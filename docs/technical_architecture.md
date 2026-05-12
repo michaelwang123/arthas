@@ -8,20 +8,20 @@
 
 ## 技术栈选型
 
-| 层级 | 技术 | 选择理由 |
-|------|------|----------|
-| **前端框架** | React 18 + TypeScript | 组件化 UI，类型安全 |
-| **状态管理** | Zustand | 极简，无 Provider 嵌套 |
-| **构建** | Vite 5 | 亚秒级 HMR，ESBuild 预构建 |
-| **可视化** | PixiJS 8 (WebGL2) | GPU 渲染在线状态动画（可选） |
-| **样式** | Tailwind CSS | 原子化 CSS，快速迭代 |
-| **加密** | Web Crypto API (AES-GCM + ECDH) | 浏览器原生，零依赖，硬件加速 |
-| **网络协议** | WebSocket (WSS) | 全双工低延迟 + TLS 传输加密 |
-| **序列化** | MessagePack | 比 JSON 小 30-50%，二进制编解码快 |
-| **后端** | Go 1.22 | goroutine 高并发，纯中转不解密 |
-| **WebSocket** | gorilla/websocket | 生产级 Go WebSocket |
-| **密钥生成** | NanoID | URL-safe 房间密钥 |
-| **部署** | Docker + Vercel + HF Spaces | 前后端分离，零成本 |
+| 层级　　　　　| 技术　　　　　　　　　　　　　　| 选择理由　　　　　　　　　　　　　|
+| ---------------| ---------------------------------| -----------------------------------|
+| **前端框架**　| React 18 + TypeScript　　　　　 | 组件化 UI，类型安全　　　　　　　 |
+| **状态管理**　| Zustand　　　　　　　　　　　　 | 极简，无 Provider 嵌套　　　　　　|
+| **构建**　　　| Vite 5　　　　　　　　　　　　　| 亚秒级 HMR，ESBuild 预构建　　　　|
+| **可视化**　　| PixiJS 8 (WebGL2)　　　　　　　 | GPU 渲染在线状态动画（可选）　　　|
+| **样式**　　　| Tailwind CSS　　　　　　　　　　| 原子化 CSS，快速迭代　　　　　　　|
+| **加密**　　　| Web Crypto API (AES-GCM + ECDH) | 浏览器原生，零依赖，硬件加速　　　|
+| **网络协议**　| WebSocket (WSS)　　　　　　　　 | 全双工低延迟 + TLS 传输加密　　　 |
+| **序列化**　　| MessagePack　　　　　　　　　　 | 比 JSON 小 30-50%，二进制编解码快 |
+| **后端**　　　| Go 1.22　　　　　　　　　　　　 | goroutine 高并发，纯中转不解密　　|
+| **WebSocket** | gorilla/websocket　　　　　　　 | 生产级 Go WebSocket　　　　　　　 |
+| **密钥生成**　| NanoID　　　　　　　　　　　　　| URL-safe 房间密钥　　　　　　　　 |
+| **部署**　　　| Docker + Vercel + HF Spaces　　 | 前后端分离，零成本　　　　　　　　|
 
 ---
 
