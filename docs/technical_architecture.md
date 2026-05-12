@@ -1,356 +1,221 @@
-# Arthas 技术架构文档
+# Arthas 技术架构
 
-> 战斗系统：实时 + 技能冷却  
-> 视角：俯视角 Top-down  
-> 目标：4 周 MVP 原型（2-8 人 PvP 争夺资源）
-
----
-
-## 一、系统架构总览
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      客户端 (Browser)                     │
-│                                                         │
-│  ┌──────────┐  ┌──────────┐  ┌────────────────────┐    │
-│  │  React   │  │  Zustand  │  │      PixiJS        │    │
-│  │  UI层    │  │  状态管理  │  │   游戏渲染层        │    │
-│  └────┬─────┘  └─────┬────┘  └─────────┬──────────┘    │
-│       │               │                 │               │
-│       └───────────────┼─────────────────┘               │
-│                       │                                 │
-│              ┌────────┴────────┐                        │
-│              │  WebSocket 层    │                        │
-│              │  (MessagePack)   │                        │
-│              └────────┬────────┘                        │
-└───────────────────────┼─────────────────────────────────┘
-                        │ WSS
-┌───────────────────────┼─────────────────────────────────┐
-│                       │         服务端 (Go)              │
-│              ┌────────┴────────┐                        │
-│              │  WebSocket Hub   │                        │
-│              │  连接管理         │                        │
-│              └────────┬────────┘                        │
-│                       │                                 │
-│              ┌────────┴────────┐                        │
-│              │   Game Loop      │                        │
-│              │   20Hz Tick      │                        │
-│              └────────┬────────┘                        │
-│                       │                                 │
-│  ┌────────┐  ┌───────┴───┐  ┌──────────┐  ┌────────┐  │
-│  │ 物理   │  │  战斗系统  │  │ 资源点   │  │ 计分   │  │
-│  │ 移动   │  │  伤害判定  │  │ 占领逻辑 │  │ 系统   │  │
-│  └────────┘  └───────────┘  └──────────┘  └────────┘  │
-└─────────────────────────────────────────────────────────┘
-```
+> 多人实时在线页面 —— 用户同屏出现、自由移动、实时沟通  
+> 技术栈：Go · WebSocket · MessagePack · PixiJS · WebGL · React · Vite
 
 ---
 
-## 二、网络协议设计
+## 技术栈选型
 
-### 2.1 传输层
+| 层级 | 技术 | 选择理由 |
+|------|------|----------|
+| **渲染** | PixiJS 8 (WebGL2) | GPU 加速 2D 渲染，轻松处理数百实体 |
+| **着色器** | GLSL (PIXI.Filter) | 零带宽视觉效果，纯 GPU 计算背景 |
+| **前端框架** | React 18 + TypeScript | UI 层与渲染层分离，类型安全 |
+| **构建** | Vite 5 | 亚秒级 HMR，ESBuild 预构建 |
+| **状态** | Zustand | 极简状态管理，无 Provider 嵌套 |
+| **网络协议** | WebSocket (WSS) | 全双工低延迟，适合实时同步 |
+| **序列化** | MessagePack | 比 JSON 小 30-50%，二进制编解码快 |
+| **后端** | Go 1.22 | goroutine 天然适合高并发连接管理 |
+| **WebSocket 库** | gorilla/websocket | 生产级 Go WebSocket 实现 |
+| **部署** | Docker + Vercel + HF Spaces | 前后端分离，零成本起步 |
 
-| 属性 | 选择 |
-|------|------|
-| 协议 | WebSocket (WSS) |
-| 序列化 | MessagePack (二进制) |
-| Tick Rate | 20Hz (服务器每 50ms 广播一次状态) |
-| 心跳 | 服务器每 25 秒发送 Ping，客户端回复 Pong |
+---
 
-### 2.2 消息格式
-
-所有消息遵循统一信封格式：
+## 系统架构
 
 ```
-{
-  "type": uint8,     // 消息类型 ID
-  "seq": uint32,     // 序列号（用于客户端预测校正）
-  "data": object     // 消息体
-}
+┌──────────────────────────────────────────────────────┐
+│                   浏览器 (Client)                      │
+│                                                      │
+│  ┌─────────┐  ┌─────────┐  ┌─────────────────────┐  │
+│  │ React   │  │ Zustand │  │  PixiJS (WebGL2)    │  │
+│  │ UI 层   │  │ Store   │  │  Canvas 渲染        │  │
+│  └────┬────┘  └────┬────┘  └──────────┬──────────┘  │
+│       └─────────────┼──────────────────┘             │
+│                     │                                │
+│           ┌─────────┴──────────┐                     │
+│           │  WebSocket Client   │                     │
+│           │  MessagePack codec  │                     │
+│           └─────────┬──────────┘                     │
+└─────────────────────┼────────────────────────────────┘
+                      │ WSS (binary frames)
+┌─────────────────────┼────────────────────────────────┐
+│                     │          Go Server              │
+│           ┌─────────┴──────────┐                     │
+│           │   WebSocket Hub     │                     │
+│           │   goroutine/conn    │                     │
+│           └─────────┬──────────┘                     │
+│                     │                                │
+│           ┌─────────┴──────────┐                     │
+│           │   Event Dispatcher  │                     │
+│           │   事件驱动处理       │                     │
+│           └─────────┬──────────┘                     │
+│                     │                                │
+│      ┌──────────────┼──────────────┐                 │
+│      │              │              │                 │
+│  ┌───┴───┐   ┌─────┴─────┐  ┌────┴────┐            │
+│  │ 移动  │   │ 聊天消息  │  │ 广播    │            │
+│  │ 处理  │   │ 处理      │  │ 分发    │            │
+│  └───────┘   └───────────┘  └─────────┘            │
+└──────────────────────────────────────────────────────┘
 ```
 
-### 2.3 消息类型定义
+---
 
-#### 客户端 → 服务器
+## 核心设计：事件驱动
 
-| Type ID | 名称 | 数据 | 说明 |
-|---------|------|------|------|
-| 0x01 | PlayerInput | `{seq, dx, dy, attack}` | 每帧输入（方向 + 是否攻击） |
-| 0x02 | SkillUse | `{skillId, targetX, targetY}` | 使用技能 |
-| 0x03 | Ping | `{timestamp}` | 心跳回复 |
+与游戏的固定频率 Tick Loop 不同，本项目采用**事件驱动**模型：
 
-#### 服务器 → 客户端
+```
+客户端发送消息 → 服务器立即处理 → 立即广播给所有人
+```
 
-| Type ID | 名称 | 数据 | 说明 |
-|---------|------|------|------|
-| 0x10 | GameState | `{tick, players[], projectiles[], coreshard}` | 每 tick 广播 |
-| 0x11 | PlayerJoined | `{id, x, y}` | 新玩家加入 |
-| 0x12 | PlayerLeft | `{id}` | 玩家离开 |
-| 0x13 | SkillEffect | `{skillId, sourceId, x, y, dx, dy}` | 技能视觉效果触发 |
-| 0x14 | PlayerDied | `{id, killerId}` | 玩家死亡 |
-| 0x15 | PlayerRespawned | `{id, x, y}` | 玩家重生 |
-| 0x16 | ScoreUpdate | `{scores: {id: score}}` | 分数变化 |
-| 0x17 | GameOver | `{winnerId, scores}` | 游戏结束 |
-| 0x18 | ServerPing | `{timestamp}` | 心跳 |
-| 0x19 | Welcome | `{playerId, gameConfig}` | 连接成功，分配 ID |
+**为什么不用 Tick Loop：**
+- 不需要物理模拟，没有"每帧计算"的需求
+- 事件驱动延迟更低（收到即处理，无需等下一个 tick）
+- CPU 占用更低（无事件时服务器空闲）
+- 代码更简单直观
 
-### 2.4 GameState 数据结构
+**服务器处理流程：**
+
+```
+收到 PlayerInput(move) → 更新位置 → 广播 PlayerMoved 给所有人
+收到 ChatMessage       → 广播 ChatBroadcast 给所有人
+连接建立               → 广播 PlayerJoined 给所有人
+连接断开               → 广播 PlayerLeft 给所有人
+```
+
+**客户端渲染：**
+
+```
+收到 PlayerMoved    → 直接更新对应实体位置（PixiJS 渲染）
+收到 ChatBroadcast  → 显示气泡
+收到 PlayerJoined   → 创建新实体
+收到 PlayerLeft     → 移除实体
+本地输入            → 发送到服务器，同时本地移动（乐观更新）
+```
+
+> 本地移动采用"乐观更新"：按键时本地立即移动，不等服务器确认。  
+> 如果网络正常，服务器广播的位置和本地一致；如果不一致，以服务器为准覆盖。  
+> 对于简单移动场景，这已经足够流畅。
+
+---
+
+## 网络协议
+
+### 消息信封
 
 ```typescript
-interface GameState {
-  tick: number;           // 服务器 tick 序号
-  players: PlayerState[];
-  projectiles: ProjectileState[];
-  coreshard: CoreshardState;
+// 所有消息统一格式，MessagePack 编码
+{
+  type: uint8       // 消息类型
+  data: object      // 消息体
+}
+```
+
+### 消息类型
+
+#### Client → Server
+
+| ID | 名称 | Payload | 说明 |
+|----|------|---------|------|
+| `0x01` | Move | `{x, y}` | 移动到目标位置 / 方向 |
+| `0x02` | Chat | `{text}` | 发送消息 |
+| `0x03` | Pong | `{t}` | 心跳回复 |
+
+#### Server → Client
+
+| ID | 名称 | Payload | 说明 |
+|----|------|---------|------|
+| `0x10` | PlayerMoved | `{id, x, y}` | 某玩家位置更新 |
+| `0x11` | PlayerJoined | `{id, name, x, y, color}` | 新用户上线 |
+| `0x12` | PlayerLeft | `{id}` | 用户离线 |
+| `0x13` | ChatBroadcast | `{id, text}` | 聊天广播 |
+| `0x18` | Ping | `{t}` | 心跳 |
+| `0x19` | Welcome | `{id, players[], config}` | 连接成功，返回当前所有在线用户 |
+
+### Welcome 消息
+
+连接成功时，服务器返回当前完整状态，客户端据此初始化场景：
+
+```typescript
+interface WelcomeData {
+  id: string                // 分配给你的 ID
+  players: PlayerInfo[]     // 当前所有在线用户
+  config: {
+    mapWidth: number
+    mapHeight: number
+  }
 }
 
-interface PlayerState {
-  id: string;
-  x: number;             // float32
-  y: number;             // float32
-  hp: number;            // uint8 (0-100)
-  maxHp: number;         // uint8
-  dir: number;           // float32 (弧度，面朝方向)
-  state: PlayerStateEnum; // idle/moving/attacking/dead
-  lastInputSeq: number;  // 用于客户端预测校正
-}
-
-interface ProjectileState {
-  id: string;
-  x: number;
-  y: number;
-  dx: number;            // 方向向量 x
-  dy: number;            // 方向向量 y
-  ownerId: string;
-  skillId: number;
-}
-
-interface CoreshardState {
-  x: number;
-  y: number;
-  state: 'idle' | 'capturing' | 'cooldown';
-  capturingPlayerId: string | null;
-  captureProgress: number; // 0-100
-  respawnTimer: number;    // 剩余冷却秒数
+interface PlayerInfo {
+  id: string
+  name: string
+  x: number
+  y: number
+  color: string             // 随机分配的颜色
 }
 ```
 
 ---
 
-## 三、游戏循环设计
+## 移动方案
 
-### 3.1 服务器 Game Loop（20Hz）
+客户端按键 → 计算新位置 → 发送 Move{x, y} → 服务器校验边界 → 广播 PlayerMoved
 
-```
-每 50ms 执行一次：
-┌─────────────────────────────────────────┐
-│ 1. 收集所有客户端输入                     │
-│ 2. 处理输入 → 更新玩家移动意图            │
-│ 3. 物理更新 → 移动所有实体               │
-│ 4. 碰撞检测 → 边界 + 实体间              │
-│ 5. 战斗处理 → 攻击判定 + 伤害计算        │
-│ 6. 投射物更新 → 移动 + 命中检测          │
-│ 7. 资源点更新 → 占领进度                 │
-│ 8. 死亡/重生处理                         │
-│ 9. 计分更新                              │
-│ 10. 广播 GameState 给所有客户端           │
-└─────────────────────────────────────────┘
-```
-
-### 3.2 客户端渲染循环（60 FPS）
-
-```
-每帧（~16.6ms）：
-┌─────────────────────────────────────────┐
-│ 1. 读取键盘/鼠标输入                     │
-│ 2. 客户端预测：立即移动本地玩家           │
-│ 3. 发送 PlayerInput 到服务器             │
-│ 4. 接收 GameState                        │
-│ 5. 校正本地玩家位置（如有偏差）           │
-│ 6. 实体插值：平滑其他玩家位置            │
-│ 7. 渲染所有实体                          │
-│ 8. 更新 UI（血条、冷却、分数）           │
-└─────────────────────────────────────────┘
+```typescript
+// 客户端：按键处理
+onKeyDown(key) {
+  const speed = 4  // px per frame
+  let {x, y} = myPosition
+  if (key === 'W') y -= speed
+  if (key === 'S') y += speed
+  if (key === 'A') x -= speed
+  if (key === 'D') x += speed
+  
+  // 边界钳制
+  x = clamp(x, 0, MAP_WIDTH)
+  y = clamp(y, 0, MAP_HEIGHT)
+  
+  myPosition = {x, y}       // 乐观更新：本地立即移动
+  ws.send(Move{x, y})       // 告知服务器
+}
 ```
 
----
-
-## 四、客户端预测与校正
-
-### 4.1 预测流程
-
-```
-1. 玩家按下 W 键
-2. 客户端立即移动角色（预测位置）
-3. 同时发送 PlayerInput{seq: 42, dx: 0, dy: -1} 到服务器
-4. 客户端保存：pendingInputs.push({seq: 42, dx: 0, dy: -1})
-5. 服务器处理后返回 GameState，其中 player.lastInputSeq = 42
-6. 客户端收到后：
-   - 删除 seq <= 42 的所有 pendingInputs
-   - 将本地位置设为服务器位置
-   - 重新应用剩余的 pendingInputs（seq > 42）
-7. 如果偏差 < 阈值（2px），不校正（避免抖动）
-```
-
-### 4.2 实体插值
-
-```
-对于其他玩家：
-1. 收到 GameState 时，不直接设置位置
-2. 存入 buffer: positionBuffer.push({tick, x, y, timestamp})
-3. 渲染时，取 100ms 前的两个快照
-4. 在两个快照之间做线性插值（LERP）
-5. 结果：其他玩家平滑移动，但有 100ms 视觉延迟
+```go
+// 服务器：收到 Move
+func (h *Hub) handleMove(client *Client, msg MoveMsg) {
+    // 边界校验
+    x := clamp(msg.X, 0, MAP_WIDTH)
+    y := clamp(msg.Y, 0, MAP_HEIGHT)
+    
+    client.Player.X = x
+    client.Player.Y = y
+    
+    // 广播给所有人（包括发送者，用于校正）
+    h.broadcast(PlayerMoved{ID: client.ID, X: x, Y: y})
+}
 ```
 
 ---
 
-## 五、战斗系统技术设计
-
-### 5.1 MVP 战斗参数
+## 参数
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| 玩家 HP | 100 | — |
-| 移动速度 | 200 units/s | 每 tick 移动 10 units |
-| 基础攻击伤害 | 15 | — |
-| 基础攻击范围 | 60 units | 近战圆形判定 |
-| 基础攻击间隔 | 500ms | 每秒最多 2 次 |
-| 技能1：冲刺 | 150 units 位移 | 5s 冷却 |
-| 技能2：火球 | 30 伤害，射程 300 | 3s 冷却，速度 400 units/s |
-| 死亡重生时间 | 3 秒 | 重生在随机位置 |
-| 地图大小 | 800 × 800 units | — |
-
-### 5.2 命中检测（服务器端）
-
-```go
-// 基础攻击：圆形范围检测
-func checkMeleeHit(attacker, target Player) bool {
-    dx := target.X - attacker.X
-    dy := target.Y - attacker.Y
-    dist := math.Sqrt(dx*dx + dy*dy)
-    
-    // 在攻击范围内
-    if dist > MELEE_RANGE {
-        return false
-    }
-    
-    // 在面朝方向的 90° 扇形内
-    angle := math.Atan2(dy, dx)
-    diff := angleDiff(attacker.Dir, angle)
-    return math.Abs(diff) < math.Pi/4
-}
-
-// 火球：圆形碰撞检测
-func checkProjectileHit(proj Projectile, target Player) bool {
-    dx := target.X - proj.X
-    dy := target.Y - proj.Y
-    dist := math.Sqrt(dx*dx + dy*dy)
-    return dist < PROJECTILE_RADIUS + PLAYER_RADIUS
-}
-```
-
-### 5.3 技能冷却管理
-
-```go
-type CooldownManager struct {
-    cooldowns map[int]time.Time // skillId -> 可用时间
-}
-
-func (cm *CooldownManager) CanUse(skillId int) bool {
-    readyAt, exists := cm.cooldowns[skillId]
-    if !exists {
-        return true
-    }
-    return time.Now().After(readyAt)
-}
-
-func (cm *CooldownManager) Use(skillId int, cooldownDuration time.Duration) {
-    cm.cooldowns[skillId] = time.Now().Add(cooldownDuration)
-}
-```
+| 地图尺寸 | 800 × 800 px | 可视区域 |
+| 移动速度 | 4 px/frame | 客户端控制 |
+| 玩家半径 | 15 px | 渲染大小 |
+| 心跳间隔 | 25s | 保活检测 |
+| 断线超时 | 60s | 无心跳则踢出 |
+| 气泡持续 | 3s | 聊天气泡显示时间 |
 
 ---
 
-## 六、资源点（源石碎片）机制
+## 项目结构
 
-### 6.1 状态机
-
-```
-        [idle]
-          │
-    玩家进入范围
-          │
-          ▼
-     [capturing]  ←── 受到伤害 → 中断回到 [idle]
-          │
-    3 秒占领完成
-          │
-          ▼
-     [collected]  → 给玩家 +10 分
-          │
-    15 秒冷却
-          │
-          ▼
-      [respawn] → 回到 [idle]
-```
-
-### 6.2 服务器逻辑
-
-```go
-func (cs *Coreshard) Update(players []Player, dt float64) {
-    switch cs.State {
-    case Idle:
-        // 检测是否有玩家在范围内
-        for _, p := range players {
-            if p.IsAlive() && cs.InRange(p) {
-                cs.State = Capturing
-                cs.CapturingPlayerID = p.ID
-                cs.Progress = 0
-                break
-            }
-        }
-    case Capturing:
-        player := findPlayer(cs.CapturingPlayerID)
-        // 玩家离开范围或死亡 → 中断
-        if player == nil || !player.IsAlive() || !cs.InRange(*player) {
-            cs.State = Idle
-            cs.Progress = 0
-            return
-        }
-        // 推进占领
-        cs.Progress += dt / CAPTURE_TIME * 100
-        if cs.Progress >= 100 {
-            cs.State = Cooldown
-            cs.RespawnTimer = RESPAWN_TIME
-            // 给玩家加分
-        }
-    case Cooldown:
-        cs.RespawnTimer -= dt
-        if cs.RespawnTimer <= 0 {
-            cs.State = Idle
-            cs.RandomizePosition() // 随机新位置
-        }
-    }
-}
-```
-
----
-
-## 七、反作弊校验（MVP 级别）
-
-| 校验项 | 实现 | 处理 |
-|--------|------|------|
-| 移动速度 | 每 tick 检查位移 ≤ maxSpeed × tickDuration × 1.2 | 强制回退位置 |
-| 攻击频率 | 检查两次攻击间隔 ≥ minInterval × 0.9 | 忽略该次攻击 |
-| 技能冷却 | 服务器维护冷却状态 | 忽略未冷却完的技能请求 |
-| 非法坐标 | 检查坐标在地图边界内 | 钳制到边界 |
-
----
-
-## 八、项目结构
-
-### 8.1 前端 (arthas-client/)
+### 前端 (arthas-client/)
 
 ```
 arthas-client/
@@ -359,108 +224,85 @@ arthas-client/
 ├── vite.config.ts
 ├── tsconfig.json
 ├── tailwind.config.js
-├── postcss.config.js
-├── public/
-│   └── favicon.ico
 └── src/
-    ├── main.tsx                 # React 入口
-    ├── App.tsx                  # 主组件：Canvas + UI
+    ├── main.tsx                    # 入口
+    ├── App.tsx                     # Canvas + UI 容器
     ├── game/
-    │   ├── Game.ts             # PixiJS Application + 游戏主循环
-    │   ├── constants.ts        # 游戏常量
-    │   ├── entities/
-    │   │   ├── Player.ts       # 玩家实体渲染
-    │   │   ├── Projectile.ts   # 投射物渲染
-    │   │   └── Coreshard.ts    # 资源点渲染
-    │   └── systems/
-    │       ├── InputSystem.ts      # 输入处理
-    │       ├── PredictionSystem.ts # 客户端预测
-    │       └── InterpolationSystem.ts # 实体插值
+    │   ├── Game.ts                # PixiJS Application 生命周期
+    │   ├── constants.ts           # 配置常量
+    │   └── shaders/
+    │       └── VoidBackground.ts  # GLSL 背景着色器
     ├── network/
-    │   ├── protocol.ts         # 消息类型定义
-    │   ├── websocket.ts        # WebSocket 连接管理
-    │   └── codec.ts            # MessagePack 编解码
+    │   ├── protocol.ts            # 消息类型 & 编解码
+    │   └── websocket.ts           # WS 连接管理 + 重连
     ├── ui/
-    │   ├── HUD.tsx             # 血条 + 技能栏
-    │   ├── Scoreboard.tsx      # 计分板
-    │   └── DeathScreen.tsx     # 死亡画面
+    │   ├── HUD.tsx                # 在线人数 / 延迟 / 状态
+    │   └── PlayerList.tsx         # 在线玩家列表
     ├── stores/
-    │   ├── gameStore.ts        # 游戏状态
-    │   └── uiStore.ts          # UI 状态
+    │   └── gameStore.ts           # Zustand 全局状态
     └── styles/
-        └── index.css           # Tailwind 入口
+        └── index.css              # Tailwind 入口
 ```
 
-### 8.2 后端 (arthas-server/)
+### 后端 (arthas-server/)
 
 ```
 arthas-server/
 ├── go.mod
 ├── go.sum
+├── Dockerfile
 ├── cmd/
 │   └── server/
-│       └── main.go             # 入口：启动 HTTP + WebSocket
-├── internal/
-│   ├── game/
-│   │   ├── game.go            # Game Loop 主循环
-│   │   ├── player.go          # 玩家实体 + 逻辑
-│   │   ├── projectile.go      # 投射物实体
-│   │   ├── coreshard.go       # 资源点逻辑
-│   │   ├── combat.go          # 战斗系统
-│   │   └── constants.go       # 游戏常量
-│   ├── network/
-│   │   ├── hub.go             # WebSocket Hub（连接管理）
-│   │   ├── client.go          # 单个客户端连接
-│   │   └── protocol.go        # 消息协议定义
-│   └── config/
-│       └── config.go          # 配置
-└── Dockerfile                  # HF Spaces 部署用
+│       └── main.go                # HTTP + WS 启动入口
+└── internal/
+    ├── game/
+    │   ├── player.go             # 玩家实体
+    │   └── constants.go          # 配置常量
+    └── network/
+        ├── hub.go                # 连接池 + 事件分发
+        ├── client.go             # 单连接 goroutine（读/写）
+        └── protocol.go           # MessagePack 消息定义
 ```
 
 ---
 
-## 九、部署架构（MVP）
+## 部署
 
 ```
-[玩家浏览器] ──HTTPS──→ [Vercel CDN] (前端静态资源)
-      │
-      └──WSS──→ [Hugging Face Spaces] (Go WebSocket 服务)
-                        │
-                  [内存游戏状态]  (MVP 不需要数据库)
+[浏览器] ──HTTPS──→ [Vercel CDN] (静态前端)
+    │
+    └──WSS──→ [HF Spaces / Docker] (Go 二进制)
+                      │
+                [内存状态] (无数据库)
 ```
 
-### 部署配置
-
-**前端 (Vercel)**：
-- 构建命令：`npm run build`
-- 输出目录：`dist/`
-- 环境变量：`VITE_WS_URL=wss://xxx.hf.space/ws`
-
-**后端 (HF Spaces)**：
-- Docker 容器运行 Go 二进制
-- 暴露端口 7860（HF Spaces 默认）
-- 健康检查端点：`GET /ping`
+| 环境 | 配置 |
+|------|------|
+| 前端 | Vercel, `npm run build`, 输出 `dist/` |
+| 后端 | Docker, Go binary, 端口 7860 |
+| 环境变量 | `VITE_WS_URL=wss://xxx.hf.space/ws` |
+| 健康检查 | `GET /ping` → 200 |
+| 备选 | Railway / Fly.io |
 
 ---
 
-## 十、开发里程碑
+## 里程碑
 
-| 里程碑 | 目标 | 验收标准 |
-|--------|------|----------|
-| M1 | WebSocket 连接 | 打开网页能连上服务器，看到 "Connected" |
-| M2 | 角色渲染 | 屏幕上出现一个色块代表自己 |
-| M3 | 移动同步 | 两个浏览器窗口能看到对方移动 |
-| M4 | 客户端预测 | 移动无延迟感，其他玩家平滑 |
-| M5 | 基础攻击 | 能打到对方，血量减少 |
-| M6 | 技能系统 | 冲刺 + 火球可用 |
-| M7 | 资源点 | 能占领源石碎片得分 |
-| M8 | 完整循环 | 5 分钟一局，有胜负判定 |
+| # | 目标 | 验收 |
+|---|------|------|
+| M1 | WebSocket 连接 | 打开页面 → 连接成功 → 分配 ID |
+| M2 | 多人同屏 | 两个窗口互相可见 |
+| M3 | 移动同步 | 一方移动，另一方实时看到 |
+| M4 | 实时聊天 | 发消息 → 对方头顶出现气泡 |
+| M5 | 公网部署 | 分享链接，朋友能用 |
 
 ---
 
-## 相关文档
+## 技术亮点
 
-- [需求文档](../req_draw.md)
-- [游戏设计](./game_design.md)
-- [路线图](./roadmap.md)
-- [地图设计](./map_design.md)
+- **事件驱动**：无 Tick Loop，收到即处理即广播，延迟最低
+- **二进制协议**：MessagePack 替代 JSON，带宽省 30-50%
+- **GPU 渲染**：PixiJS WebGL2 + GLSL 着色器背景特效
+- **goroutine 并发**：每连接独立 goroutine，天然高并发
+- **乐观更新**：本地输入即时响应，服务器广播兜底校正
+- **零数据库**：纯内存状态，架构极简
