@@ -1,8 +1,9 @@
-import { Application, Container, Graphics } from 'pixi.js'
+import { Application, Container, Graphics, Filter, GlProgram, Sprite, Texture } from 'pixi.js'
 import { WORLD_WIDTH, WORLD_HEIGHT, PLAYER_RADIUS } from './constants'
 import { InputSystem } from './systems/InputSystem'
 import { WebSocketManager } from '../network/websocket'
 import { useGameStore } from '../stores/gameStore'
+import { voidBackgroundFragment, voidBackgroundVertex } from './shaders/VoidBackground'
 
 export class Game {
   private app: Application
@@ -12,6 +13,7 @@ export class Game {
   private wsManager: WebSocketManager
   private playerGraphics: Map<string, Graphics> = new Map()
   private coreshardGraphic: Graphics | null = null
+  private bgFilter: Filter | null = null
   private initialized = false
 
   constructor(container: HTMLDivElement) {
@@ -40,6 +42,9 @@ export class Game {
     this.world = new Container()
     this.app.stage.addChild(this.world)
 
+    // 添加着色器背景
+    this.initBackground()
+
     // 绘制地图边界和网格
     this.drawMapBorder()
 
@@ -54,6 +59,39 @@ export class Game {
 
     this.initialized = true
     console.log('[Game] Game fully initialized!')
+  }
+
+  private initBackground() {
+    try {
+      // 创建着色器背景
+      const bgSprite = new Sprite(Texture.WHITE)
+      bgSprite.width = WORLD_WIDTH
+      bgSprite.height = WORLD_HEIGHT
+
+      this.bgFilter = new Filter({
+        glProgram: GlProgram.from({
+          vertex: voidBackgroundVertex,
+          fragment: voidBackgroundFragment,
+        }),
+        resources: {
+          uniforms: {
+            uTime: { value: 0, type: 'f32' },
+            uResolution: { value: [WORLD_WIDTH, WORLD_HEIGHT], type: 'vec2<f32>' },
+          },
+        },
+      })
+
+      bgSprite.filters = [this.bgFilter]
+      this.world.addChild(bgSprite)
+      console.log('[Game] Void background shader initialized')
+    } catch (err) {
+      console.warn('[Game] Shader failed, using fallback background:', err)
+      // 降级：纯色背景
+      const fallback = new Graphics()
+      fallback.rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
+      fallback.fill(0x0d0d1a)
+      this.world.addChild(fallback)
+    }
   }
 
   private drawMapBorder() {
@@ -86,6 +124,11 @@ export class Game {
   private update() {
     const state = useGameStore.getState()
     const input = this.inputSystem.getInput()
+
+    // 更新着色器时间
+    if (this.bgFilter) {
+      (this.bgFilter.resources as any).uniforms.uniforms.uTime = performance.now() / 1000
+    }
 
     // 发送输入到服务器
     if (state.connected && state.playerId) {
