@@ -12,6 +12,91 @@ This design covers the code changes and configuration files needed to make Artha
 
 All changes use Go standard library only (no new backend dependencies). The frontend gains no new runtime dependencies.
 
+## Project Context & Code Standards
+
+### 项目定位
+
+本项目（Arthas）是一个用于**学习 Go 语言 WebSocket 原理**的实践项目。代码不仅要能正确运行，更要作为学习材料，帮助理解以下核心概念：
+
+- Go 的 goroutine 并发模型与 channel 通信
+- WebSocket 协议的升级（HTTP Upgrade / Hijack）机制
+- 生产级服务器的生命周期管理（启动、运行、优雅关闭）
+- 信号处理与进程管理
+- 零知识（zero-knowledge）中继架构的安全设计
+
+### 编码规范要求
+
+实现代码时**必须**遵守以下规范：
+
+**1. 详细注释（教学级别）**
+- 每个文件顶部必须有 package-level 注释，说明该包的职责和设计思路
+- 每个导出函数/方法必须有 GoDoc 格式注释，包含：功能描述、参数说明、返回值说明
+- 关键逻辑处必须有行内注释，解释 **WHY**（为什么这样做）而非 WHAT（做了什么）
+- 并发相关代码必须注释说明：哪个 goroutine 调用、是否线程安全、锁的持有范围
+- Channel 操作必须注释说明：发送方/接收方、阻塞条件、关闭语义
+
+**2. 注释示例风格**
+```go
+// Hub 是 WebSocket 连接的中央管理器，采用 CSP（Communicating Sequential Processes）模型。
+//
+// 设计原理：
+// - 使用 channel 而非 mutex 来协调并发访问，避免共享状态的复杂性
+// - register/unregister 是无缓冲 channel，确保注册操作的顺序性
+// - done channel 使用「close 广播」模式：关闭一个 channel 会唤醒所有等待的 goroutine
+//
+// Goroutine 模型：
+// - Hub.Run() 在独立 goroutine 中运行，是唯一修改 clients map 的 goroutine
+// - 每个 Client 有 2 个 goroutine：readPump（读取 WebSocket）和 writePump（写入 WebSocket）
+//
+// 关闭顺序：
+// 1. main() 调用 Hub.Stop() → 关闭 done channel
+// 2. Run() 检测到 done 关闭 → 退出循环
+// 3. Stop() 关闭所有 client.send channel → writePump 退出
+// 4. writePump 退出后关闭 conn → readPump 读取失败退出
+// 5. WaitGroup 计数归零 → main() 继续退出
+type Hub struct { ... }
+```
+
+**3. 最佳工程实践**
+- 遵循 Go 官方 [Effective Go](https://go.dev/doc/effective_go) 和 [Code Review Comments](https://go.dev/wiki/CodeReviewComments)
+- 错误处理：永远不忽略 error，使用 `fmt.Errorf("context: %w", err)` 包装错误
+- 命名：使用 Go 惯用命名（短变量名用于局部作用域，描述性名称用于导出标识符）
+- 包组织：每个包有单一职责，包名简短且有意义
+- 测试：测试函数名使用 `Test<Function>_<Scenario>` 格式，测试用例使用 table-driven 风格
+- 常量：魔法数字必须定义为命名常量，并注释其含义和来源
+
+**4. 学习要点标注**
+
+在代码中使用 `// 📚 学习要点:` 前缀标注关键的 Go/WebSocket 知识点：
+
+```go
+// 📚 学习要点: HTTP Hijack 机制
+// WebSocket 升级时，gorilla/websocket 调用 http.Hijacker 接口"劫持"底层 TCP 连接。
+// 劫持后，该连接不再由 http.Server 管理，因此 Server.Shutdown() 无法感知它。
+// 这就是为什么我们需要 Hub.Stop() 来主动关闭 WebSocket 连接。
+conn, err := upgrader.Upgrade(w, r, nil)
+```
+
+### 日志采样策略（高负载场景）
+
+当连接数超过阈值时，connect/disconnect 日志可能产生大量输出。设计预留了采样扩展点：
+
+```go
+// logSampled 在高频事件中按比例采样日志输出。
+// 当前实现：始终输出所有日志（适合学习和调试）。
+// 生产优化：当 clientCount > 1000 时，可改为每 10 次事件输出 1 条摘要日志。
+//
+// 📚 学习要点: 日志采样是生产系统的常见优化。
+// 在高 QPS 场景下，每个请求都写日志会成为性能瓶颈（I/O 开销 + 锁竞争）。
+// 常见策略：计数采样（每 N 条输出 1 条）、概率采样、速率限制（每秒最多 M 条）。
+func (h *Hub) logClientEvent(event, clientID string) {
+    count := h.clientCount()
+    logger.Info("Hub", "%s %s, total: %d", event, clientID, count)
+}
+```
+
+当前阶段保持全量日志输出，便于学习和调试。
+
 ## Architecture
 
 ```mermaid
@@ -66,18 +151,30 @@ graph TD
 **Changes:**
 
 ```go
-// New constants/variables
+// 📚 学习要点: Go 的 ldflags 机制
+// -ldflags "-X main.Version=..." 在编译时将字符串值注入到变量中。
+// 这是 Go 程序实现「构建时配置」的标准方式，无需配置文件或环境变量。
+// CI/CD 流水线通常注入 git tag 或 commit hash 作为版本号。
 var Version = "1.0.0" // overridable via -ldflags "-X main.Version=..."
 
 func main() {
     // 1. Initialize structured logger
+    // 📚 学习要点: 日志初始化必须在所有 goroutine 启动之前完成。
+    // log.SetFlags() 和 log.SetOutput() 不是并发安全的（写操作），
+    // 但 log.Printf() 是并发安全的（内部有 mutex）。
     logger.Init()
 
     // 2. Create Hub, start Hub.Run()
+    // 📚 学习要点: Hub 在独立 goroutine 中运行事件循环。
+    // 这是 Go 中常见的「actor 模型」：一个 goroutine 独占状态，
+    // 其他 goroutine 通过 channel 发送消息来请求状态变更。
     hub := network.NewHub()
     go hub.Run()
 
     // 3. Register routes on explicit ServeMux
+    // 📚 学习要点: 为什么不用 http.DefaultServeMux？
+    // DefaultServeMux 是全局变量，多个测试并行运行时会互相干扰。
+    // 显式创建 ServeMux 使路由配置可测试、可隔离。
     mux := http.NewServeMux()
     mux.HandleFunc("/ping", handlePing)
     mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
@@ -89,23 +186,40 @@ func main() {
     if port == "" {
         port = "8080"
     }
+
+    // 📚 学习要点: http.Server 结构体 vs http.ListenAndServe 函数
+    // http.ListenAndServe 是便捷函数，内部创建一个默认 Server。
+    // 直接使用 http.Server 可以：
+    // - 设置超时参数（ReadHeaderTimeout 防止 slowloris 攻击）
+    // - 调用 Shutdown() 实现优雅关闭
+    // - 在测试中使用 httptest.NewServer 替换
     srv := &http.Server{
         Addr:              ":" + port,
         Handler:           mux,
-        ReadHeaderTimeout: 10 * time.Second, // slowloris 防护
+        ReadHeaderTimeout: 10 * time.Second, // 防止 slowloris 攻击
     }
 
     // 5. Start server in goroutine
+    // 📚 学习要点: 为什么在 goroutine 中启动 ListenAndServe？
+    // ListenAndServe 是阻塞调用，会一直运行直到出错或 Shutdown 被调用。
+    // 放在 goroutine 中让 main 函数可以继续执行信号监听逻辑。
     go func() {
         if err := srv.ListenAndServe(); err != http.ErrServerClosed {
             logger.Error("Server", "listen failed: %v", err)
             os.Exit(1)
         }
+        // 📚 学习要点: err == http.ErrServerClosed 表示 Shutdown() 被调用，
+        // 这是正常的关闭流程，不应视为错误。
     }()
 
     logger.Info("Server", "started on :%s (version %s)", port, Version)
 
     // 6. Wait for SIGTERM/SIGINT
+    // 📚 学习要点: os/signal 包的信号处理
+    // signal.Notify 将操作系统信号转发到 Go channel。
+    // 缓冲区大小为 1：即使 main goroutine 暂时没有读取，信号也不会丢失。
+    // SIGTERM: 容器编排器（Docker/K8s）发送的优雅停止信号
+    // SIGINT: 用户按 Ctrl+C 时发送
     quit := make(chan os.Signal, 1)
     signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
     <-quit
@@ -113,16 +227,27 @@ func main() {
     logger.Info("Server", "shutting down...")
 
     // 7. Two-phase graceful shutdown
+    // 📚 学习要点: context.WithTimeout 创建一个带截止时间的 context。
+    // 5 秒后 context 自动取消，用于限制关闭操作的最大等待时间。
     shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
 
     // Phase 1: Stop accepting new connections
+    // 📚 学习要点: Server.Shutdown 的行为
+    // 1. 关闭所有 listener（不再接受新连接）
+    // 2. 等待所有活跃的 HTTP 请求完成
+    // 3. 但是！不会等待 WebSocket 连接（因为它们已被 Hijack）
     srv.Shutdown(shutdownCtx)
 
     // Phase 2: Close existing WebSocket connections
+    // 📚 学习要点: 为什么需要 Phase 2？
+    // WebSocket 连接通过 HTTP Hijack 脱离了 http.Server 的管理。
+    // Shutdown() 对它们无感知，必须由 Hub 主动关闭。
     hub.Stop()
 
     // Phase 3: Wait for all client goroutines to finish (with timeout)
+    // 📚 学习要点: WaitGroup + select 实现「等待或超时」模式
+    // 这是 Go 中处理「最多等 N 秒」的标准模式。
     done := make(chan struct{})
     go func() {
         hub.Wait()
@@ -139,6 +264,9 @@ func main() {
     os.Exit(0)
 }
 
+// handlePing 是健康检查端点的处理函数。
+// 容器编排器和外部保活服务（如 cron-job.org）通过此端点验证服务存活。
+// 设计为无状态、无认证、极低延迟（< 1ms）。
 func handlePing(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "text/plain")
     w.WriteHeader(http.StatusOK)
@@ -162,16 +290,36 @@ func handlePing(w http.ResponseWriter, r *http.Request) {
 **New fields and methods:**
 
 ```go
+// Hub 是 WebSocket 连接的中央管理器，采用 CSP（Communicating Sequential Processes）模型。
+//
+// 📚 学习要点: CSP 并发模型
+// Go 的并发哲学是「不要通过共享内存来通信，而要通过通信来共享内存」。
+// Hub 是这一哲学的典型实现：
+// - clients map 只在 Run() goroutine 中被修改（单一写者）
+// - 其他 goroutine 通过 register/unregister channel 请求修改
+// - 这消除了对 clients map 的竞态条件，无需复杂的锁策略
+//
+// Goroutine 拓扑：
+//   main goroutine → Hub.Run() goroutine
+//                  → Client.readPump() goroutine (per client)
+//                  → Client.writePump() goroutine (per client)
 type Hub struct {
     roomManager *room.RoomManager
     clients     map[*Client]bool
-    register    chan *Client
-    unregister  chan *Client
-    mu          sync.RWMutex
+    register    chan *Client    // 无缓冲：确保注册的顺序性
+    unregister  chan *Client    // 无缓冲：确保注销的顺序性
+    mu          sync.RWMutex   // 保护 clients map 的并发读取（clientCount）
 
     // Graceful shutdown support
-    done chan struct{}   // closed to signal Run() to exit
-    wg   sync.WaitGroup // tracks active client goroutines
+    // 📚 学习要点: done channel 的「close 广播」模式
+    // 关闭一个 channel 会让所有阻塞在该 channel 上的 <-ch 操作立即返回零值。
+    // 这是 Go 中实现「一对多取消通知」的惯用模式。
+    done chan struct{}
+
+    // 📚 学习要点: sync.WaitGroup 用于等待一组 goroutine 完成
+    // Add(n) 增加计数，Done() 减少计数，Wait() 阻塞直到计数归零。
+    // 这里用于跟踪所有 readPump/writePump goroutine，确保关闭时等待它们退出。
+    wg sync.WaitGroup
 }
 
 func NewHub() *Hub {
@@ -184,11 +332,18 @@ func NewHub() *Hub {
     }
 }
 
-// Run starts the Hub main loop. Returns when Stop() is called.
+// Run 启动 Hub 主事件循环。在独立 goroutine 中调用。
+// 当 Stop() 被调用时（done channel 关闭），Run 返回。
+//
+// 📚 学习要点: select 多路复用
+// select 语句让一个 goroutine 同时等待多个 channel 操作。
+// 当多个 case 同时就绪时，Go 运行时随机选择一个执行（公平调度）。
 func (h *Hub) Run() {
     for {
         select {
         case <-h.done:
+            // 📚 学习要点: 关闭的 channel 立即返回零值
+            // 一旦 done 被关闭，每次循环都会走到这个 case，退出循环。
             return
         case client := <-h.register:
             h.mu.Lock()
@@ -199,7 +354,7 @@ func (h *Hub) Run() {
             h.mu.Lock()
             if _, ok := h.clients[client]; ok {
                 delete(h.clients, client)
-                close(client.send)
+                close(client.send) // 关闭 send channel 通知 writePump 退出
             }
             h.mu.Unlock()
             h.handleClientDisconnect(client)
@@ -208,7 +363,13 @@ func (h *Hub) Run() {
     }
 }
 
-// Stop signals all clients to close and terminates the Hub loop.
+// Stop 触发优雅关闭：通知 Run() 退出，并主动关闭所有客户端连接。
+//
+// 📚 学习要点: 关闭顺序的重要性
+// 1. 先 close(done) — 让 Run() 退出，不再处理 register/unregister
+// 2. 再 close(client.send) — 让每个 writePump 退出
+// 3. writePump 退出时关闭 WebSocket conn — 让 readPump 读取失败退出
+// 这个顺序确保不会出现「向已关闭 channel 发送」的 panic。
 func (h *Hub) Stop() {
     close(h.done)
     h.mu.Lock()
@@ -219,7 +380,7 @@ func (h *Hub) Stop() {
     h.mu.Unlock()
 }
 
-// Wait blocks until all client goroutines have finished.
+// Wait 阻塞直到所有客户端 goroutine（readPump + writePump）退出。
 func (h *Hub) Wait() {
     h.wg.Wait()
 }
@@ -228,6 +389,13 @@ func (h *Hub) Wait() {
 **WaitGroup usage in ServeWs:**
 
 ```go
+// ServeWs 处理 WebSocket 升级请求，创建 Client 并启动读写 goroutine。
+//
+// 📚 学习要点: WebSocket 升级流程
+// 1. 客户端发送 HTTP GET 请求，带有 Upgrade: websocket 头
+// 2. 服务器调用 Upgrade()，内部执行 HTTP Hijack 获取底层 TCP 连接
+// 3. Hijack 后，该连接完全由我们的代码管理，http.Server 不再感知它
+// 4. 这就是为什么 Server.Shutdown() 无法关闭 WebSocket 连接
 func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
     conn, err := upgrader.Upgrade(w, r, nil)
     if err != nil {
@@ -245,15 +413,19 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
         send: make(chan []byte, sendBufferSize),
     }
 
-    // Register with shutdown safety: if Hub is already stopped, close immediately
+    // 📚 学习要点: select 实现「发送或取消」模式
+    // 如果 Hub 已经停止（done 已关闭），register channel 没有接收者，
+    // 直接发送会永久阻塞。select + done 避免了这个死锁。
     select {
     case hub.register <- client:
     case <-hub.done:
+        // Hub 已关闭，直接关闭连接，不注册
         conn.Close()
         return
     }
 
-    // Track goroutines for graceful shutdown
+    // 📚 学习要点: WaitGroup 的 Add 必须在 goroutine 启动前调用
+    // 如果在 goroutine 内部调用 Add，可能出现 Wait() 在 Add() 之前返回的竞态。
     hub.wg.Add(2)
     go func() {
         defer hub.wg.Done()
@@ -271,7 +443,11 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 ```go
 func (c *Client) readPump() {
     defer func() {
-        // Use select with done channel to avoid blocking if Hub has stopped
+        // 📚 学习要点: 为什么需要 select 守卫？
+        // 场景：Hub.Stop() 已调用 → done 已关闭 → Run() 已退出
+        // 此时 unregister channel 没有接收者（Run 不再 select 它）
+        // 如果直接 `c.hub.unregister <- c`，会永久阻塞（goroutine 泄漏）
+        // select + done 确保：如果 Hub 已停止，跳过注销（Stop 已清理）
         select {
         case c.hub.unregister <- c:
         case <-c.hub.done:
@@ -284,7 +460,6 @@ func (c *Client) readPump() {
 ```
 
 **Design rationale for channel safety:** After `Hub.Run()` exits (done channel closed), the `register` and `unregister` channels have no reader. Without the `select` guard, goroutines would block forever on these unbuffered channels, causing a goroutine leak and preventing clean shutdown.
-```
 
 **Design rationale:**
 - `done` channel allows `Run()` to exit cleanly during shutdown.
@@ -297,6 +472,16 @@ func (c *Client) readPump() {
 A new package providing formatted log output using only the standard library.
 
 ```go
+// Package logger 提供结构化日志输出，封装标准库 log 包。
+//
+// 📚 学习要点: 为什么封装标准库 log？
+// 1. 统一格式 — 所有日志自动包含时间戳、级别、模块，无需每次手动拼接
+// 2. 单一修改点 — 未来切换到 JSON 格式或第三方库，只需修改此包
+// 3. 语义清晰 — logger.Warn("CORS", ...) 比 log.Printf("[WARN] [CORS] ...") 更易读
+//
+// 线程安全性：
+// - Init() 必须在所有 goroutine 启动前调用（非并发安全的配置操作）
+// - Info/Warn/Error 可以从任意 goroutine 并发调用（底层 log.Printf 有 mutex）
 package logger
 
 import (
@@ -306,17 +491,21 @@ import (
     "time"
 )
 
-// Level constants
+// Level constants — 日志级别
 const (
-    INFO  = "INFO"
-    WARN  = "WARN"
-    ERROR = "ERROR"
+    INFO  = "INFO"  // 正常运行事件（连接、断开、房间创建）
+    WARN  = "WARN"  // 异常但可恢复的事件（CORS 拒绝、频率限制）
+    ERROR = "ERROR" // 严重错误，可能影响服务（监听失败、序列化错误）
 )
 
-// Init disables default log flags and sets output to stdout.
-// MUST be called before any goroutines start logging.
+// Init 初始化日志配置：禁用默认时间前缀，输出到 stdout。
+// 必须在 main() 中、启动任何 goroutine 之前调用。
+//
+// 📚 学习要点: 为什么输出到 stdout 而非文件？
+// 容器化部署中，日志应输出到 stdout/stderr，由容器运行时收集。
+// 这遵循 12-Factor App 原则的第 XI 条：将日志视为事件流。
 func Init() {
-    log.SetFlags(0)
+    log.SetFlags(0)      // 禁用默认的日期时间前缀（我们自己格式化）
     log.SetOutput(os.Stdout)
 }
 
@@ -335,6 +524,9 @@ func Error(module, format string, args ...interface{}) {
     emit(ERROR, module, format, args...)
 }
 
+// emit 是内部日志格式化函数，所有公开方法最终调用此函数。
+// 📚 学习要点: unexported 函数（小写开头）只能在包内访问，
+// 这是 Go 的封装机制，确保外部只能通过 Info/Warn/Error 调用。
 func emit(level, module, format string, args ...interface{}) {
     ts := time.Now().Format(time.RFC3339)
     msg := fmt.Sprintf(format, args...)
@@ -353,6 +545,13 @@ func emit(level, module, format string, args ...interface{}) {
 **Extracted to a separate file** for clarity and testability (instead of embedding in `client.go`):
 
 ```go
+// Package network 的 origin.go 文件负责 WebSocket 连接的来源验证。
+//
+// 📚 学习要点: 为什么需要 Origin 验证？
+// WebSocket 不受浏览器同源策略（Same-Origin Policy）的限制。
+// 任何网页都可以向任何 WebSocket 服务器发起连接。
+// Origin 验证是服务端唯一的防线，确保只有授权的前端域名可以连接。
+// 这防止了 CSRF 类攻击：恶意网站无法冒充合法前端与后端通信。
 package network
 
 import (
@@ -361,11 +560,20 @@ import (
     "github.com/arthas/arthas-server/internal/logger"
 )
 
+// allowedOrigins 存储解析后的允许来源列表。
+// 📚 学习要点: 包级变量的初始化时机
+// 此变量在 main() 中通过 InitOriginControl() 设置，
+// 之后只被 CheckOriginAllowed() 读取（只读）。
+// 由于写入发生在所有 goroutine 启动之前，不存在数据竞争。
 var allowedOrigins []string
 
-// InitOriginControl parses the ALLOWED_ORIGINS environment variable.
-// Empty entries are filtered out. If the result is an empty list,
-// all origins will be accepted (development mode).
+// InitOriginControl 解析 ALLOWED_ORIGINS 环境变量值。
+// 空条目会被过滤（如 "a.com,,b.com," → ["a.com", "b.com"]）。
+// 如果解析结果为空列表，则允许所有来源（开发模式）。
+//
+// 📚 学习要点: 防御性解析
+// 用户可能输入格式不规范的值（多余逗号、空格）。
+// 好的解析器应该宽容输入、严格输出（Postel's Law）。
 func InitOriginControl(origins string) {
     if origins == "" {
         allowedOrigins = nil
@@ -373,7 +581,7 @@ func InitOriginControl(origins string) {
     }
 
     parts := strings.Split(origins, ",")
-    result := make([]string, 0, len(parts))
+    result := make([]string, 0, len(parts)) // 预分配容量，避免多次扩容
     for _, p := range parts {
         trimmed := strings.TrimSpace(p)
         if trimmed != "" {
@@ -390,8 +598,14 @@ func InitOriginControl(origins string) {
     }
 }
 
-// CheckOriginAllowed validates an origin against the allowed list.
-// Returns true if the origin is permitted.
+// CheckOriginAllowed 验证给定的 origin 是否在允许列表中。
+// 当允许列表为空时（开发模式），对任何 origin 返回 true。
+//
+// 📚 学习要点: 精确匹配 vs 模式匹配
+// 这里使用精确字符串匹配（==），不支持通配符。
+// 原因：Origin 验证是安全边界，模糊匹配可能引入绕过漏洞。
+// 例如 "*.evil.com" 如果用 strings.HasSuffix 实现，
+// 攻击者可以注册 "not-evil.com" 来绕过。
 func CheckOriginAllowed(origin string) bool {
     if len(allowedOrigins) == 0 {
         return true // dev mode: allow all
@@ -408,6 +622,10 @@ func CheckOriginAllowed(origin string) bool {
 **Changes to `client.go` upgrader:**
 
 ```go
+// 📚 学习要点: Upgrader 配置
+// ReadBufferSize/WriteBufferSize 控制 WebSocket 帧的读写缓冲区大小。
+// 1024 字节对于聊天消息足够（我们的消息上限是 4096 字节）。
+// CheckOrigin 是安全关键函数，在 HTTP → WebSocket 升级前调用。
 var upgrader = websocket.Upgrader{
     ReadBufferSize:  1024,
     WriteBufferSize: 1024,
@@ -425,7 +643,15 @@ var upgrader = websocket.Upgrader{
 **CORS rejection logging deduplication:**
 
 ```go
-// Helper to detect CORS rejection errors from gorilla/websocket
+// isCORSRejection 检测 WebSocket 升级错误是否由 Origin 验证失败引起。
+//
+// 📚 学习要点: 错误检测模式
+// gorilla/websocket 在 CheckOrigin 返回 false 时，返回包含
+// "origin not allowed" 的错误。我们通过字符串匹配识别这类错误，
+// 避免在 ServeWs 中重复记录（CheckOrigin 内已经记录过了）。
+//
+// 更健壮的方式是使用 errors.Is/errors.As（如果库导出了错误类型），
+// 但 gorilla/websocket 未导出此错误类型，只能用字符串匹配。
 func isCORSRejection(err error) bool {
     return strings.Contains(err.Error(), "origin not allowed")
 }
@@ -435,6 +661,10 @@ In `ServeWs`, only log non-CORS upgrade errors to avoid double-logging:
 ```go
 if err != nil {
     if !isCORSRejection(err) {
+        // 📚 学习要点: 错误包装（Error Wrapping）
+        // Go 1.13+ 推荐使用 fmt.Errorf("context: %w", err) 包装错误，
+        // 保留原始错误链，使 errors.Is/errors.As 可以穿透包装层。
+        // 这里我们直接记录日志而非返回错误，因为 ServeWs 是顶层 handler。
         logger.Warn("WS", "upgrade error: %v", err)
     }
     return
@@ -502,8 +732,19 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates
-WORKDIR /root/
+
+# 📚 学习要点: 容器安全 - 非 root 用户
+# 生产容器不应以 root 运行，遵循最小权限原则。
+# UID 1000 是 HF Spaces 的默认用户 ID，确保平台兼容性。
+# 如果进程被攻破，攻击者只能获得受限用户权限，无法修改系统文件。
+RUN adduser -D -u 1000 appuser
+
+WORKDIR /home/appuser
 COPY --from=builder /app/server .
+RUN chown appuser:appuser ./server
+
+USER appuser
+
 EXPOSE 7860
 ENV PORT=7860
 HEALTHCHECK --interval=30s --timeout=3s \
@@ -516,19 +757,19 @@ CMD ["./server"]
 - `-X main.Version=${VERSION}` allows CI/CD to inject the git tag or commit hash.
 - `HEALTHCHECK` enables Docker's built-in health monitoring (used by orchestrators like Docker Compose, Kubernetes).
 - Alpine's BusyBox includes `wget`, no additional packages needed.
-- **Future improvement:** Add non-root user (`adduser -D appuser` + `USER appuser`) once target platform compatibility is confirmed.
+- **Non-root user (UID 1000):** 遵循最小权限原则，HF Spaces 默认以 UID 1000 运行，Railway/Fly.io 也支持非 root 容器。
 
 ## Data Models
 
 This feature introduces no new persistent data models. The changes are purely operational:
 
-| Item | Type | Description |
-|------|------|-------------|
-| `Version` | `string` (compile-time) | Server version, injected via ldflags |
-| `allowedOrigins` | `[]string` (runtime) | Parsed from `ALLOWED_ORIGINS` env var at startup |
-| Log entry | Structured text | `[RFC3339] [LEVEL] [MODULE] message` |
-| `Hub.done` | `chan struct{}` | Closed to signal shutdown |
-| `Hub.wg` | `sync.WaitGroup` | Tracks active client goroutines |
+| Item             | Type                    | Description                                      |
+| ------------------| -------------------------| --------------------------------------------------|
+| `Version`        | `string` (compile-time) | Server version, injected via ldflags             |
+| `allowedOrigins` | `[]string` (runtime)    | Parsed from `ALLOWED_ORIGINS` env var at startup |
+| Log entry        | Structured text         | `[RFC3339] [LEVEL] [MODULE] message`             |
+| `Hub.done`       | `chan struct{}`         | Closed to signal shutdown                        |
+| `Hub.wg`         | `sync.WaitGroup`        | Tracks active client goroutines                  |
 
 **Environment Variables:**
 
@@ -647,6 +888,20 @@ Exit with code 0
 
 ### Property-Based Tests
 
+> 📚 **为什么使用 Property-Based Testing（PBT）而非仅靠 Example-Based Testing？**
+>
+> Example-based 测试验证的是「这几个具体输入产生了正确输出」，而 PBT 验证的是「对于所有满足约束的输入，某个性质始终成立」。
+>
+> 类比：Example-based 测试像是在地图上标注几个已知安全的点，PBT 像是证明整个区域都是安全的。
+>
+> 实际价值：
+> - PBT 能发现开发者未想到的边界情况（如空字符串、超长输入、特殊字符）
+> - 一个 property test 等价于数百个 example test 的覆盖范围
+> - 当 property test 失败时，框架会自动「缩小」（shrink）输入到最小反例，便于调试
+>
+> 局限性：`testing/quick` 是 Go 内置的简易 PBT 库，不支持 shrinking。
+> 如果未来需要更强的 PBT 能力，可考虑 `github.com/leanovate/gopter`（但当前不引入新依赖）。
+
 **Library:** Go standard `testing/quick` package (no new dependencies)
 
 **Configuration:** Minimum 100 iterations per property test.
@@ -673,6 +928,57 @@ Exit with code 0
 - `arthas-server/internal/logger/logger_test.go` — log format properties
 - `arthas-server/internal/network/origin_test.go` — CORS/origin validation properties + unit tests
 - `arthas-server/internal/network/hub_test.go` — Hub lifecycle, Stop/Wait behavior
+
+## Design Decisions & Alternatives
+
+本节记录关键设计决策及其替代方案，帮助理解为什么选择当前方案。
+
+### `done` Channel vs `context.Context`
+
+**选择：** 使用 `done chan struct{}` 作为 Hub 的关闭信号。
+
+**替代方案：** 使用 `context.Context` 传播取消信号。
+
+| 维度 | done channel | context.Context |
+|------|-------------|-----------------|
+| 语义清晰度 | 高 — 关闭即广播 | 中 — 需理解 context 树 |
+| 代码复杂度 | 低 — 单一 channel | 中 — 需要传递 ctx 参数 |
+| 可组合性 | 低 — 仅支持取消 | 高 — 支持超时、值传递 |
+| Go 惯用程度 | 中 — 常见于简单场景 | 高 — 标准库推荐模式 |
+
+**决策理由：**
+
+```go
+// 📚 学习要点: done channel 的「close 广播」模式
+//
+// Go 中关闭一个 channel 会让所有阻塞在该 channel 上的 goroutine 立即收到零值。
+// 这是一种高效的「一对多」通知机制，无需知道有多少接收者。
+//
+// 对比 context.Context：
+// - context 适合请求级别的生命周期管理（HTTP handler → 下游调用）
+// - done channel 适合组件级别的生命周期管理（Hub 启动 → Hub 关闭）
+//
+// 在本项目中，Hub 是一个长生命周期组件，不是请求链的一部分，
+// 因此 done channel 更直观。如果未来 Hub 需要调用外部服务（如数据库），
+// 则应改用 context.Context 以支持超时传播。
+close(h.done) // 所有 select 中监听 h.done 的 goroutine 都会被唤醒
+```
+
+### 全量日志 vs 采样日志
+
+**选择：** 当前阶段保持全量日志输出。
+
+**理由：** 作为学习项目，全量日志有助于观察系统行为。生产环境中若连接数 > 1000/s，应引入采样机制。设计中已预留 `logClientEvent` 扩展点，未来可无侵入地切换为采样模式。
+
+### 非 root 容器用户
+
+**选择：** 使用 UID 1000 的非 root 用户运行容器。
+
+**理由：**
+- 最小权限原则 — 即使容器被攻破，攻击者无法获得 root 权限
+- HF Spaces 默认以 UID 1000 运行 Docker 容器
+- Railway 和 Fly.io 均支持非 root 容器
+- 唯一限制：无法绑定 < 1024 的端口（我们使用 7860，不受影响）
 
 ## Migration Notes
 
@@ -707,3 +1013,24 @@ All existing `log.Printf("[Hub] ...")` and `log.Printf("[WS] ...")` calls must b
 | `internal/room/manager.go` | `RoomCount()` already exists |
 | `internal/network/protocol.go` | No protocol changes needed |
 | `go.mod` | No new dependencies |
+
+## Appendix: Go 核心概念索引
+
+本 feature 涉及的 Go 核心概念及其在代码中的位置，供学习时快速定位：
+
+| 概念 | 文件 | 关键代码 | 学习价值 |
+|------|------|----------|----------|
+| Channel close 广播 | `hub.go` | `close(h.done)` | 一对多取消通知的惯用模式 |
+| 无缓冲 Channel 同步 | `hub.go` | `register/unregister chan *Client` | 确保操作顺序性，理解阻塞语义 |
+| select 多路复用 | `hub.go` | `select { case <-h.done: ... }` | 同时等待多个 channel 的核心机制 |
+| HTTP Hijack | `client.go` | `upgrader.Upgrade(w, r, nil)` | WebSocket 如何从 HTTP 接管 TCP 连接 |
+| sync.WaitGroup | `hub.go` + `client.go` | `wg.Add(2)` / `wg.Done()` / `wg.Wait()` | 等待一组 goroutine 完成 |
+| Signal handling | `main.go` | `signal.Notify(quit, syscall.SIGTERM)` | 操作系统信号与 Go channel 的桥接 |
+| context.WithTimeout | `main.go` | `context.WithTimeout(ctx, 5*time.Second)` | 带截止时间的取消传播 |
+| Goroutine 生命周期 | `client.go` | `go client.readPump()` / `writePump()` | 每个连接的并发读写模型 |
+| sync.RWMutex | `hub.go` | `h.mu.RLock()` / `h.mu.Lock()` | 读多写少场景的锁优化 |
+| 包级变量初始化顺序 | `origin.go` | `var allowedOrigins []string` | 理解 init 时序与并发安全 |
+| ldflags 编译注入 | `main.go` | `var Version = "1.0.0"` | 构建时配置的标准方式 |
+| defer 栈执行顺序 | `client.go` | `defer func() { ... }()` | LIFO 清理资源的惯用模式 |
+| http.Server 结构体 | `main.go` | `&http.Server{ReadHeaderTimeout: ...}` | 生产级 HTTP 服务器配置 |
+| 12-Factor App 日志 | `logger.go` | `log.SetOutput(os.Stdout)` | 容器化部署的日志最佳实践 |
