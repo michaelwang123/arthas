@@ -6,43 +6,43 @@
 
 ## Tasks
 
-- [ ] 1. Create structured logger package
-  - [ ] 1.1 Create `internal/logger/logger.go` with Init, Info, Warn, Error functions
+- [x] 1. Create structured logger package
+  - [x] 1.1 Create `internal/logger/logger.go` with Init, Info, Warn, Error functions
     - Implement `[RFC3339] [LEVEL] [MODULE] message` format using standard `log` package
     - Include `Init()` function that sets `log.SetFlags(0)` and `log.SetOutput(os.Stdout)`
     - Include detailed GoDoc comments and 📚 学习要点 annotations as specified in design
     - _Requirements: 4.1, 4.5_
 
-  - [ ] 1.2 Write property test for structured log format (Property 3)
+  - [x] 1.2 Write property test for structured log format (Property 3)
     - **Property 3: Structured log format invariant**
     - Use `testing/quick` with minimum 100 iterations
     - Verify output matches `[<RFC3339>] [<LEVEL>] [<MODULE>] <message>` for any module/level/message
     - Test file: `internal/logger/logger_test.go`
     - **Validates: Requirements 4.1**
 
-- [ ] 2. Implement Origin validation
-  - [ ] 2.1 Create `internal/network/origin.go` with InitOriginControl and CheckOriginAllowed
+- [x] 2. Implement Origin validation
+  - [x] 2.1 Create `internal/network/origin.go` with InitOriginControl and CheckOriginAllowed
     - Parse `ALLOWED_ORIGINS` env var: split by comma, trim whitespace, filter empty entries
     - `CheckOriginAllowed` returns true if origin matches any entry, or if list is empty (dev mode)
     - Include defensive parsing (handle extra commas, whitespace) per Postel's Law
     - Include detailed comments and 📚 学习要点 annotations
     - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-  - [ ] 2.2 Write property test for origin list parsing (Property 1)
+  - [x] 2.2 Write property test for origin list parsing (Property 1)
     - **Property 1: Origin list parsing preserves all entries**
     - Use `testing/quick` with minimum 100 iterations
     - Verify parsing produces same set of trimmed non-empty origins, empty entries filtered
     - Test file: `internal/network/origin_test.go`
     - **Validates: Requirements 2.2, 3.4**
 
-  - [ ] 2.3 Write property test for origin validation correctness (Property 2)
+  - [x] 2.3 Write property test for origin validation correctness (Property 2)
     - **Property 2: Origin validation correctness**
     - Use `testing/quick` with minimum 100 iterations
     - Verify returns true iff origin matches an entry, or list is empty
     - Test file: `internal/network/origin_test.go`
     - **Validates: Requirements 3.1, 3.2, 3.3**
 
-  - [ ] 2.4 Write unit tests for origin validation edge cases
+  - [x] 2.4 Write unit tests for origin validation edge cases
     - Test `"a.com,,b.com,"` parses to `["a.com", "b.com"]`
     - Test empty ALLOWED_ORIGINS allows all origins
     - Test non-allowed origin is rejected
@@ -50,60 +50,60 @@
     - Test file: `internal/network/origin_test.go`
     - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-- [ ] 3. Create frontend deployment configuration files
-  - [ ] 3.1 Create `arthas-client/vercel.json` with SPA rewrite and cache headers
+- [x] 3. Create frontend deployment configuration files
+  - [x] 3.1 Create `arthas-client/vercel.json` with SPA rewrite and cache headers
     - Add rewrite rule: all routes → `/index.html`
     - Add cache headers for `/assets/(.*)`: `public, immutable, max-age=31536000`
     - _Requirements: 2.4_
 
-  - [ ] 3.2 Create `arthas-client/.env.production.example`
+  - [x] 3.2 Create `arthas-client/.env.production.example`
     - Document `VITE_WS_URL=wss://your-backend-domain/ws`
     - Note: `websocket.ts` already reads `import.meta.env.VITE_WS_URL` with fallback — no code change needed
     - _Requirements: 2.5_
 
-- [ ] 4. Checkpoint — Logger, Origin, and Frontend config
+- [x] 4. Checkpoint — Logger, Origin, and Frontend config
   - Run: `go build ./...` (verify compilation)
   - Run: `go test ./internal/logger/... ./internal/network/... -v` (verify tests)
   - Run: `go vet ./...` (static analysis)
   - Verify `arthas-client/vercel.json` is valid JSON
   - Ask the user if questions arise.
 
-- [ ] 5. Implement Hub graceful shutdown support
+- [x] 5. Implement Hub graceful shutdown support
   - ⚠️ **Risk: HIGH** — Modifies core Hub struct that all connections depend on. Verify existing room tests pass after each sub-task.
 
-  - [ ] 5.1 Add `done` channel to Hub and modify `Run()` for clean exit
+  - [x] 5.1 Add `done` channel to Hub and modify `Run()` for clean exit
     - Add `done chan struct{}` field initialized in `NewHub()`
     - Modify `Run()` to add `case <-h.done: return` in the select loop
     - This enables the shutdown signal without changing any other behavior
     - _Requirements: 1.3_
 
-  - [ ] 5.2 Add `sync.WaitGroup`, `Stop()`, and `Wait()` methods to Hub
+  - [x] 5.2 Add `sync.WaitGroup`, `Stop()`, and `Wait()` methods to Hub
     - Add `wg sync.WaitGroup` field for tracking readPump/writePump goroutines
     - Implement `Stop()`: close done, then acquire `h.mu.Lock()` before iterating clients to close send channels and clear map (existing `mu` field already in Hub — use write lock to prevent race with `clientCount()`)
     - Implement `Wait()`: call `wg.Wait()`
     - Include detailed comments explaining close-broadcast pattern and shutdown ordering
     - _Requirements: 1.3, 1.4_
 
-  - [ ] 5.3 Update `ServeWs` for WaitGroup tracking and shutdown-safe registration
+  - [x] 5.3 Update `ServeWs` for WaitGroup tracking and shutdown-safe registration
     - Add `hub.wg.Add(2)` before launching readPump/writePump goroutines
     - Wrap goroutines with `defer hub.wg.Done()`
     - Add `select` guard on `hub.register <- client` with `case <-hub.done` fallback
     - _Requirements: 1.3, 1.4_
 
-  - [ ] 5.4 Update `readPump` defer for shutdown-safe unregistration
+  - [x] 5.4 Update `readPump` defer for shutdown-safe unregistration
     - Add `select` guard on `hub.unregister <- c` with `case <-hub.done` fallback
     - Prevents goroutine leak when Hub.Run() has already exited
     - _Requirements: 1.3, 1.4_
 
-  - [ ] 5.5 Write unit tests for Hub lifecycle (Stop/Wait behavior)
+  - [x] 5.5 Write unit tests for Hub lifecycle (Stop/Wait behavior)
     - Test that Stop() causes Run() to exit
     - Test that Wait() returns after all goroutines finish
     - Test that register after Stop doesn't block
     - Test file: `internal/network/hub_test.go`
     - _Requirements: 1.3, 1.4_
 
-- [ ] 6. Implement CORS integration in WebSocket upgrader
-  - [ ] 6.1 Update `client.go` upgrader CheckOrigin to use `CheckOriginAllowed`
+- [x] 6. Implement CORS integration in WebSocket upgrader
+  - [x] 6.1 Update `client.go` upgrader CheckOrigin to use `CheckOriginAllowed`
     - Set `CheckOrigin` function to validate Origin header via `CheckOriginAllowed`
     - Log WARN with rejected origin and remote address on rejection
     - Add `isCORSRejection` helper to detect CORS-specific upgrade errors
@@ -111,14 +111,14 @@
     - Update `ServeWs` to skip double-logging for CORS rejections
     - _Requirements: 3.1, 3.2_
 
-  - [ ] 6.2 Write unit tests for CORS rejection flow
+  - [x] 6.2 Write unit tests for CORS rejection flow
     - Test non-allowed origin gets HTTP 403 on WS upgrade
     - Test CORS rejection produces exactly one log entry (no double-logging)
     - **Test that `isCORSRejection` correctly identifies the gorilla/websocket error string** (regression guard for fragile string matching)
     - Test file: `internal/network/origin_test.go`
     - _Requirements: 3.1, 3.2_
 
-- [ ] 7. Checkpoint — Hub shutdown, CORS, and regression verification
+- [x] 7. Checkpoint — Hub shutdown, CORS, and regression verification
   - Run: `go build ./...`
   - Run: `go test ./internal/network/... -v` (Hub + CORS tests)
   - Run: `go test ./internal/room/... -v` (**regression**: verify room tests still pass after Hub modifications)
@@ -126,10 +126,10 @@
   - Run: `go vet ./...`
   - Ask the user if questions arise.
 
-- [ ] 8. Rewrite `cmd/server/main.go` for production server lifecycle
+- [x] 8. Rewrite `cmd/server/main.go` for production server lifecycle
   - ⚠️ **Risk: MEDIUM** — Complete rewrite of the application entry point. Keep a mental model of the old main.go for rollback.
 
-  - [ ] 8.1 Implement production-ready main.go with explicit ServeMux and http.Server
+  - [x] 8.1 Implement production-ready main.go with explicit ServeMux and http.Server
     - Add `var Version = "1.0.0"` overridable via ldflags
     - Initialize logger, create Hub, start `hub.Run()` in goroutine
     - Create explicit `http.NewServeMux()` with `/ping` and `/ws` routes
@@ -139,7 +139,7 @@
     - Log startup message with port, version, RFC 3339 timestamp
     - _Requirements: 1.1, 1.2, 1.5, 2.1, 2.2_
 
-  - [ ] 8.2 Implement signal handling and two-phase graceful shutdown
+  - [x] 8.2 Implement signal handling and two-phase graceful shutdown
     - Listen for SIGTERM/SIGINT via `signal.Notify` on buffered channel
     - Phase 1: `srv.Shutdown(ctx)` with 5-second timeout context
     - Phase 2: `hub.Stop()` to close all WebSocket connections
@@ -148,13 +148,13 @@
     - Include detailed 📚 学习要点 annotations for signal handling and context patterns
     - _Requirements: 1.3, 1.4_
 
-  - [ ] 8.3 Implement `/ping` health check handler
+  - [x] 8.3 Implement `/ping` health check handler
     - Return HTTP 200 with `Content-Type: text/plain` and body `"pong"`
     - No authentication required
     - Served on same port and mux as `/ws`
     - _Requirements: 1.1, 1.2_
 
-  - [ ] 8.4 Write unit tests for ping endpoint and startup behavior
+  - [x] 8.4 Write unit tests for ping endpoint and startup behavior
     - Test GET /ping returns 200 + "pong"
     - Test /ping accessible without auth headers
     - Test /ping responds within 100ms
@@ -163,8 +163,8 @@
     - Test file: `cmd/server/main_test.go`
     - _Requirements: 1.1, 1.2, 1.5, 2.1_
 
-- [ ] 9. Migrate existing log calls to structured logger
-  - [ ] 9.1 Replace all `log.Printf` calls in `hub.go` and `client.go` with logger calls
+- [x] 9. Migrate existing log calls to structured logger
+  - [x] 9.1 Replace all `log.Printf` calls in `hub.go` and `client.go` with logger calls
     - Replace `log.Printf("[Hub] ...")` with `logger.Info("Hub", ...)`
     - Replace error logs with `logger.Error(...)` or `logger.Warn(...)`
     - Add connect/disconnect logs with client ID and total connection count
@@ -174,7 +174,7 @@
     - **Scope**: Only `hub.go` and `client.go` need migration. Verified: `protocol.go` and `room/` package have zero `log.` calls.
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-- [ ] 10. Write property test for zero-knowledge log invariant (Property 4)
+- [x] 10. Write property test for zero-knowledge log invariant (Property 4)
   - **Property 4: Zero-knowledge log invariant**
   - Use `testing/quick` with minimum 100 iterations
   - Capture log output (redirect via `log.SetOutput`) during simulated message relay
@@ -183,7 +183,7 @@
   - Test file: `internal/logger/logger_test.go` or `internal/network/hub_test.go`
   - **Validates: Requirements 4.5**
 
-- [ ] 11. Checkpoint — Full server lifecycle verification
+- [x] 11. Checkpoint — Full server lifecycle verification
   - Run: `go build ./...`
   - Run: `go test ./... -v` (all packages)
   - Run: `go test -race ./...` (**race detection**: full concurrency verification across all packages)
@@ -191,13 +191,13 @@
   - Manual verification (platform-neutral): start server in one terminal with `go run ./cmd/server`, then in another terminal run `curl http://localhost:8080/ping` (or `Invoke-WebRequest http://localhost:8080/ping` on Windows PowerShell). Expect response: `pong`
   - Ask the user if questions arise.
 
-- [ ] 12. Optimize Dockerfile for production
-  - [ ] 12.0 Create `arthas-server/.dockerignore` for build cache optimization
+- [x] 12. Optimize Dockerfile for production
+  - [x] 12.0 Create `arthas-server/.dockerignore` for build cache optimization
     - Exclude: `.git`, `docs/`, `official_doc/`, `arthas-client/`, `*.md`, `.kiro/`
     - This prevents unnecessary cache invalidation when non-server files change
     - _Requirements: 5.1_
 
-  - [ ] 12.1 Update `arthas-server/Dockerfile` with ldflags, non-root user, and HEALTHCHECK
+  - [x] 12.1 Update `arthas-server/Dockerfile` with ldflags, non-root user, and HEALTHCHECK
     - Add `ARG VERSION=1.0.0` and `-ldflags "-s -w -X main.Version=${VERSION}"` to build
     - Add non-root user (UID 1000) for security
     - **Note**: Change `WORKDIR` from `/root/` to `/home/appuser` — this is a significant path change
@@ -207,12 +207,12 @@
     - Depends on: Task 8.1 (main.go must declare `var Version` for ldflags `-X main.Version` to work)
     - _Requirements: 5.1, 5.2, 5.4_
 
-  - [ ] 12.2 Write integration test for Docker image size
+  - [x] 12.2 Write integration test for Docker image size
     - Verify built image is under 30MB
     - Use `//go:build integration` tag
     - _Requirements: 5.1_
 
-- [ ] 13. Final checkpoint — Full build verification
+- [x] 13. Final checkpoint — Full build verification
   - Run: `go build ./...` (no errors)
   - Run: `go test ./... -v` (all tests pass)
   - Run: `go vet ./...` (no issues)

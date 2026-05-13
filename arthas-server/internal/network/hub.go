@@ -2,22 +2,54 @@ package network
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
+	"github.com/arthas/arthas-server/internal/logger"
 	"github.com/arthas/arthas-server/internal/room"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/vmihailenco/msgpack/v5"
 )
 
 // Hub 管理所有 WebSocket 连接，并将消息路由到对应的房间处理逻辑。
+//
+// 📚 学习要点: CSP 并发模型与关闭顺序
+// Hub 采用 CSP（Communicating Sequential Processes）模型：
+// - clients map 只在 Run() goroutine 中被修改（单一写者）
+// - 其他 goroutine 通过 register/unregister channel 请求修改
+//
+// Goroutine 拓扑：
+//
+//	main goroutine → Hub.Run() goroutine
+//	               → Client.readPump() goroutine (per client)
+//	               → Client.writePump() goroutine (per client)
+//
+// 关闭顺序：
+// 1. main() 调用 Hub.Stop() → 关闭 done channel
+// 2. Run() 检测到 done 关闭 → 退出循环
+// 3. Stop() 关闭所有 client.send channel → writePump 退出
+// 4. writePump 退出后关闭 conn → readPump 读取失败退出
+// 5. WaitGroup 计数归零 → main() 的 hub.Wait() 返回，继续退出
 type Hub struct {
 	roomManager *room.RoomManager
 	clients     map[*Client]bool
 	register    chan *Client
 	unregister  chan *Client
 	mu          sync.RWMutex
+
+	// 📚 学习要点: done channel 的「close 广播」模式
+	// 关闭一个 channel 会让所有阻塞在该 channel 上的 <-ch 操作立即返回零值。
+	// 这是 Go 中实现「一对多取消通知」的惯用模式。
+	// 当 Stop() 被调用时，close(done) 会同时唤醒 Run() 中的 select
+	// 以及任何其他监听 done 的 goroutine，实现一对多的关闭通知。
+	done chan struct{}
+
+	// 📚 学习要点: sync.WaitGroup 用于等待一组 goroutine 完成
+	// Add(n) 增加计数，Done() 减少计数，Wait() 阻塞直到计数归零。
+	// 这里用于跟踪所有 readPump/writePump goroutine，确保关闭时等待它们退出。
+	// 使用规则：Add() 必须在启动 goroutine 之前调用（在 ServeWs 中），
+	// 否则可能出现 Wait() 在 Add() 之前返回的竞态条件。
+	wg sync.WaitGroup
 }
 
 // NewHub 创建一个新的 Hub 实例，内部初始化 RoomManager。
@@ -27,18 +59,31 @@ func NewHub() *Hub {
 		clients:     make(map[*Client]bool),
 		register:    make(chan *Client),
 		unregister:  make(chan *Client),
+		done:        make(chan struct{}),
 	}
 }
 
 // Run 启动 Hub 主循环，处理客户端注册/注销事件。
+// 当 done channel 被关闭时（通过 Stop() 调用），Run 退出循环并返回。
+//
+// 📚 学习要点: select 多路复用与 done channel
+// select 语句让一个 goroutine 同时等待多个 channel 操作。
+// 当 done channel 被关闭后，<-h.done 会立即返回零值（struct{}{}），
+// 使得每次循环迭代都会匹配到该 case，从而退出 for 循环。
+// 这是 Go 中实现「可取消事件循环」的标准模式。
 func (h *Hub) Run() {
 	for {
 		select {
+		case <-h.done:
+			// 📚 学习要点: 关闭的 channel 立即返回零值
+			// 一旦 done 被 close()，每次 select 都会走到这个 case，退出循环。
+			// 这使得 Run() 可以被外部（Stop()）优雅地终止。
+			return
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
 			h.mu.Unlock()
-			log.Printf("[Hub] Client %s connected. Total: %d", client.ID, h.clientCount())
+			logger.Info("Hub", "client %s connected, total: %d", client.ID, h.clientCount())
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -50,9 +95,49 @@ func (h *Hub) Run() {
 
 			// 断线自动离开房间
 			h.handleClientDisconnect(client)
-			log.Printf("[Hub] Client %s disconnected. Total: %d", client.ID, h.clientCount())
+			logger.Info("Hub", "client %s disconnected, total: %d", client.ID, h.clientCount())
 		}
 	}
+}
+
+// Stop 触发优雅关闭：通知 Run() 退出，并主动关闭所有客户端连接。
+//
+// 📚 学习要点: 关闭顺序的重要性
+// 1. 先 close(done) — 让 Run() 退出，不再处理 register/unregister
+// 2. 再 close(client.send) — 让每个 writePump 退出
+// 3. writePump 退出时关闭 WebSocket conn — 让 readPump 读取失败退出
+// 这个顺序确保不会出现「向已关闭 channel 发送」的 panic。
+//
+// 📚 学习要点: 为什么使用 Lock()（写锁）而非 RLock()（读锁）？
+// Stop() 需要修改 clients map（delete 操作）和关闭 send channel，
+// 这是写操作。同时 clientCount() 使用 RLock 读取 map 长度。
+// 如果 Stop() 用 RLock，会与 clientCount() 的 RLock 并发执行，
+// 但 delete 操作不是并发安全的 — 必须用写锁互斥所有读者。
+func (h *Hub) Stop() {
+	close(h.done)
+
+	h.mu.Lock()
+	for client := range h.clients {
+		close(client.send)
+		delete(h.clients, client)
+	}
+	h.mu.Unlock()
+}
+
+// Wait 阻塞直到所有客户端 goroutine（readPump + writePump）退出。
+//
+// 📚 学习要点: WaitGroup 的语义
+// wg.Wait() 会阻塞调用者，直到内部计数器归零。
+// 每个 readPump/writePump 在启动前调用 wg.Add(1)，退出时调用 wg.Done()。
+// 当所有 pump goroutine 都退出后，Wait() 返回，表示可以安全退出进程。
+//
+// 典型调用模式（在 main.go 中）：
+//
+//	hub.Stop()   // 触发关闭
+//	hub.Wait()   // 等待所有 goroutine 退出
+//	os.Exit(0)   // 安全退出
+func (h *Hub) Wait() {
+	h.wg.Wait()
 }
 
 // HandleMessage 解析原始消息并根据类型路由到对应的处理函数。
@@ -71,7 +156,7 @@ func (h *Hub) HandleMessage(client *Client, msg *Message) {
 	case MsgPong:
 		h.handlePong(client, msg.Data)
 	default:
-		log.Printf("[Hub] Unknown message type 0x%02x from client %s", msg.Type, client.ID)
+		logger.Warn("Hub", "unknown message type 0x%02x from client %s", msg.Type, client.ID)
 	}
 }
 
@@ -80,7 +165,7 @@ func (h *Hub) HandleMessage(client *Client, msg *Message) {
 func (h *Hub) ParseAndHandleMessage(client *Client, raw []byte) {
 	var msg Message
 	if err := msgpack.Unmarshal(raw, &msg); err != nil {
-		log.Printf("[Hub] Failed to unmarshal message from %s: %v", client.ID, err)
+		logger.Warn("Hub", "failed to unmarshal message from %s: %v", client.ID, err)
 		h.sendError(client, ErrCodeInvalidMessage, "invalid message format")
 		return
 	}
@@ -114,7 +199,7 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 	// Generate NanoID (21 chars) for roomId
 	roomId, err := gonanoid.New()
 	if err != nil {
-		log.Printf("[Hub] Failed to generate NanoID: %v", err)
+		logger.Error("Hub", "failed to generate NanoID: %v", err)
 		h.sendError(client, ErrCodeInvalidMessage, "failed to create room")
 		return
 	}
@@ -137,7 +222,7 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 		},
 	}
 	if err := r.AddMember(member); err != nil {
-		log.Printf("[Hub] Failed to add creator to room: %v", err)
+		logger.Error("Hub", "failed to add creator to room: %v", err)
 		h.sendError(client, ErrCodeRoomFull, "room is full")
 		return
 	}
@@ -159,7 +244,7 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 		},
 	})
 
-	log.Printf("[Hub] Room %s created by client %s (%s)", roomId, client.ID, name)
+	logger.Info("Hub", "room %s created by client %s (%s), total rooms: %d", roomId, client.ID, name, h.roomManager.RoomCount())
 }
 
 func (h *Hub) handleJoinRoom(client *Client, data interface{}) {
@@ -233,7 +318,7 @@ func (h *Hub) handleJoinRoom(client *Client, data interface{}) {
 	}
 	broadcastData, err := msgpack.Marshal(memberJoinedMsg)
 	if err != nil {
-		log.Printf("[Hub] Failed to marshal MemberJoined message: %v", err)
+		logger.Error("Hub", "failed to marshal MemberJoined message: %v", err)
 	} else {
 		r.Broadcast(client.ID, broadcastData)
 	}
@@ -259,7 +344,7 @@ func (h *Hub) handleJoinRoom(client *Client, data interface{}) {
 		Members: members,
 	})
 
-	log.Printf("[Hub] Client %s (%s) joined room %s", client.ID, name, roomId)
+	logger.Info("Hub", "client %s (%s) joined room %s", client.ID, name, roomId)
 }
 
 func (h *Hub) handleSendMessage(client *Client, data interface{}) {
@@ -316,7 +401,7 @@ func (h *Hub) handleSendMessage(client *Client, data interface{}) {
 	// 7. 序列化并广播给房间内其他成员（排除发送者）
 	broadcastData, err := msgpack.Marshal(relayMsg)
 	if err != nil {
-		log.Printf("[Hub] Failed to marshal RelayMessage: %v", err)
+		logger.Error("Hub", "failed to marshal RelayMessage: %v", err)
 		return
 	}
 	r.Broadcast(client.ID, broadcastData)
@@ -347,7 +432,7 @@ func (h *Hub) handleLeaveRoom(client *Client, data interface{}) {
 		}
 		broadcastData, err := msgpack.Marshal(memberLeftMsg)
 		if err != nil {
-			log.Printf("[Hub] Failed to marshal MemberLeft message: %v", err)
+			logger.Error("Hub", "failed to marshal MemberLeft message: %v", err)
 		} else {
 			r.Broadcast(client.ID, broadcastData)
 		}
@@ -355,14 +440,14 @@ func (h *Hub) handleLeaveRoom(client *Client, data interface{}) {
 		// If room is now empty, remove it
 		if remaining == 0 {
 			h.roomManager.RemoveRoom(roomId)
-			log.Printf("[Hub] Room %s destroyed (empty)", roomId)
+			logger.Info("Hub", "room %s destroyed (empty), total rooms: %d", roomId, h.roomManager.RoomCount())
 		}
 	}
 
 	// Clear client's room association
 	client.RoomID = ""
 
-	log.Printf("[Hub] Client %s left room %s", client.ID, roomId)
+	logger.Info("Hub", "client %s left room %s", client.ID, roomId)
 }
 
 func (h *Hub) handleTyping(client *Client, data interface{}) {
@@ -399,7 +484,7 @@ func (h *Hub) handleTyping(client *Client, data interface{}) {
 	}
 	broadcastData, err := msgpack.Marshal(typingMsg)
 	if err != nil {
-		log.Printf("[Hub] Failed to marshal MemberTyping message: %v", err)
+		logger.Error("Hub", "failed to marshal MemberTyping message: %v", err)
 		return
 	}
 	r.Broadcast(client.ID, broadcastData)
@@ -443,7 +528,7 @@ func (h *Hub) sendError(client *Client, code string, msg string) {
 	}
 	data, err := msgpack.Marshal(errMsg)
 	if err != nil {
-		log.Printf("[Hub] Failed to marshal error message: %v", err)
+		logger.Error("Hub", "failed to marshal error message: %v", err)
 		return
 	}
 	client.Send(data)
@@ -454,7 +539,7 @@ func (h *Hub) sendToClient(client *Client, msgType uint8, msgData interface{}) {
 	msg := Message{Type: msgType, Data: msgData}
 	data, err := msgpack.Marshal(msg)
 	if err != nil {
-		log.Printf("[Hub] Failed to marshal message: %v", err)
+		logger.Error("Hub", "failed to marshal message: %v", err)
 		return
 	}
 	client.Send(data)
