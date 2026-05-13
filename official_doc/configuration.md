@@ -16,17 +16,17 @@
 
 以下参数在代码中定义，修改需重新编译：
 
-| 参数 | 值 | 文件 | 说明 |
-|------|-----|------|------|
-| `MaxMembers` | 50 | `internal/room/room.go` | 单房间最大成员数 |
-| `writeWait` | 10s | `internal/network/client.go` | WebSocket 写超时 |
-| `pongWait` | 40s | `internal/network/client.go` | 读超时（心跳 1.5 倍） |
-| `sendBufferSize` | 256 | `internal/network/client.go` | 发送缓冲区大小 |
-| `maxMessageSize` | 4096 bytes | `internal/network/client.go` | 单条消息最大字节数 |
-| `rateLimitWindow` | 10s | `internal/network/client.go` | 频率限制滑动窗口 |
-| `rateLimitMaxCount` | 10 | `internal/network/client.go` | 窗口内最大消息数 |
-| Ping 间隔 | 25s | `internal/network/client.go` | 心跳发送间隔 |
-| NanoID 长度 | 21 chars | `internal/network/hub.go` | 房间 ID 长度 |
+| 参数　　　　　　　　| 值　　　　 | 文件　　　　　　　　　　　　 | 说明　　　　　　　　　|
+| ---------------------| ------------| ------------------------------| -----------------------|
+| `MaxMembers`　　　　| 50　　　　 | `internal/room/room.go`　　　| 单房间最大成员数　　　|
+| `writeWait`　　　　 | 10s　　　　| `internal/network/client.go` | WebSocket 写超时　　　|
+| `pongWait`　　　　　| 40s　　　　| `internal/network/client.go` | 读超时（心跳 1.5 倍） |
+| `sendBufferSize`　　| 256　　　　| `internal/network/client.go` | 发送缓冲区大小　　　　|
+| `maxMessageSize`　　| 4096 bytes | `internal/network/client.go` | 单条消息最大字节数　　|
+| `rateLimitWindow`　 | 10s　　　　| `internal/network/client.go` | 频率限制滑动窗口　　　|
+| `rateLimitMaxCount` | 10　　　　 | `internal/network/client.go` | 窗口内最大消息数　　　|
+| Ping 间隔　　　　　 | 25s　　　　| `internal/network/client.go` | 心跳发送间隔　　　　　|
+| NanoID 长度　　　　 | 21 chars　 | `internal/network/hub.go`　　| 房间 ID 长度　　　　　|
 
 ---
 
@@ -34,8 +34,8 @@
 
 ### 环境变量
 
-| 变量名 | 默认值 | 文件 | 说明 |
-|--------|--------|------|------|
+| 变量名　　　　| 默认值　　　　　　　　　 | 文件　　　　　　　 | 说明　　　　　　　　 |
+| ---------------| --------------------------| --------------------| ----------------------|
 | `VITE_WS_URL` | `ws://localhost:8080/ws` | `.env.development` | WebSocket 服务器地址 |
 
 ### 环境文件
@@ -51,16 +51,16 @@ VITE_WS_URL=wss://your-backend-domain.com/ws
 
 ### 内置常量
 
-| 参数 | 值 | 文件 | 说明 |
-|------|-----|------|------|
-| `MAX_MESSAGES` | 200 | `stores/chatStore.ts` | 消息列表最大保留条数 |
-| `RATE_LIMIT_WINDOW_MS` | 10000 | `stores/chatStore.ts` | 客户端频率限制窗口 |
-| `RATE_LIMIT_MAX` | 10 | `stores/chatStore.ts` | 窗口内最大发送数 |
-| `TYPING_TIMEOUT_MS` | 2000 | `stores/chatStore.ts` | 输入状态自动取消时间 |
-| `MAX_LENGTH` | 500 | `components/MessageInput.tsx` | 单条消息最大字符数 |
-| `SHOW_COUNT_THRESHOLD` | 400 | `components/MessageInput.tsx` | 显示字数统计的阈值 |
-| `BACKOFF_INITIAL_MS` | 1000 | `network/websocket.ts` | 重连初始退避时间 |
-| `BACKOFF_MAX_MS` | 30000 | `network/websocket.ts` | 重连最大退避时间 |
+| 参数　　　　　　　　　 | 值　　| 文件　　　　　　　　　　　　　| 说明　　　　　　　　 |
+| ------------------------| -------| -------------------------------| ----------------------|
+| `MAX_MESSAGES`　　　　 | 200　 | `stores/chatStore.ts`　　　　 | 消息列表最大保留条数 |
+| `RATE_LIMIT_WINDOW_MS` | 10000 | `stores/chatStore.ts`　　　　 | 客户端频率限制窗口　 |
+| `RATE_LIMIT_MAX`　　　 | 10　　| `stores/chatStore.ts`　　　　 | 窗口内最大发送数　　 |
+| `TYPING_TIMEOUT_MS`　　| 2000　| `stores/chatStore.ts`　　　　 | 输入状态自动取消时间 |
+| `MAX_LENGTH`　　　　　 | 500　 | `components/MessageInput.tsx` | 单条消息最大字符数　 |
+| `SHOW_COUNT_THRESHOLD` | 400　 | `components/MessageInput.tsx` | 显示字数统计的阈值　 |
+| `BACKOFF_INITIAL_MS`　 | 1000　| `network/websocket.ts`　　　　| 重连初始退避时间　　 |
+| `BACKOFF_MAX_MS`　　　 | 30000 | `network/websocket.ts`　　　　| 重连最大退避时间　　 |
 
 ---
 
