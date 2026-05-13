@@ -33,28 +33,28 @@ MessagePack 编码后以 WebSocket Binary Frame 发送。
 
 ### Client → Server
 
-| ID | 名称 | 说明 |
-|----|------|------|
-| `0x01` | CreateRoom | 创建房间 |
-| `0x02` | JoinRoom | 加入房间 |
+| ID     | 名称　　　　| 说明　　　　 |
+| --------| -------------| --------------|
+| `0x01` | CreateRoom　| 创建房间　　 |
+| `0x02` | JoinRoom　　| 加入房间　　 |
 | `0x03` | SendMessage | 发送加密消息 |
-| `0x04` | LeaveRoom | 离开房间 |
-| `0x05` | Typing | 输入状态 |
-| `0x06` | Pong | 心跳回复 |
+| `0x04` | LeaveRoom　 | 离开房间　　 |
+| `0x05` | Typing　　　| 输入状态　　 |
+| `0x06` | Pong　　　　| 心跳回复　　 |
 
 ### Server → Client
 
-| ID | 名称 | 说明 |
-|----|------|------|
-| `0x10` | RoomCreated | 房间创建成功 |
-| `0x11` | RoomJoined | 加入房间成功 |
-| `0x12` | MemberJoined | 新成员加入 |
-| `0x13` | MemberLeft | 成员离开 |
+| ID     | 名称　　　　 | 说明　　　　 |
+| --------| --------------| --------------|
+| `0x10` | RoomCreated　| 房间创建成功 |
+| `0x11` | RoomJoined　 | 加入房间成功 |
+| `0x12` | MemberJoined | 新成员加入　 |
+| `0x13` | MemberLeft　 | 成员离开　　 |
 | `0x14` | RelayMessage | 转发加密消息 |
 | `0x15` | MemberTyping | 成员输入状态 |
-| `0x16` | RoomClosed | 房间关闭 |
-| `0x17` | Error | 错误响应 |
-| `0x18` | Ping | 心跳请求 |
+| `0x16` | RoomClosed　 | 房间关闭　　 |
+| `0x17` | Error　　　　| 错误响应　　 |
+| `0x18` | Ping　　　　 | 心跳请求　　 |
 
 ---
 
