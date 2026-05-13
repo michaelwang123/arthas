@@ -1,56 +1,134 @@
 package network
 
-// 消息类型 ID
+// 消息类型 ID — Client → Server
 const (
-	// 客户端 → 服务器
-	MsgPlayerInput uint8 = 0x01
-	MsgSkillUse    uint8 = 0x02
-	MsgPong        uint8 = 0x03
-
-	// 服务器 → 客户端
-	MsgGameState       uint8 = 0x10
-	MsgPlayerJoined    uint8 = 0x11
-	MsgPlayerLeft      uint8 = 0x12
-	MsgSkillEffect     uint8 = 0x13
-	MsgPlayerDied      uint8 = 0x14
-	MsgPlayerRespawned uint8 = 0x15
-	MsgScoreUpdate     uint8 = 0x16
-	MsgGameOver        uint8 = 0x17
-	MsgServerPing      uint8 = 0x18
-	MsgWelcome         uint8 = 0x19
+	MsgCreateRoom  uint8 = 0x01
+	MsgJoinRoom    uint8 = 0x02
+	MsgSendMessage uint8 = 0x03
+	MsgLeaveRoom   uint8 = 0x04
+	MsgTyping      uint8 = 0x05
+	MsgPong        uint8 = 0x06
 )
 
-// Message 通用消息信封
+// 消息类型 ID — Server → Client
+const (
+	MsgRoomCreated  uint8 = 0x10
+	MsgRoomJoined   uint8 = 0x11
+	MsgMemberJoined uint8 = 0x12
+	MsgMemberLeft   uint8 = 0x13
+	MsgRelayMessage uint8 = 0x14
+	MsgMemberTyping uint8 = 0x15
+	MsgRoomClosed   uint8 = 0x16
+	MsgError        uint8 = 0x17
+	MsgPing         uint8 = 0x18
+)
+
+// 错误码
+const (
+	ErrCodeRoomNotFound   = "E001"
+	ErrCodeRoomFull       = "E002"
+	ErrCodeNotInRoom      = "E003"
+	ErrCodeRateLimited    = "E004"
+	ErrCodeInvalidMessage = "E005"
+)
+
+// Message 通用消息信封，使用 MessagePack 二进制序列化。
 type Message struct {
 	Type uint8       `msgpack:"type"`
 	Data interface{} `msgpack:"data"`
 }
 
-// PlayerInputData 玩家输入
-type PlayerInputData struct {
-	Seq    uint32  `msgpack:"seq"`
-	DX     float64 `msgpack:"dx"`
-	DY     float64 `msgpack:"dy"`
-	Attack bool    `msgpack:"attack"`
-	MouseX float64 `msgpack:"mouseX"`
-	MouseY float64 `msgpack:"mouseY"`
+// --- Client → Server 数据结构 ---
+
+// CreateRoomData 创建房间请求。
+type CreateRoomData struct {
+	Name string `msgpack:"name"`
 }
 
-// SkillUseData 技能使用
-type SkillUseData struct {
-	SkillID int     `msgpack:"skillId"`
-	TargetX float64 `msgpack:"targetX"`
-	TargetY float64 `msgpack:"targetY"`
+// JoinRoomData 加入房间请求。
+type JoinRoomData struct {
+	RoomID string `msgpack:"roomId"`
+	Name   string `msgpack:"name"`
 }
 
-// WelcomeData 欢迎消息
-type WelcomeData struct {
-	PlayerID   string     `msgpack:"playerId"`
-	GameConfig GameConfig `msgpack:"gameConfig"`
+// SendMessageData 发送加密消息。
+type SendMessageData struct {
+	IV         string `msgpack:"iv"`
+	Ciphertext string `msgpack:"ciphertext"`
 }
 
-type GameConfig struct {
-	WorldWidth  float64 `msgpack:"worldWidth"`
-	WorldHeight float64 `msgpack:"worldHeight"`
-	TickRate    int     `msgpack:"tickRate"`
+// LeaveRoomData 离开房间请求（无字段）。
+type LeaveRoomData struct{}
+
+// TypingData 输入状态通知。
+type TypingData struct {
+	Typing bool `msgpack:"typing"`
+}
+
+// PongData 心跳回复。
+type PongData struct {
+	T int64 `msgpack:"t"`
+}
+
+// --- Server → Client 数据结构 ---
+
+// RoomCreatedData 房间创建成功响应。
+type RoomCreatedData struct {
+	RoomID string `msgpack:"roomId"`
+}
+
+// RoomJoinedData 加入房间成功响应，包含当前成员列表。
+type RoomJoinedData struct {
+	RoomID  string       `msgpack:"roomId"`
+	Members []MemberInfo `msgpack:"members"`
+}
+
+// MemberJoinedData 新成员加入通知。
+type MemberJoinedData struct {
+	ID    string `msgpack:"id"`
+	Name  string `msgpack:"name"`
+	Color string `msgpack:"color"`
+}
+
+// MemberLeftData 成员离开通知。
+type MemberLeftData struct {
+	ID string `msgpack:"id"`
+}
+
+// RelayMessageData 服务器中转的加密消息。
+type RelayMessageData struct {
+	SenderID   string `msgpack:"senderId"`
+	SenderName string `msgpack:"senderName"`
+	IV         string `msgpack:"iv"`
+	Ciphertext string `msgpack:"ciphertext"`
+	T          int64  `msgpack:"t"`
+}
+
+// MemberTypingData 成员输入状态通知。
+type MemberTypingData struct {
+	ID     string `msgpack:"id"`
+	Typing bool   `msgpack:"typing"`
+}
+
+// RoomClosedData 房间关闭通知（无字段）。
+type RoomClosedData struct{}
+
+// ErrorData 错误响应。
+type ErrorData struct {
+	Code string `msgpack:"code"`
+	Msg  string `msgpack:"msg"`
+}
+
+// PingData 服务器心跳。
+type PingData struct {
+	T int64 `msgpack:"t"`
+}
+
+// --- 共用结构 ---
+
+// MemberInfo 成员信息，用于 RoomJoined 响应中的成员列表。
+type MemberInfo struct {
+	ID    string `msgpack:"id"`
+	Name  string `msgpack:"name"`
+	Color string `msgpack:"color"`
 }
