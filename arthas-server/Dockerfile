@@ -54,10 +54,12 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
 # 最小化运行环境：Alpine Linux + 编译后的二进制
-FROM alpine:latest
+FROM alpine:3.23
 
-# ca-certificates: 支持 HTTPS 出站请求（如果未来需要调用外部 API）
-RUN apk --no-cache add ca-certificates
+# 📚 学习要点: 为什么不安装 ca-certificates？
+# Arthas 服务器是纯 WebSocket 中继，不发起任何 HTTPS 出站请求。
+# 去掉 ca-certificates 包可节省 ~0.5MB，确保镜像 < 30MB。
+# 如果未来需要调用外部 API，再加回：RUN apk --no-cache add ca-certificates
 
 # 创建非 root 用户（安全最佳实践）
 # -D: 不设置密码（无法通过密码登录）
