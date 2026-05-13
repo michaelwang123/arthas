@@ -1,73 +1,73 @@
-import { useEffect, useRef, useState } from 'react'
-import { Game } from './game/Game'
-import { HUD } from './ui/HUD'
-import { Scoreboard } from './ui/Scoreboard'
-import { useGameStore } from './stores/gameStore'
+import { useEffect, Component, type ReactNode } from 'react';
+import { useChatStore } from './stores/chatStore';
+import { Home } from './pages/Home';
+import { ChatRoom } from './pages/ChatRoom';
 
-function App() {
-  const canvasRef = useRef<HTMLDivElement>(null)
-  const gameRef = useRef<Game | null>(null)
-  const connected = useGameStore((s) => s.connected)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+// ===== ErrorBoundary =====
 
-  useEffect(() => {
-    if (!canvasRef.current || gameRef.current) return
-
-    const game = new Game(canvasRef.current)
-    gameRef.current = game
-
-    game.start()
-      .then(() => {
-        setLoading(false)
-        console.log('[App] Game started successfully')
-      })
-      .catch((err) => {
-        console.error('[App] Game failed to start:', err)
-        setError(String(err))
-        setLoading(false)
-      })
-
-    return () => {
-      game.destroy()
-      gameRef.current = null
-    }
-  }, [])
-
-  return (
-    <div className="relative w-screen h-screen bg-gray-900">
-      {/* PixiJS 渲染层 */}
-      <div ref={canvasRef} id="game-canvas" className="absolute inset-0 z-0" />
-
-      {/* React UI 覆盖层 */}
-      <div className="absolute inset-0 pointer-events-none z-10">
-        {error ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-red-400 text-lg p-4 bg-black/80 rounded">
-              Error: {error}
-            </div>
-          </div>
-        ) : loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-white text-2xl font-bold animate-pulse">
-              Loading game...
-            </div>
-          </div>
-        ) : !connected ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-yellow-400 text-xl font-bold animate-pulse">
-              Connecting to server...
-            </div>
-          </div>
-        ) : (
-          <>
-            <HUD />
-            <Scoreboard />
-          </>
-        )}
-      </div>
-    </div>
-  )
+interface ErrorBoundaryProps {
+  children: ReactNode;
 }
 
-export default App
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[ErrorBoundary] Caught error:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-gray-800 rounded-xl p-6 text-center space-y-4">
+            <div className="text-4xl">⚠️</div>
+            <h1 className="text-xl font-bold text-white">出错了</h1>
+            <p className="text-sm text-gray-400">
+              {this.state.error?.message ?? '发生了未知错误'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+            >
+              刷新页面
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// ===== App =====
+
+function App() {
+  const roomId = useChatStore((s) => s.roomId);
+  const connect = useChatStore((s) => s.connect);
+
+  useEffect(() => {
+    connect();
+  }, []);
+
+  return (
+    <ErrorBoundary>
+      {roomId === null ? <Home /> : <ChatRoom />}
+    </ErrorBoundary>
+  );
+}
+
+export default App;

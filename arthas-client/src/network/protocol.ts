@@ -1,99 +1,114 @@
 // ===== 消息类型 ID =====
 
-// 客户端 → 服务器
-export const MSG_PLAYER_INPUT = 0x01
-export const MSG_SKILL_USE = 0x02
-export const MSG_PONG = 0x03
+// Client → Server
+export const MSG_CREATE_ROOM = 0x01;
+export const MSG_JOIN_ROOM = 0x02;
+export const MSG_SEND_MESSAGE = 0x03;
+export const MSG_LEAVE_ROOM = 0x04;
+export const MSG_TYPING = 0x05;
+export const MSG_PONG = 0x06;
 
-// 服务器 → 客户端
-export const MSG_GAME_STATE = 0x10
-export const MSG_PLAYER_JOINED = 0x11
-export const MSG_PLAYER_LEFT = 0x12
-export const MSG_SKILL_EFFECT = 0x13
-export const MSG_PLAYER_DIED = 0x14
-export const MSG_PLAYER_RESPAWNED = 0x15
-export const MSG_SCORE_UPDATE = 0x16
-export const MSG_GAME_OVER = 0x17
-export const MSG_SERVER_PING = 0x18
-export const MSG_WELCOME = 0x19
+// Server → Client
+export const MSG_ROOM_CREATED = 0x10;
+export const MSG_ROOM_JOINED = 0x11;
+export const MSG_MEMBER_JOINED = 0x12;
+export const MSG_MEMBER_LEFT = 0x13;
+export const MSG_RELAY_MESSAGE = 0x14;
+export const MSG_MEMBER_TYPING = 0x15;
+export const MSG_ROOM_CLOSED = 0x16;
+export const MSG_ERROR = 0x17;
+export const MSG_PING = 0x18;
 
-// ===== 数据类型 =====
+// ===== 错误码 =====
 
-export type PlayerStateEnum = 'idle' | 'moving' | 'attacking' | 'dead'
-
-export interface PlayerState {
-  id: string
-  x: number
-  y: number
-  hp: number
-  maxHp: number
-  dir: number
-  state: PlayerStateEnum
-  lastInputSeq: number
-}
-
-export interface ProjectileState {
-  id: string
-  x: number
-  y: number
-  dx: number
-  dy: number
-  ownerId: string
-  skillId: number
-}
-
-export interface CoreshardState {
-  x: number
-  y: number
-  state: 'idle' | 'capturing' | 'cooldown'
-  capturingPlayerId: string | null
-  captureProgress: number
-  respawnTimer: number
-}
-
-export interface GameStateMessage {
-  tick: number
-  players: PlayerState[]
-  projectiles: ProjectileState[]
-  coreshard: CoreshardState
-}
-
-export interface WelcomeMessage {
-  playerId: string
-  gameConfig: {
-    worldWidth: number
-    worldHeight: number
-    tickRate: number
-  }
-}
-
-export interface PlayerInputMessage {
-  seq: number
-  dx: number
-  dy: number
-  attack: boolean
-  mouseX: number
-  mouseY: number
-}
-
-export interface SkillUseMessage {
-  skillId: number
-  targetX: number
-  targetY: number
-}
-
-export interface ScoreUpdateMessage {
-  scores: Record<string, number>
-}
-
-export interface GameOverMessage {
-  winnerId: string
-  scores: Record<string, number>
-}
+export const ERR_ROOM_NOT_FOUND = 'E001';
+export const ERR_ROOM_FULL = 'E002';
+export const ERR_NOT_IN_ROOM = 'E003';
+export const ERR_RATE_LIMITED = 'E004';
+export const ERR_INVALID_MESSAGE = 'E005';
 
 // ===== 消息信封 =====
 
 export interface Message {
-  type: number
-  data: unknown
+  type: number;
+  data: unknown;
+}
+
+// ===== Client → Server 数据结构 =====
+
+export interface CreateRoomData {
+  name: string;
+}
+
+export interface JoinRoomData {
+  roomId: string;
+  name: string;
+}
+
+export interface SendMessageData {
+  iv: string;
+  ciphertext: string;
+}
+
+export interface LeaveRoomData {}
+
+export interface TypingData {
+  typing: boolean;
+}
+
+export interface PongData {
+  t: number;
+}
+
+// ===== Server → Client 数据结构 =====
+
+export interface RoomCreatedData {
+  roomId: string;
+}
+
+export interface RoomJoinedData {
+  roomId: string;
+  members: MemberInfo[];
+}
+
+export interface MemberJoinedData {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface MemberLeftData {
+  id: string;
+}
+
+export interface RelayMessageData {
+  senderId: string;
+  senderName: string;
+  iv: string;
+  ciphertext: string;
+  t: number;
+}
+
+export interface MemberTypingData {
+  id: string;
+  typing: boolean;
+}
+
+export interface RoomClosedData {}
+
+export interface ErrorData {
+  code: string;
+  msg: string;
+}
+
+export interface PingData {
+  t: number;
+}
+
+// ===== 共用结构 =====
+
+export interface MemberInfo {
+  id: string;
+  name: string;
+  color: string;
 }

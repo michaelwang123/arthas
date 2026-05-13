@@ -3,10 +3,12 @@ package network
 import (
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 const (
@@ -31,12 +33,26 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// 消息频率限制常量
+const (
+	rateLimitWindow   = 10 * time.Second // 滑动窗口大小
+	rateLimitMaxCount = 10               // 窗口内最大消息数
+)
+
 // Client 代表一个 WebSocket 客户端连接
 type Client struct {
-	ID   string
-	hub  *Hub
-	conn *websocket.Conn
-	send chan []byte
+	ID       string
+	RoomID   string // 当前所在房间 ID（空字符串 = 未加入任何房间）
+	Name     string // 显示昵称（创建/加入房间时设置）
+	Color    string // 颜色标识（服务器分配）
+	LastPong int64  // 最近一次收到 Pong 的时间戳（UnixMilli）
+	hub      *Hub
+	conn     *websocket.Conn
+	send     chan []byte
+
+	// 消息频率限制：滑动窗口时间戳
+	msgTimestamps []int64
+	msgMu         sync.Mutex
 }
 
 // ServeWs 处理 WebSocket 升级请求
@@ -83,7 +99,7 @@ func (c *Client) readPump() {
 			break
 		}
 
-		c.hub.HandleMessage(c.ID, message)
+		c.hub.ParseAndHandleMessage(c, message)
 	}
 }
 
@@ -111,7 +127,18 @@ func (c *Client) writePump() {
 
 		case <-pingTicker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			// WebSocket-level ping for connection liveness
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+			// Application-level Ping (MsgPing) for frontend latency measurement
+			pingMsg := Message{Type: MsgPing, Data: PingData{T: time.Now().UnixMilli()}}
+			pingData, err := msgpack.Marshal(pingMsg)
+			if err != nil {
+				log.Printf("[WS] Failed to marshal Ping message for %s: %v", c.ID, err)
+				return
+			}
+			if err := c.conn.WriteMessage(websocket.BinaryMessage, pingData); err != nil {
 				return
 			}
 		}
@@ -129,4 +156,34 @@ func (c *Client) Send(data []byte) {
 
 func generateID() string {
 	return uuid.New().String()[:8]
+}
+
+// IsRateLimited 检查客户端是否超过消息频率限制。
+// 使用滑动窗口算法：保留最近 10 秒内的消息时间戳，
+// 如果窗口内消息数 >= rateLimitMaxCount，则返回 true。
+func (c *Client) IsRateLimited() bool {
+	c.msgMu.Lock()
+	defer c.msgMu.Unlock()
+
+	now := time.Now().UnixMilli()
+	windowStart := now - rateLimitWindow.Milliseconds()
+
+	// 清除窗口外的旧时间戳
+	validIdx := 0
+	for _, ts := range c.msgTimestamps {
+		if ts > windowStart {
+			c.msgTimestamps[validIdx] = ts
+			validIdx++
+		}
+	}
+	c.msgTimestamps = c.msgTimestamps[:validIdx]
+
+	// 检查是否超限
+	if len(c.msgTimestamps) >= rateLimitMaxCount {
+		return true
+	}
+
+	// 记录本次消息时间戳
+	c.msgTimestamps = append(c.msgTimestamps, now)
+	return false
 }

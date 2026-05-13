@@ -1,192 +1,151 @@
 import { encode, decode } from '@msgpack/msgpack'
-import {
-  MSG_PLAYER_INPUT,
-  MSG_SKILL_USE,
-  MSG_PONG,
-  MSG_GAME_STATE,
-  MSG_WELCOME,
-  MSG_PLAYER_JOINED,
-  MSG_PLAYER_LEFT,
-  MSG_PLAYER_DIED,
-  MSG_PLAYER_RESPAWNED,
-  MSG_SCORE_UPDATE,
-  MSG_GAME_OVER,
-  MSG_SERVER_PING,
-  type Message,
-  type GameStateMessage,
-  type WelcomeMessage,
-  type ScoreUpdateMessage,
-  type GameOverMessage,
-} from './protocol'
-import { useGameStore } from '../stores/gameStore'
-import type { PlayerInput } from '../game/systems/InputSystem'
+import { MSG_PING, MSG_PONG, type Message } from './protocol'
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws'
+// ===== 配置 =====
 
-export class WebSocketManager {
-  private ws: WebSocket | null = null
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  private inputSeq = 0
+const DEFAULT_WS_URL = 'ws://localhost:8080/ws'
+const BACKOFF_INITIAL_MS = 1000
+const BACKOFF_MAX_MS = 30000
 
-  connect() {
-    try {
-      this.ws = new WebSocket(WS_URL)
-      this.ws.binaryType = 'arraybuffer'
+// ===== 状态 =====
 
-      this.ws.onopen = () => {
-        console.log('[WS] Connected to server')
-        useGameStore.getState().setConnected(true)
+let ws: WebSocket | null = null
+let connected = false
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let backoff = BACKOFF_INITIAL_MS
+let messageHandler: ((msg: Message) => void) | null = null
+let shouldReconnect = true
+
+// ===== 公开 API =====
+
+/**
+ * 发起 WebSocket 连接。
+ * @param url 可选，覆盖默认 URL
+ */
+export function connect(url?: string): void {
+  const wsUrl = url ?? import.meta.env.VITE_WS_URL ?? DEFAULT_WS_URL
+  shouldReconnect = true
+
+  try {
+    ws = new WebSocket(wsUrl)
+    ws.binaryType = 'arraybuffer'
+
+    ws.onopen = () => {
+      console.log('[WS] Connected')
+      connected = true
+      backoff = BACKOFF_INITIAL_MS // 重置退避
+    }
+
+    ws.onmessage = (event: MessageEvent) => {
+      handleRawMessage(event.data)
+    }
+
+    ws.onclose = () => {
+      console.log('[WS] Disconnected')
+      connected = false
+      ws = null
+      if (shouldReconnect) {
+        scheduleReconnect(wsUrl)
       }
+    }
 
-      this.ws.onmessage = (event) => {
-        this.handleMessage(event.data)
-      }
-
-      this.ws.onclose = () => {
-        console.log('[WS] Disconnected')
-        useGameStore.getState().setConnected(false)
-        this.scheduleReconnect()
-      }
-
-      this.ws.onerror = (err) => {
-        console.error('[WS] Error:', err)
-      }
-    } catch (err) {
-      console.error('[WS] Connection failed:', err)
-      this.scheduleReconnect()
+    ws.onerror = (err) => {
+      console.error('[WS] Error:', err)
+    }
+  } catch (err) {
+    console.error('[WS] Connection failed:', err)
+    connected = false
+    ws = null
+    if (shouldReconnect) {
+      scheduleReconnect(url ?? import.meta.env.VITE_WS_URL ?? DEFAULT_WS_URL)
     }
   }
+}
 
-  disconnect() {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer)
-    }
-    if (this.ws) {
-      this.ws.close()
-      this.ws = null
-    }
+/**
+ * 主动关闭连接，不再自动重连。
+ */
+export function disconnect(): void {
+  shouldReconnect = false
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
   }
+  if (ws) {
+    ws.close()
+    ws = null
+  }
+  connected = false
+}
 
-  sendInput(input: PlayerInput) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
+/**
+ * 发送消息。将 {type, data} 信封用 MessagePack 编码后以二进制发送。
+ */
+export function send(type: number, data: unknown): void {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return
+  const msg: Message = { type, data }
+  const encoded = encode(msg)
+  ws.send(encoded)
+}
 
-    // 只在有实际输入时发送
-    if (input.dx === 0 && input.dy === 0 && !input.attack && !input.skill1 && !input.skill2) {
+/**
+ * 注册消息处理回调。收到服务器消息后会调用此 handler。
+ */
+export function onMessage(handler: (msg: Message) => void): void {
+  messageHandler = handler
+}
+
+/**
+ * 返回当前连接状态。
+ */
+export function isConnected(): boolean {
+  return connected
+}
+
+/**
+ * 返回底层 WebSocket 实例（调试/高级用途）。
+ */
+export function getWs(): WebSocket | null {
+  return ws
+}
+
+// ===== 内部逻辑 =====
+
+/**
+ * 处理收到的原始二进制消息：解码 → 处理 Ping → 分发给 handler。
+ */
+function handleRawMessage(raw: ArrayBuffer): void {
+  try {
+    const msg = decode(new Uint8Array(raw)) as Message
+
+    // 自动回复 Ping
+    if (msg.type === MSG_PING) {
+      const pingData = msg.data as { t: number }
+      send(MSG_PONG, { t: pingData.t })
       return
     }
 
-    this.inputSeq++
-
-    // 发送移动/攻击输入
-    this.send({
-      type: MSG_PLAYER_INPUT,
-      data: {
-        seq: this.inputSeq,
-        dx: input.dx,
-        dy: input.dy,
-        attack: input.attack,
-        mouseX: input.mouseX,
-        mouseY: input.mouseY,
-      },
-    })
-
-    // 发送技能使用
-    if (input.skill1) {
-      this.send({
-        type: MSG_SKILL_USE,
-        data: { skillId: 1, targetX: input.mouseX, targetY: input.mouseY },
-      })
+    // 分发给注册的 handler
+    if (messageHandler) {
+      messageHandler(msg)
     }
-    if (input.skill2) {
-      this.send({
-        type: MSG_SKILL_USE,
-        data: { skillId: 2, targetX: input.mouseX, targetY: input.mouseY },
-      })
-    }
+  } catch (err) {
+    console.error('[WS] Failed to decode message:', err)
   }
+}
 
-  private send(msg: Message) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
-    const data = encode(msg)
-    this.ws.send(data)
-  }
+/**
+ * 指数退避重连调度。
+ * 退避序列：1s → 2s → 4s → 8s → 16s → 30s (max)
+ */
+function scheduleReconnect(url: string): void {
+  if (reconnectTimer) return
 
-  private handleMessage(raw: ArrayBuffer) {
-    try {
-      const msg = decode(new Uint8Array(raw)) as Message
-      const store = useGameStore.getState()
-
-      switch (msg.type) {
-        case MSG_WELCOME: {
-          const data = msg.data as WelcomeMessage
-          store.setPlayerId(data.playerId)
-          console.log('[WS] Welcome! Player ID:', data.playerId)
-          break
-        }
-
-        case MSG_GAME_STATE: {
-          const data = msg.data as GameStateMessage
-          store.updateGameState(data)
-          break
-        }
-
-        case MSG_PLAYER_JOINED: {
-          const data = msg.data as { id: string }
-          console.log('[WS] Player joined:', data.id)
-          break
-        }
-
-        case MSG_PLAYER_LEFT: {
-          const data = msg.data as { id: string }
-          console.log('[WS] Player left:', data.id)
-          break
-        }
-
-        case MSG_PLAYER_DIED: {
-          const data = msg.data as { id: string; killerId: string }
-          if (data.id === store.playerId) {
-            store.setDead(true)
-          }
-          break
-        }
-
-        case MSG_PLAYER_RESPAWNED: {
-          const data = msg.data as { id: string }
-          if (data.id === store.playerId) {
-            store.setDead(false)
-          }
-          break
-        }
-
-        case MSG_SCORE_UPDATE: {
-          const data = msg.data as ScoreUpdateMessage
-          store.updateScores(data.scores)
-          break
-        }
-
-        case MSG_GAME_OVER: {
-          const data = msg.data as GameOverMessage
-          store.setGameOver(data.winnerId, data.scores)
-          break
-        }
-
-        case MSG_SERVER_PING: {
-          // 回复 Pong
-          this.send({ type: MSG_PONG, data: { timestamp: Date.now() } })
-          break
-        }
-      }
-    } catch (err) {
-      console.error('[WS] Failed to decode message:', err)
-    }
-  }
-
-  private scheduleReconnect() {
-    if (this.reconnectTimer) return
-    console.log('[WS] Reconnecting in 3s...')
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null
-      this.connect()
-    }, 3000)
-  }
+  console.log(`[WS] Reconnecting in ${backoff / 1000}s...`)
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    // 增长退避时间（下次使用）
+    backoff = Math.min(backoff * 2, BACKOFF_MAX_MS)
+    connect(url)
+  }, backoff)
 }
