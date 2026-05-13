@@ -1,0 +1,26 @@
+# .dockerignore — Docker 构建上下文排除规则
+#
+# 📚 学习要点: .dockerignore 的作用
+# Docker 构建时会将「构建上下文」（build context）中的所有文件发送给 Docker daemon。
+# .dockerignore 排除不需要的文件，带来两个好处：
+# 1. 减少发送到 daemon 的数据量（加快构建启动速度）
+# 2. 避免不相关文件变更导致缓存失效（COPY . . 层的缓存依赖所有文件的哈希）
+#
+# 例如：修改 README.md 不应该触发 Go 代码的重新编译。
+
+# 版本控制
+.git
+
+# 文档目录（不参与编译）
+docs/
+official_doc/
+
+# 前端项目（独立部署到 Vercel）
+arthas-client/
+
+# Markdown 文件（README 等）
+*.md
+
+# IDE 和工具配置
+.kiro/
+.vscode/
