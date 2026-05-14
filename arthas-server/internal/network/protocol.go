@@ -2,25 +2,27 @@ package network
 
 // 消息类型 ID — Client → Server
 const (
-	MsgCreateRoom  uint8 = 0x01
-	MsgJoinRoom    uint8 = 0x02
-	MsgSendMessage uint8 = 0x03
-	MsgLeaveRoom   uint8 = 0x04
-	MsgTyping      uint8 = 0x05
-	MsgPong        uint8 = 0x06
+	MsgCreateRoom   uint8 = 0x01
+	MsgJoinRoom     uint8 = 0x02
+	MsgSendMessage  uint8 = 0x03
+	MsgLeaveRoom    uint8 = 0x04
+	MsgTyping       uint8 = 0x05
+	MsgPong         uint8 = 0x06
+	MsgSendReaction uint8 = 0x07
 )
 
 // 消息类型 ID — Server → Client
 const (
-	MsgRoomCreated  uint8 = 0x10
-	MsgRoomJoined   uint8 = 0x11
-	MsgMemberJoined uint8 = 0x12
-	MsgMemberLeft   uint8 = 0x13
-	MsgRelayMessage uint8 = 0x14
-	MsgMemberTyping uint8 = 0x15
-	MsgRoomClosed   uint8 = 0x16
-	MsgError        uint8 = 0x17
-	MsgPing         uint8 = 0x18
+	MsgRoomCreated   uint8 = 0x10
+	MsgRoomJoined    uint8 = 0x11
+	MsgMemberJoined  uint8 = 0x12
+	MsgMemberLeft    uint8 = 0x13
+	MsgRelayMessage  uint8 = 0x14
+	MsgMemberTyping  uint8 = 0x15
+	MsgRoomClosed    uint8 = 0x16
+	MsgError         uint8 = 0x17
+	MsgPing          uint8 = 0x18
+	MsgRelayReaction uint8 = 0x19
 )
 
 // 错误码
@@ -97,6 +99,15 @@ type MemberLeftData struct {
 
 // RelayMessageData 服务器中转的加密消息。
 type RelayMessageData struct {
+	SenderID   string `msgpack:"senderId"`
+	SenderName string `msgpack:"senderName"`
+	IV         string `msgpack:"iv"`
+	Ciphertext string `msgpack:"ciphertext"`
+	T          int64  `msgpack:"t"`
+}
+
+// RelayReactionData 服务器中转的加密反应消息。
+type RelayReactionData struct {
 	SenderID   string `msgpack:"senderId"`
 	SenderName string `msgpack:"senderName"`
 	IV         string `msgpack:"iv"`

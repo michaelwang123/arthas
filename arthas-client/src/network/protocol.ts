@@ -7,6 +7,7 @@ export const MSG_SEND_MESSAGE = 0x03;
 export const MSG_LEAVE_ROOM = 0x04;
 export const MSG_TYPING = 0x05;
 export const MSG_PONG = 0x06;
+export const MSG_SEND_REACTION = 0x07;
 
 // Server → Client
 export const MSG_ROOM_CREATED = 0x10;
@@ -18,6 +19,7 @@ export const MSG_MEMBER_TYPING = 0x15;
 export const MSG_ROOM_CLOSED = 0x16;
 export const MSG_ERROR = 0x17;
 export const MSG_PING = 0x18;
+export const MSG_RELAY_REACTION = 0x19;
 
 // ===== 错误码 =====
 
@@ -82,6 +84,14 @@ export interface MemberLeftData {
 }
 
 export interface RelayMessageData {
+  senderId: string;
+  senderName: string;
+  iv: string;
+  ciphertext: string;
+  t: number;
+}
+
+export interface RelayReactionData {
   senderId: string;
   senderName: string;
   iv: string;

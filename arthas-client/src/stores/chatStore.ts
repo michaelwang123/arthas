@@ -11,11 +11,13 @@ import {
   MSG_SEND_MESSAGE,
   MSG_LEAVE_ROOM,
   MSG_TYPING,
+  MSG_SEND_REACTION,
   MSG_ROOM_CREATED,
   MSG_ROOM_JOINED,
   MSG_MEMBER_JOINED,
   MSG_MEMBER_LEFT,
   MSG_RELAY_MESSAGE,
+  MSG_RELAY_REACTION,
   MSG_MEMBER_TYPING,
   MSG_ROOM_CLOSED,
   MSG_ERROR,
@@ -25,6 +27,7 @@ import {
   type MemberJoinedData,
   type MemberLeftData,
   type RelayMessageData,
+  type RelayReactionData,
   type MemberTypingData,
   type ErrorData,
 } from '../network/protocol';
@@ -34,17 +37,31 @@ import { encryptMessage } from '../crypto/encrypt';
 import { decryptMessage } from '../crypto/decrypt';
 import { encodeShareKey, decodeShareKey } from '../crypto/shareKey';
 import { playNotificationSound, showDesktopNotification, playJoinSound, playLeaveSound } from '../utils/notification';
+import { buildPayload, parsePayload, makeStableId } from '../utils/payload';
 
 // ===== Types =====
 
+export interface ReplyData {
+  stableId: string;
+  senderName: string;
+  preview: string;
+}
+
+export interface Reaction {
+  emoji: string;
+  userIds: string[];
+}
+
 export interface ChatMessage {
   id: string;
+  stableId: string;
   senderId: string;
   senderName: string;
   text: string;
   timestamp: number;
   isMine: boolean;
   isSystem: boolean;
+  reply?: ReplyData;
 }
 
 export interface Member {
@@ -72,6 +89,12 @@ export interface ChatState {
   // Notification
   muted: boolean;
 
+  // Reply
+  replyTo: ReplyData | null;
+
+  // Reactions
+  reactions: Map<string, Reaction[]>;
+
   // Actions
   connect: () => void;
   createRoom: (name: string) => Promise<void>;
@@ -80,6 +103,9 @@ export interface ChatState {
   setTyping: (typing: boolean) => void;
   leaveRoom: () => void;
   toggleMute: () => void;
+  setReplyTo: (reply: ReplyData) => void;
+  clearReply: () => void;
+  sendReaction: (stableId: string, emoji: string) => void;
 
   // Internal
   handleServerMessage: (msg: Message) => void;
@@ -136,6 +162,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   typingMembers: new Map(),
   muted: localStorage.getItem('arthas_muted') === 'true',
+  replyTo: null,
+  reactions: new Map(),
 
   connect: () => {
     ws.onMessage((msg: Message) => {
@@ -166,6 +194,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Invalid share code — add system error message
       const errorMsg: ChatMessage = {
         id: generateMessageId(),
+        stableId: '',
         senderId: 'system',
         senderName: 'System',
         text: '分享码无效',
@@ -184,13 +213,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (text: string) => {
-    const { roomKey, myId, myName } = get();
+    const { roomKey, myId, myName, replyTo } = get();
     if (!roomKey || !myId) return;
 
     // Rate limiting check
     if (isRateLimited()) {
       const errorMsg: ChatMessage = {
         id: generateMessageId(),
+        stableId: '',
         senderId: 'system',
         senderName: 'System',
         text: '发送过快，请稍后再试',
@@ -202,27 +232,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
+    // Build payload with optional reply
+    const payload = buildPayload(text, replyTo);
+
     // Encrypt
-    const { iv, ciphertext } = await encryptMessage(roomKey, text);
+    const { iv, ciphertext } = await encryptMessage(roomKey, payload);
 
     // Send over WebSocket
     ws.send(MSG_SEND_MESSAGE, { iv, ciphertext });
     recordMessageSent();
 
     // Optimistic local render
+    const timestamp = Date.now();
     const localMsg: ChatMessage = {
       id: generateMessageId(),
+      stableId: makeStableId(myId, timestamp),
       senderId: myId,
       senderName: myName,
       text,
-      timestamp: Date.now(),
+      timestamp,
       isMine: true,
       isSystem: false,
+      reply: replyTo ?? undefined,
     };
 
     set((state) => {
       const updated = [...state.messages, localMsg];
-      return { messages: updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated };
+      return {
+        messages: updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated,
+        replyTo: null, // Clear reply after sending
+      };
     });
   },
 
@@ -265,6 +304,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       members: [],
       messages: [],
       typingMembers: new Map(),
+      replyTo: null,
+      reactions: new Map(),
     });
 
     // Reset module-level state
@@ -280,6 +321,74 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const newMuted = !get().muted;
     localStorage.setItem('arthas_muted', String(newMuted));
     set({ muted: newMuted });
+  },
+
+  setReplyTo: (reply: ReplyData) => {
+    set({ replyTo: reply });
+  },
+
+  clearReply: () => {
+    set({ replyTo: null });
+  },
+
+  sendReaction: (stableId: string, emoji: string) => {
+    const { myId, roomKey, reactions } = get();
+    if (!myId || !roomKey) return;
+
+    const msgReactions = reactions.get(stableId) || [];
+    const myExisting = msgReactions.find((r) => r.userIds.includes(myId));
+
+    const encryptAndSend = async (targetStableId: string, targetEmoji: string, action: 'add' | 'remove') => {
+      const payload = JSON.stringify({ stableId: targetStableId, emoji: targetEmoji, action });
+      const { iv, ciphertext } = await encryptMessage(roomKey, payload);
+      ws.send(MSG_SEND_REACTION, { iv, ciphertext });
+    };
+
+    const updateLocal = (targetEmoji: string, action: 'add' | 'remove') => {
+      set((state) => {
+        const current = new Map(state.reactions);
+        const list = [...(current.get(stableId) || [])];
+
+        if (action === 'add') {
+          const existing = list.find((r) => r.emoji === targetEmoji);
+          if (existing) {
+            existing.userIds = [...existing.userIds, myId];
+          } else {
+            list.push({ emoji: targetEmoji, userIds: [myId] });
+          }
+        } else {
+          const existing = list.find((r) => r.emoji === targetEmoji);
+          if (existing) {
+            existing.userIds = existing.userIds.filter((id) => id !== myId);
+            if (existing.userIds.length === 0) {
+              const idx = list.indexOf(existing);
+              list.splice(idx, 1);
+            }
+          }
+        }
+
+        current.set(stableId, list);
+        return { reactions: current };
+      });
+    };
+
+    if (myExisting) {
+      if (myExisting.emoji === emoji) {
+        // Toggle off
+        encryptAndSend(stableId, emoji, 'remove');
+        updateLocal(emoji, 'remove');
+      } else {
+        // Switch: remove old + add new
+        encryptAndSend(stableId, myExisting.emoji, 'remove');
+        encryptAndSend(stableId, emoji, 'add');
+        updateLocal(myExisting.emoji, 'remove');
+        updateLocal(emoji, 'add');
+      }
+    } else {
+      // New reaction
+      encryptAndSend(stableId, emoji, 'add');
+      updateLocal(emoji, 'add');
+    }
   },
 
   handleServerMessage: (msg: Message) => {
@@ -320,6 +429,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         const systemMsg: ChatMessage = {
           id: generateMessageId(),
+          stableId: '',
           senderId: 'system',
           senderName: 'System',
           text: `${data.name} 加入了房间`,
@@ -350,6 +460,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         const systemMsg: ChatMessage = {
           id: generateMessageId(),
+          stableId: '',
           senderId: 'system',
           senderName: 'System',
           text: `${memberName} 离开了房间`,
@@ -391,14 +502,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Decrypt asynchronously
         decryptMessage(roomKey, data.iv, data.ciphertext)
           .then((plaintext) => {
+            // Parse payload (supports both new JSON format and old plain text)
+            const { text, reply } = parsePayload(plaintext);
+
             const chatMsg: ChatMessage = {
               id: generateMessageId(),
+              stableId: makeStableId(data.senderId, data.t),
               senderId: data.senderId,
               senderName: data.senderName,
-              text: plaintext,
+              text,
               timestamp: data.t,
               isMine: false,
               isSystem: false,
+              reply,
             };
 
             set((state) => {
@@ -421,6 +537,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             // Decryption failed — show placeholder
             const errorMsg: ChatMessage = {
               id: generateMessageId(),
+              stableId: makeStableId(data.senderId, data.t),
               senderId: data.senderId,
               senderName: data.senderName,
               text: '无法解密此消息',
@@ -435,6 +552,55 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 messages: messages.length > MAX_MESSAGES ? messages.slice(-MAX_MESSAGES) : messages,
               };
             });
+          });
+        break;
+      }
+
+      case MSG_RELAY_REACTION: {
+        const data = msg.data as RelayReactionData;
+        const { roomKey } = get();
+
+        if (!roomKey) break;
+
+        decryptMessage(roomKey, data.iv, data.ciphertext)
+          .then((plaintext) => {
+            try {
+              const { stableId, emoji, action } = JSON.parse(plaintext);
+              if (!stableId || !emoji || !action) return;
+
+              set((state) => {
+                const reactions = new Map(state.reactions);
+                const list = [...(reactions.get(stableId) || [])];
+
+                if (action === 'add') {
+                  const existing = list.find((r) => r.emoji === emoji);
+                  if (existing) {
+                    if (!existing.userIds.includes(data.senderId)) {
+                      existing.userIds = [...existing.userIds, data.senderId];
+                    }
+                  } else {
+                    list.push({ emoji, userIds: [data.senderId] });
+                  }
+                } else if (action === 'remove') {
+                  const existing = list.find((r) => r.emoji === emoji);
+                  if (existing) {
+                    existing.userIds = existing.userIds.filter((id) => id !== data.senderId);
+                    if (existing.userIds.length === 0) {
+                      const idx = list.indexOf(existing);
+                      list.splice(idx, 1);
+                    }
+                  }
+                }
+
+                reactions.set(stableId, list);
+                return { reactions };
+              });
+            } catch {
+              // Invalid reaction payload — ignore
+            }
+          })
+          .catch(() => {
+            // Decryption failed — ignore
           });
         break;
       }
@@ -478,6 +644,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         const systemMsg: ChatMessage = {
           id: generateMessageId(),
+          stableId: '',
           senderId: 'system',
           senderName: 'System',
           text: '房间已关闭',
@@ -493,6 +660,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           members: [],
           messages: [...state.messages, systemMsg],
           typingMembers: new Map(),
+          replyTo: null,
+          reactions: new Map(),
         }));
         break;
       }
@@ -512,6 +681,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         const errorMsg: ChatMessage = {
           id: generateMessageId(),
+          stableId: '',
           senderId: 'system',
           senderName: 'System',
           text,
