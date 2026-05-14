@@ -235,7 +235,7 @@ function EphemeralWrapper({ msgId: _msgId, stableId, ephemeral, children }: Ephe
   return (
     <div
       data-stable-id={stableId}
-      className={fading ? 'opacity-0 max-h-0 transition-all duration-200' : 'transition-all duration-200'}
+      className={fading ? 'opacity-0 max-h-0 overflow-hidden transition-all duration-200' : 'transition-all duration-200'}
     >
       {children}
     </div>
