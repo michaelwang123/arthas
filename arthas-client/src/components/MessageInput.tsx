@@ -10,6 +10,8 @@ export function MessageInput() {
   const [emojiOpen, setEmojiOpen] = useState(false);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const setTyping = useChatStore((s) => s.setTyping);
+  const replyTo = useChatStore((s) => s.replyTo);
+  const clearReply = useChatStore((s) => s.clearReply);
   const wasTypingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
@@ -26,6 +28,13 @@ export function MessageInput() {
       cursorPosRef.current = null;
     }
   }, [text]);
+
+  // 选择回复时自动聚焦输入框
+  useEffect(() => {
+    if (replyTo) {
+      inputRef.current?.focus();
+    }
+  }, [replyTo]);
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
@@ -62,6 +71,9 @@ export function MessageInput() {
       e.preventDefault();
       handleSend();
     }
+    if (e.key === 'Escape' && replyTo) {
+      clearReply();
+    }
   };
 
   const insertEmoji = (emoji: string) => {
@@ -81,44 +93,64 @@ export function MessageInput() {
   };
 
   return (
-    <div className="relative flex gap-2 items-center">
-      {/* Emoji button */}
-      <button
-        ref={emojiBtnRef}
-        onClick={() => setEmojiOpen((v) => !v)}
-        aria-label="选择表情"
-        className="min-h-[44px] min-w-[44px] flex items-center justify-center text-xl text-gray-400 hover:text-white transition-colors"
-      >
-        😊
-      </button>
+    <div className="relative">
+      {/* Reply preview bar */}
+      {replyTo && (
+        <div className="flex items-center gap-2 px-3 py-2 mb-1 bg-gray-700/50 border-l-2 border-indigo-500 rounded-t-lg">
+          <div className="flex-1 min-w-0">
+            <span className="text-xs text-indigo-400 font-medium">{replyTo.senderName}</span>
+            <p className="text-xs text-gray-400 truncate">{replyTo.preview}</p>
+          </div>
+          <button
+            onClick={clearReply}
+            aria-label="取消回复"
+            className="text-gray-500 hover:text-white transition-colors shrink-0 w-6 h-6 flex items-center justify-center"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
-      {/* Input */}
-      <div className="relative flex-1">
-        <input
-          ref={inputRef}
-          type="text"
-          value={text}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder="输入消息..."
-          maxLength={MAX_LENGTH}
-          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 transition-colors"
-        />
-        {text.length > SHOW_COUNT_THRESHOLD && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-            {text.length}/{MAX_LENGTH}
-          </span>
-        )}
+      {/* Input row */}
+      <div className="flex gap-2 items-center">
+        {/* Emoji button */}
+        <button
+          ref={emojiBtnRef}
+          onClick={() => setEmojiOpen((v) => !v)}
+          aria-label="选择表情"
+          className="min-h-[44px] min-w-[44px] flex items-center justify-center text-xl text-gray-400 hover:text-white transition-colors"
+        >
+          😊
+        </button>
+
+        {/* Input */}
+        <div className="relative flex-1">
+          <input
+            ref={inputRef}
+            type="text"
+            value={text}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            placeholder={replyTo ? '输入回复...' : '输入消息...'}
+            maxLength={MAX_LENGTH}
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 transition-colors"
+          />
+          {text.length > SHOW_COUNT_THRESHOLD && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+              {text.length}/{MAX_LENGTH}
+            </span>
+          )}
+        </div>
+
+        {/* Send button */}
+        <button
+          onClick={handleSend}
+          disabled={!canSend}
+          className="min-h-[44px] min-w-[44px] px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 rounded-lg text-white font-medium transition-colors"
+        >
+          发送
+        </button>
       </div>
-
-      {/* Send button */}
-      <button
-        onClick={handleSend}
-        disabled={!canSend}
-        className="min-h-[44px] min-w-[44px] px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 rounded-lg text-white font-medium transition-colors"
-      >
-        发送
-      </button>
 
       {/* Emoji Picker */}
       {emojiOpen && (

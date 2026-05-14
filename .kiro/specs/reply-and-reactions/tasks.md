@@ -76,15 +76,15 @@
     - `role="menu"` + `aria-label="添加反应"`
     - _Requirements: 2.2, 2.3, 2.13, 2.14, 4.6, 4.7_
 
-- [ ] 4. 回复 + 反应 UI
-  - [ ] 4.1 修改 `src/components/MessageInput.tsx`
+- [x] 4. 回复 + 反应 UI
+  - [x] 4.1 修改 `src/components/MessageInput.tsx`
     - 从 store 读取 `replyTo` 和 `clearReply`
     - 输入框上方条件渲染回复预览条
     - 预览条：左侧 indigo 边框 + 发送者名 + 摘要 + ✕ 取消按钮
     - 发送后自动清除 replyTo
     - _Requirements: 1.4, 1.5_
 
-  - [ ] 4.2 修改 `src/components/MessageBubble.tsx`
+  - [x] 4.2 修改 `src/components/MessageBubble.tsx`
     - 新增 Props: `reply?`, `reactions?`, `stableId`, `onReply()`, `onReact(emoji)`
     - 气泡顶部：引用块渲染（msg.reply 存在时），可点击跳转
     - 气泡下方：ReactionSummary 组件（显示反应汇总，点击切换）
@@ -94,7 +94,7 @@
     - 系统消息/解密失败消息不显示回复/反应按钮
     - _Requirements: 1.2, 1.7, 1.8, 1.10, 1.11, 2.2, 2.7, 2.8, 2.10, 2.13_
 
-  - [ ] 4.3 修改 `src/components/MessageList.tsx`
+  - [x] 4.3 修改 `src/components/MessageList.tsx`
     - 每条消息容器添加 `data-stable-id={msg.stableId}`
     - 实现 `scrollToMessage(stableId)` — querySelector + scrollIntoView + ring 高亮 1.5s
     - 从 store 读取 reactions 并传递给 MessageBubble
@@ -102,27 +102,27 @@
     - 传递 `onReact` 回调（调用 store.sendReaction）
     - _Requirements: 1.8, 1.9_
 
-  - [ ] 4.4 实现移动端滑动回复
+  - [x] 4.4 实现移动端滑动回复
     - 在消息 wrapper 上添加 touch 事件（touchstart/touchmove/touchend）
     - 水平右滑 ≥ 60px 触发回复，垂直滑动 > 10px 取消
     - 滑动时 translateX 跟随（最大 80px），松手弹回
     - 左右对齐的消息都向右滑
     - _Requirements: 1.3, 4.5_
 
-  - [ ] 4.5 实现移动端双击反应
+  - [x] 4.5 实现移动端双击反应
     - 消息 wrapper 添加 `[touch-action:manipulation]`（禁用浏览器双击缩放）
     - 双击检测：两次 click 间隔 < 300ms
     - 双击后在消息上方弹出 ReactionPanel
     - _Requirements: 2.5, 2.12_
 
-- [ ] 5. 集成验证
-  - [ ] 5.1 后端验证
+- [x] 5. 集成验证
+  - [x] 5.1 后端验证
     - `go build ./...` 无错误
     - `go test ./internal/network/... -v` 通过
     - 手动测试：发送反应后其他客户端收到 MsgRelayReaction
     - _Requirements: 3.1-3.5_
 
-  - [ ] 5.2 前端验证
+  - [x] 5.2 前端验证
     - `npm run build` 无错误
     - 发送带引用的消息 → 接收方正确显示引用块
     - 点击引用块 → 滚动到原消息 + 高亮
@@ -134,7 +134,7 @@
     - 反应面板点击外部正确关闭
     - _Requirements: 1.1-1.12, 2.1-2.14_
 
-  - [ ] 5.3 移动端验证
+  - [x] 5.3 移动端验证（需手动测试）
     - 滑动回复手势正常（右滑 60px 触发）
     - 垂直滑动不触发回复（正常滚动）
     - 双击弹出反应面板
