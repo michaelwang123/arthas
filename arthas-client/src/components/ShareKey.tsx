@@ -25,20 +25,24 @@ export function ShareKey({ shareCode }: ShareKeyProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <span className="text-sm text-gray-400 shrink-0">分享码:</span>
-
-      <code className="text-xs text-indigo-300 bg-gray-700 px-2 py-1 rounded max-w-xs truncate">
+      {/* Desktop: show share code text */}
+      <span className="text-sm text-gray-400 shrink-0 hidden md:inline">分享码:</span>
+      <code className="text-xs text-indigo-300 bg-gray-700 px-2 py-1 rounded max-w-xs truncate hidden md:inline">
         {shareCode ?? '生成中...'}
       </code>
 
+      {/* Copy button — mobile shows full text, desktop shows icon */}
       <button
         onClick={handleCopy}
         disabled={!shareCode}
-        className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+        aria-label="复制分享码"
+        className="min-h-[44px] min-w-[44px] px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-1"
       >
-        {copied ? '已复制' : '复制'}
+        <span className="md:hidden">{copied ? '✓ 已复制' : '📋 复制分享码'}</span>
+        <span className="hidden md:inline">{copied ? '已复制' : '复制'}</span>
       </button>
 
+      {/* Desktop: show full share link */}
       {shareLink && (
         <span className="text-xs text-gray-500 truncate max-w-sm hidden lg:inline">
           {shareLink}
