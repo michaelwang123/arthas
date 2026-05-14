@@ -17,10 +17,15 @@ export default {
           from: { transform: 'translateX(100%)' },
           to: { transform: 'translateX(0)' },
         },
+        'slide-in-msg': {
+          from: { opacity: '0', transform: 'translateX(8px)' },
+          to: { opacity: '1', transform: 'translateX(0)' },
+        },
       },
       animation: {
         'pulse-banner': 'pulse-banner 2s ease-in-out infinite',
         'slide-in-right': 'slide-in-right 0.2s ease-out',
+        'slide-in-msg': 'slide-in-msg 0.2s ease-out',
       },
     },
   },

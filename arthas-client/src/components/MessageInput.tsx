@@ -1,17 +1,31 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useChatStore } from '../stores/chatStore';
+import { EmojiPicker } from './EmojiPicker';
 
 const MAX_LENGTH = 500;
 const SHOW_COUNT_THRESHOLD = 400;
 
 export function MessageInput() {
   const [text, setText] = useState('');
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const setTyping = useChatStore((s) => s.setTyping);
   const wasTypingRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
+  const cursorPosRef = useRef<number | null>(null);
 
   const trimmedText = text.trim();
   const canSend = trimmedText.length > 0 && trimmedText.length <= MAX_LENGTH;
+
+  // 光标位置恢复（emoji 插入后）
+  useEffect(() => {
+    if (cursorPosRef.current !== null && inputRef.current) {
+      inputRef.current.setSelectionRange(cursorPosRef.current, cursorPosRef.current);
+      inputRef.current.focus();
+      cursorPosRef.current = null;
+    }
+  }, [text]);
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
@@ -50,10 +64,38 @@ export function MessageInput() {
     }
   };
 
+  const insertEmoji = (emoji: string) => {
+    const input = inputRef.current;
+    const start = input?.selectionStart ?? text.length;
+    const end = input?.selectionEnd ?? text.length;
+    const newText = text.slice(0, start) + emoji + text.slice(end);
+    if (newText.length > MAX_LENGTH) return;
+    cursorPosRef.current = start + emoji.length;
+    setText(newText);
+
+    // Trigger typing indicator
+    if (!wasTypingRef.current) {
+      setTyping(true);
+      wasTypingRef.current = true;
+    }
+  };
+
   return (
-    <div className="flex gap-2 items-center">
+    <div className="relative flex gap-2 items-center">
+      {/* Emoji button */}
+      <button
+        ref={emojiBtnRef}
+        onClick={() => setEmojiOpen((v) => !v)}
+        aria-label="选择表情"
+        className="min-h-[44px] min-w-[44px] flex items-center justify-center text-xl text-gray-400 hover:text-white transition-colors"
+      >
+        😊
+      </button>
+
+      {/* Input */}
       <div className="relative flex-1">
         <input
+          ref={inputRef}
           type="text"
           value={text}
           onChange={handleChange}
@@ -68,6 +110,8 @@ export function MessageInput() {
           </span>
         )}
       </div>
+
+      {/* Send button */}
       <button
         onClick={handleSend}
         disabled={!canSend}
@@ -75,6 +119,15 @@ export function MessageInput() {
       >
         发送
       </button>
+
+      {/* Emoji Picker */}
+      {emojiOpen && (
+        <EmojiPicker
+          onSelect={insertEmoji}
+          onClose={() => setEmojiOpen(false)}
+          excludeRef={emojiBtnRef}
+        />
+      )}
     </div>
   );
 }

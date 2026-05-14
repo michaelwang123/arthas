@@ -1,0 +1,13 @@
+{
+  "name": "Arthas Chat",
+  "short_name": "Arthas",
+  "description": "端到端加密临时聊天室",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#111827",
+  "background_color": "#111827",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

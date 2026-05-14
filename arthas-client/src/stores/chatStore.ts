@@ -33,7 +33,7 @@ import { importRoomKey } from '../crypto/keys';
 import { encryptMessage } from '../crypto/encrypt';
 import { decryptMessage } from '../crypto/decrypt';
 import { encodeShareKey, decodeShareKey } from '../crypto/shareKey';
-import { playNotificationSound, showDesktopNotification } from '../utils/notification';
+import { playNotificationSound, showDesktopNotification, playJoinSound, playLeaveSound } from '../utils/notification';
 
 // ===== Types =====
 
@@ -335,6 +335,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             messages: messages.length > MAX_MESSAGES ? messages.slice(-MAX_MESSAGES) : messages,
           };
         });
+
+        // Play join sound
+        if (!get().muted) playJoinSound();
         break;
       }
 
@@ -373,6 +376,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             typingMembers,
           };
         });
+
+        // Play leave sound
+        if (!get().muted) playLeaveSound();
         break;
       }
 
