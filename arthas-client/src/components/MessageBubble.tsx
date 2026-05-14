@@ -160,7 +160,7 @@ export function MessageBubble({
 
       {/* Desktop hover action buttons */}
       {canInteract && (
-        <div className={`absolute -top-3 ${isOwn ? 'left-0' : 'right-0'} hidden md:flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150`}>
+        <div className={`absolute -top-3 ${isOwn ? 'right-0' : 'left-0'} hidden md:flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150`}>
           {onReply && (
             <button
               onClick={(e) => { e.stopPropagation(); onReply() }}
