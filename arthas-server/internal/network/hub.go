@@ -207,13 +207,8 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 		return
 	}
 
-	// Parse ephemeral — msgpack may deserialize as int64 or uint64
-	var ephemeral int
-	if v, ok := dataMap["ephemeral"].(int64); ok {
-		ephemeral = int(v)
-	} else if v, ok := dataMap["ephemeral"].(uint64); ok {
-		ephemeral = int(v)
-	}
+	// Parse ephemeral — msgpack deserializes small integers as int8/uint8/int16/uint16 etc.
+	ephemeral := toInt(dataMap["ephemeral"])
 
 	// Generate NanoID (21 chars) for roomId
 	roomId, err := gonanoid.New()
@@ -581,9 +576,7 @@ func (h *Hub) handlePong(client *Client, data interface{}) {
 		return
 	}
 	// 提取客户端回传的时间戳（可用于 RTT 计算）
-	if t, ok := dataMap["t"].(int64); ok {
-		client.LastPong = t
-	} else if t, ok := dataMap["t"].(uint64); ok {
+	if t := toInt(dataMap["t"]); t != 0 {
 		client.LastPong = int64(t)
 	} else {
 		// 如果无法解析时间戳，使用当前时间
@@ -658,4 +651,34 @@ func generateColor(id string) string {
 		b = 0xFF
 	}
 	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
+}
+
+// toInt converts a msgpack-decoded interface{} value to int.
+// vmihailenco/msgpack/v5 decodes integers into the smallest Go type that fits:
+// 0-127 → int8, 128-255 → uint8, 256-32767 → int16, etc.
+func toInt(v interface{}) int {
+	switch n := v.(type) {
+	case int8:
+		return int(n)
+	case uint8:
+		return int(n)
+	case int16:
+		return int(n)
+	case uint16:
+		return int(n)
+	case int32:
+		return int(n)
+	case uint32:
+		return int(n)
+	case int64:
+		return int(n)
+	case uint64:
+		return int(n)
+	case int:
+		return n
+	case uint:
+		return int(n)
+	default:
+		return 0
+	}
 }
