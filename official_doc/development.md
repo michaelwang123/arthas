@@ -272,6 +272,129 @@ npx tsc --noEmit
 
 ---
 
+## 生产部署
+
+### 后端部署（HF Spaces）
+
+后端以 Docker 容器形式部署到 Hugging Face Spaces。
+
+#### 前置条件
+
+1. 注册 [Hugging Face](https://huggingface.co) 账号
+2. 创建 Access Token（Settings → Tokens，权限选 Write）
+3. 创建 Space：https://huggingface.co/new-space
+   - SDK: **Docker**
+   - Hardware: **CPU Basic**（免费）
+   - Visibility: **Public**（Private 的 URL 需要认证，前端无法连接）
+
+#### 一键部署脚本
+
+```powershell
+# 从项目根目录执行
+.\official_doc\scripts\deploy-hf-space.ps1
+
+# 自定义用户名和 Space 名称
+.\official_doc\scripts\deploy-hf-space.ps1 -HfUsername "your-username" -SpaceName "arthas-server"
+```
+
+脚本会提示输入 HF 用户名和 Token 进行认证。
+
+#### 手动部署步骤
+
+```powershell
+# 1. 复制 arthas-server 到临时目录
+$tmp = "$env:TEMP\hf-deploy"
+Copy-Item -Recurse arthas-server $tmp
+cd $tmp
+
+# 2. 清理编译产物
+Remove-Item -Force *.exe, *.test -ErrorAction SilentlyContinue
+
+# 3. 初始化 git 并提交
+git init
+git add -A
+git commit -m "deploy: arthas production server"
+
+# 4. 推送到 HF Space
+git remote add space https://huggingface.co/spaces/你的用户名/arthas-server
+git push space master:main --force
+
+# 5. 清理
+cd ..
+Remove-Item -Recurse -Force $tmp
+```
+
+#### 重要文件
+
+- `arthas-server/Dockerfile` — 多阶段构建，最终镜像 < 30MB
+- `arthas-server/README.md` — 包含 HF Space 所需的 YAML front matter（`sdk: docker`）
+- `arthas-server/.dockerignore` — 排除不需要的文件加速构建
+
+#### 验证
+
+构建完成后（约 2-3 分钟）访问：
+```
+https://你的用户名-arthas-server.hf.space/ping
+```
+返回 `pong` 表示部署成功。
+
+#### 环境变量配置
+
+在 Space Settings → Repository secrets 中设置：
+
+| 变量 | 值 | 说明 |
+|------|-----|------|
+| `ALLOWED_ORIGINS` | `https://your-frontend.vercel.app` | 允许的前端域名（逗号分隔多个） |
+
+设置后需重启 Space 生效。
+
+---
+
+### 前端部署（Vercel）
+
+前端部署到 Vercel，从 GitHub monorepo 中选择 `arthas-client` 子目录。
+
+#### 步骤
+
+1. 将整个 arthas 项目推送到 GitHub
+2. 访问 [vercel.com/new](https://vercel.com/new)，导入 GitHub 仓库
+3. 配置：
+   - **Root Directory**: `arthas-client`
+   - **Framework Preset**: Vite
+   - **Environment Variables**: `VITE_WS_URL` = `wss://你的用户名-arthas-server.hf.space/ws`
+4. 点击 Deploy
+
+#### 验证
+
+部署完成后打开 Vercel 分配的域名，检查浏览器 Network 面板中 WebSocket 连接使用 `wss://`。
+
+---
+
+### 保活配置（cron-job.org）
+
+HF Spaces 免费层在无流量时会休眠。配置定时健康检查保持活跃：
+
+1. 注册 [cron-job.org](https://cron-job.org)
+2. 创建任务：
+   - URL: `https://你的用户名-arthas-server.hf.space/ping`
+   - 间隔: 每 10 分钟
+   - 超时: 30 秒
+   - 失败重试: 1 次
+
+---
+
+### 部署后验证清单
+
+| # | 验证项 | 方法 | 预期结果 |
+|---|--------|------|----------|
+| 1 | 健康检查 | 访问 `/ping` | 200 + "pong" |
+| 2 | WSS 连接 | 浏览器 Network 面板 | WebSocket 使用 wss:// |
+| 3 | 跨网络聊天 | 两台设备创建/加入房间 | 消息正常加解密 |
+| 4 | 日志无明文 | 查看 HF Space 日志 | 无消息内容 |
+| 5 | CORS 拦截 | 从非授权域名连接 | 返回 403 |
+
+---
+
 ## 下一步
 
 - [贡献指南](contributing.md) — 如何提交代码
