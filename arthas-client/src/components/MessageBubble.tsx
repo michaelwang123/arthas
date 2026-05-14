@@ -1,24 +1,46 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { linkify, truncateUrl } from '../utils/linkify'
+import { ReactionPanel, getReactionPanelPosition } from './ReactionPanel'
+import type { ReplyData, Reaction } from '../stores/chatStore'
 
 interface MessageBubbleProps {
   text: string
   isOwn: boolean
   canCopy: boolean
   isDecryptFailed: boolean
+  stableId: string
+  reply?: ReplyData
+  reactions?: Reaction[]
+  myId: string | null
+  onReply?: () => void
+  onReact?: (emoji: string) => void
+  onScrollToMessage?: (stableId: string) => void
 }
 
 /**
- * 消息气泡组件 — 封装链接识别和桌面端复制功能。
+ * 消息气泡组件 — 封装链接识别、复制、回复引用、反应功能。
  *
- * 特性：
- * - 自动识别 URL 并渲染为可点击链接
- * - 桌面端 hover 显示复制按钮
- * - 移动端依赖浏览器原生长按复制（不阻止 user-select）
- * - 解密失败消息显示红色斜体
+ * 桌面端：hover 显示操作按钮（复制 + 回复 + 反应）
+ * 移动端：滑动回复 + 双击反应 + 原生长按复制
  */
-export function MessageBubble({ text, isOwn, canCopy, isDecryptFailed }: MessageBubbleProps) {
+export function MessageBubble({
+  text, isOwn, canCopy, isDecryptFailed,
+  reply, reactions, myId, onReply, onReact, onScrollToMessage,
+}: MessageBubbleProps) {
   const [copied, setCopied] = useState(false)
+  const [showReactionPanel, setShowReactionPanel] = useState(false)
+  const [reactionPosition, setReactionPosition] = useState<'above' | 'below'>('above')
+  const reactBtnRef = useRef<HTMLButtonElement>(null)
+  const bubbleRef = useRef<HTMLDivElement>(null)
+
+  // Swipe-to-reply state
+  const touchStartX = useRef(0)
+  const touchStartY = useRef(0)
+  const touchDeltaX = useRef(0)
+  const swiping = useRef(false)
+
+  // Double-tap state
+  const lastTapTime = useRef(0)
 
   const handleCopy = async () => {
     if (!canCopy) return
@@ -26,54 +48,194 @@ export function MessageBubble({ text, isOwn, canCopy, isDecryptFailed }: Message
       await navigator.clipboard.writeText(text)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard API 可能在非 HTTPS 环境下失败
+    } catch {}
+  }
+
+  const handleReactClick = () => {
+    if (reactBtnRef.current) {
+      setReactionPosition(getReactionPanelPosition(reactBtnRef.current))
+    }
+    setShowReactionPanel((v) => !v)
+  }
+
+  const handleReact = (emoji: string) => {
+    onReact?.(emoji)
+    setShowReactionPanel(false)
+  }
+
+  // Mobile: swipe-to-reply
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+    swiping.current = true
+    touchDeltaX.current = 0
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!swiping.current) return
+    const dx = e.touches[0].clientX - touchStartX.current
+    const dy = Math.abs(e.touches[0].clientY - touchStartY.current)
+
+    // Vertical scroll > 10px → cancel swipe
+    if (dy > 10 && Math.abs(dx) < dy) {
+      swiping.current = false
+      if (bubbleRef.current) bubbleRef.current.style.transform = ''
+      return
+    }
+
+    // Only right swipe
+    if (dx < 0) { touchDeltaX.current = 0; return }
+    touchDeltaX.current = Math.min(dx, 80)
+    if (bubbleRef.current) {
+      bubbleRef.current.style.transform = `translateX(${touchDeltaX.current}px)`
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (swiping.current && touchDeltaX.current >= 60 && onReply) {
+      onReply()
+    }
+    swiping.current = false
+    touchDeltaX.current = 0
+    if (bubbleRef.current) {
+      bubbleRef.current.style.transition = 'transform 0.15s ease-out'
+      bubbleRef.current.style.transform = ''
+      setTimeout(() => {
+        if (bubbleRef.current) bubbleRef.current.style.transition = ''
+      }, 150)
+    }
+  }
+
+  // Mobile: double-tap for reactions
+  const handleClick = () => {
+    const now = Date.now()
+    if (now - lastTapTime.current < 300) {
+      // Double tap
+      if (reactBtnRef.current) {
+        setReactionPosition(getReactionPanelPosition(reactBtnRef.current))
+      } else if (bubbleRef.current) {
+        setReactionPosition(getReactionPanelPosition(bubbleRef.current))
+      }
+      setShowReactionPanel(true)
+      lastTapTime.current = 0
+    } else {
+      lastTapTime.current = now
     }
   }
 
   const bgClass = isOwn ? 'bg-indigo-600' : 'bg-gray-700'
   const roundedClass = isOwn ? 'rounded-lg rounded-br-sm' : 'rounded-lg rounded-bl-sm'
+  const canInteract = canCopy && !isDecryptFailed
 
   return (
-    <div className={`relative group ${bgClass} text-white px-3 py-2 ${roundedClass}`}>
-      {isDecryptFailed ? (
-        <span className={`italic ${isOwn ? 'text-red-300' : 'text-red-400'}`}>{text}</span>
-      ) : (
-        <RichText text={text} />
-      )}
+    <div
+      ref={bubbleRef}
+      className="relative group [touch-action:manipulation]"
+      onTouchStart={canInteract ? handleTouchStart : undefined}
+      onTouchMove={canInteract ? handleTouchMove : undefined}
+      onTouchEnd={canInteract ? handleTouchEnd : undefined}
+      onClick={canInteract ? handleClick : undefined}
+    >
+      <div className={`${bgClass} text-white px-3 py-2 ${roundedClass}`}>
+        {/* Reply quote block */}
+        {reply && (
+          <div
+            onClick={(e) => { e.stopPropagation(); onScrollToMessage?.(reply.stableId) }}
+            className="mb-1.5 px-2 py-1 bg-black/20 border-l-2 border-gray-400 rounded text-xs cursor-pointer hover:bg-black/30 transition-colors"
+            role="button"
+            aria-label={`跳转到 ${reply.senderName} 的消息`}
+          >
+            <span className="text-gray-300 font-medium">{reply.senderName}</span>
+            <p className="text-gray-400 truncate mt-0.5">{reply.preview}</p>
+          </div>
+        )}
 
-      {/* Desktop-only copy button (hover reveal) */}
-      {canCopy && (
-        <button
-          onClick={handleCopy}
-          aria-label="复制消息"
-          className="absolute -top-2 -right-2 w-6 h-6 items-center justify-center
-                     bg-gray-600 rounded-full text-xs opacity-0 group-hover:opacity-100
-                     transition-opacity duration-150 hover:bg-gray-500
-                     hidden md:flex"
-        >
-          {copied ? '✓' : '📋'}
-        </button>
+        {/* Message content */}
+        {isDecryptFailed ? (
+          <span className={`italic ${isOwn ? 'text-red-300' : 'text-red-400'}`}>{text}</span>
+        ) : (
+          <RichText text={text} />
+        )}
+      </div>
+
+      {/* Desktop hover action buttons */}
+      {canInteract && (
+        <div className={`absolute -top-3 ${isOwn ? 'left-0' : 'right-0'} hidden md:flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150`}>
+          {onReply && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onReply() }}
+              aria-label="回复"
+              className="w-6 h-6 flex items-center justify-center bg-gray-600 rounded-full text-xs hover:bg-gray-500"
+            >
+              ↩
+            </button>
+          )}
+          <button
+            ref={reactBtnRef}
+            onClick={(e) => { e.stopPropagation(); handleReactClick() }}
+            aria-label="添加反应"
+            className="w-6 h-6 flex items-center justify-center bg-gray-600 rounded-full text-xs hover:bg-gray-500"
+          >
+            😊
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleCopy() }}
+            aria-label="复制消息"
+            className="w-6 h-6 flex items-center justify-center bg-gray-600 rounded-full text-xs hover:bg-gray-500"
+          >
+            {copied ? '✓' : '📋'}
+          </button>
+        </div>
       )}
 
       {/* Copied toast */}
       {copied && (
-        <span className="absolute -top-6 right-0 text-xs text-green-400 bg-gray-900 px-1.5 py-0.5 rounded whitespace-nowrap">
+        <span className="absolute -top-6 right-0 text-xs text-green-400 bg-gray-900 px-1.5 py-0.5 rounded whitespace-nowrap z-10">
           已复制
         </span>
+      )}
+
+      {/* Reaction panel */}
+      {showReactionPanel && (
+        <ReactionPanel
+          onReact={handleReact}
+          onClose={() => setShowReactionPanel(false)}
+          triggerRef={reactBtnRef}
+          position={reactionPosition}
+        />
+      )}
+
+      {/* Reaction summary */}
+      {reactions && reactions.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1">
+          {reactions.map((r) => {
+            const isMine = myId ? r.userIds.includes(myId) : false
+            return (
+              <button
+                key={r.emoji}
+                onClick={(e) => { e.stopPropagation(); onReact?.(r.emoji) }}
+                aria-label={`${r.emoji} ${r.userIds.length}人`}
+                className={`px-1.5 py-0.5 rounded-full text-xs flex items-center gap-0.5 transition-colors
+                  ${isMine ? 'bg-indigo-600/30 border border-indigo-500' : 'bg-gray-700/50 border border-gray-600 hover:border-gray-500'}`}
+              >
+                <span>{r.emoji}</span>
+                <span className="text-gray-400">{r.userIds.length}</span>
+              </button>
+            )
+          })}
+        </div>
       )}
     </div>
   )
 }
 
 /**
- * 富文本渲染 — 将消息文本中的 URL 渲染为可点击链接。
+ * 富文本渲染 — URL 自动识别为可点击链接。
  */
 function RichText({ text }: { text: string }) {
   const segments = linkify(text)
 
   if (segments.length === 1 && segments[0].type === 'text') {
-    // 纯文本快速路径
     return <span className="break-words">{text}</span>
   }
 
@@ -88,6 +250,7 @@ function RichText({ text }: { text: string }) {
             rel="noopener noreferrer"
             className="text-blue-400 underline hover:text-blue-300"
             title={seg.content}
+            onClick={(e) => e.stopPropagation()}
           >
             {truncateUrl(seg.content)}
           </a>

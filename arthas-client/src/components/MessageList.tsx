@@ -1,6 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
+import { useChatStore } from '../stores/chatStore';
 import type { ChatMessage, Member } from '../stores/chatStore';
 import { MessageBubble } from './MessageBubble';
+import { truncatePreview } from '../utils/payload';
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -38,6 +40,9 @@ function formatSeparatorTime(timestamp: number): string {
 export function MessageList({ messages, myId, members }: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(messages.length);
+  const reactions = useChatStore((s) => s.reactions);
+  const setReplyTo = useChatStore((s) => s.setReplyTo);
+  const sendReaction = useChatStore((s) => s.sendReaction);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -52,8 +57,24 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
     prevCountRef.current = messages.length;
   }, [messages.length]);
 
+  const scrollToMessage = useCallback((stableId: string) => {
+    const el = document.querySelector(`[data-stable-id="${stableId}"]`) as HTMLElement;
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('ring-2', 'ring-indigo-500/50');
+    setTimeout(() => el.classList.remove('ring-2', 'ring-indigo-500/50'), 1500);
+  }, []);
+
   function getMemberColor(senderId: string): string | undefined {
     return members.find((m) => m.id === senderId)?.color;
+  }
+
+  function handleReply(msg: ChatMessage) {
+    setReplyTo({
+      stableId: msg.stableId,
+      senderName: msg.senderName,
+      preview: truncatePreview(msg.text),
+    });
   }
 
   if (messages.length === 0) {
@@ -76,14 +97,10 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
         // System messages
         if (msg.isSystem) {
           return (
-            <div key={msg.id}>
-              {showSeparator && (
-                <TimeSeparator timestamp={msg.timestamp} />
-              )}
+            <div key={msg.id} data-stable-id={msg.stableId || undefined}>
+              {showSeparator && <TimeSeparator timestamp={msg.timestamp} />}
               <div className="flex justify-center">
-                <span className="text-xs text-gray-500 italic">
-                  {msg.text}
-                </span>
+                <span className="text-xs text-gray-500 italic">{msg.text}</span>
               </div>
             </div>
           );
@@ -93,6 +110,7 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
         const isDecryptFailed = msg.text === DECRYPT_FAIL_TEXT;
         const senderColor = getMemberColor(msg.senderId);
         const canCopy = !isDecryptFailed;
+        const msgReactions = reactions.get(msg.stableId) || undefined;
 
         // Determine if this is the newest own message (for animation)
         const isNewestOwn = isNewBatch && index === messages.length - 1 && isOwn;
@@ -101,10 +119,8 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
         // Own messages — right-aligned
         if (isOwn) {
           return (
-            <div key={msg.id}>
-              {showSeparator && (
-                <TimeSeparator timestamp={msg.timestamp} />
-              )}
+            <div key={msg.id} data-stable-id={msg.stableId}>
+              {showSeparator && <TimeSeparator timestamp={msg.timestamp} />}
               <div className={`flex justify-end ${animClass}`}>
                 <div className="max-w-[70%] flex flex-col items-end">
                   <MessageBubble
@@ -112,6 +128,13 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
                     isOwn={true}
                     canCopy={canCopy}
                     isDecryptFailed={isDecryptFailed}
+                    stableId={msg.stableId}
+                    reply={msg.reply}
+                    reactions={msgReactions}
+                    myId={myId}
+                    onReply={canCopy ? () => handleReply(msg) : undefined}
+                    onReact={canCopy ? (emoji) => sendReaction(msg.stableId, emoji) : undefined}
+                    onScrollToMessage={scrollToMessage}
                   />
                   <span className="text-xs text-gray-500 mt-0.5">
                     {formatTime(msg.timestamp)}
@@ -124,10 +147,8 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
 
         // Others' messages — left-aligned
         return (
-          <div key={msg.id}>
-            {showSeparator && (
-              <TimeSeparator timestamp={msg.timestamp} />
-            )}
+          <div key={msg.id} data-stable-id={msg.stableId}>
+            {showSeparator && <TimeSeparator timestamp={msg.timestamp} />}
             <div className="flex justify-start">
               <div className="max-w-[70%] flex flex-col items-start">
                 <span
@@ -141,6 +162,13 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
                   isOwn={false}
                   canCopy={canCopy}
                   isDecryptFailed={isDecryptFailed}
+                  stableId={msg.stableId}
+                  reply={msg.reply}
+                  reactions={msgReactions}
+                  myId={myId}
+                  onReply={canCopy ? () => handleReply(msg) : undefined}
+                  onReact={canCopy ? (emoji) => sendReaction(msg.stableId, emoji) : undefined}
+                  onScrollToMessage={scrollToMessage}
                 />
                 <span className="text-xs text-gray-500 mt-0.5">
                   {formatTime(msg.timestamp)}
