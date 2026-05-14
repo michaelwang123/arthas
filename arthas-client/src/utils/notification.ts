@@ -76,3 +76,43 @@ export function showDesktopNotification(senderName: string): void {
     tag: 'arthas-msg',
   })
 }
+
+/**
+ * 播放成员加入音效（上升音调 C5→E5, 120ms）。
+ * 受静音按钮控制，由 chatStore 调用。
+ */
+export function playJoinSound(): void {
+  if (!audioCtx) return
+  if (audioCtx.state === 'suspended') audioCtx.resume()
+  const osc = audioCtx.createOscillator()
+  const gain = audioCtx.createGain()
+  osc.connect(gain)
+  gain.connect(audioCtx.destination)
+  osc.frequency.setValueAtTime(660, audioCtx.currentTime)
+  osc.frequency.linearRampToValueAtTime(830, audioCtx.currentTime + 0.1)
+  osc.type = 'sine'
+  gain.gain.setValueAtTime(0.1, audioCtx.currentTime)
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12)
+  osc.start()
+  osc.stop(audioCtx.currentTime + 0.12)
+}
+
+/**
+ * 播放成员离开音效（下降音调 E5→C5, 120ms）。
+ * 受静音按钮控制，由 chatStore 调用。
+ */
+export function playLeaveSound(): void {
+  if (!audioCtx) return
+  if (audioCtx.state === 'suspended') audioCtx.resume()
+  const osc = audioCtx.createOscillator()
+  const gain = audioCtx.createGain()
+  osc.connect(gain)
+  gain.connect(audioCtx.destination)
+  osc.frequency.setValueAtTime(830, audioCtx.currentTime)
+  osc.frequency.linearRampToValueAtTime(660, audioCtx.currentTime + 0.1)
+  osc.type = 'sine'
+  gain.gain.setValueAtTime(0.1, audioCtx.currentTime)
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12)
+  osc.start()
+  osc.stop(audioCtx.currentTime + 0.12)
+}
