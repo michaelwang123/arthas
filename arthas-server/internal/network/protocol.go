@@ -32,6 +32,7 @@ const (
 	ErrCodeNotInRoom      = "E003"
 	ErrCodeRateLimited    = "E004"
 	ErrCodeInvalidMessage = "E005"
+	ErrCodeWrongPassword  = "E006"
 )
 
 // Message 通用消息信封，使用 MessagePack 二进制序列化。
@@ -44,13 +45,16 @@ type Message struct {
 
 // CreateRoomData 创建房间请求。
 type CreateRoomData struct {
-	Name string `msgpack:"name"`
+	Name      string `msgpack:"name"`
+	Password  string `msgpack:"password"`
+	Ephemeral int    `msgpack:"ephemeral"`
 }
 
 // JoinRoomData 加入房间请求。
 type JoinRoomData struct {
-	RoomID string `msgpack:"roomId"`
-	Name   string `msgpack:"name"`
+	RoomID   string `msgpack:"roomId"`
+	Name     string `msgpack:"name"`
+	Password string `msgpack:"password"`
 }
 
 // SendMessageData 发送加密消息。
@@ -81,8 +85,10 @@ type RoomCreatedData struct {
 
 // RoomJoinedData 加入房间成功响应，包含当前成员列表。
 type RoomJoinedData struct {
-	RoomID  string       `msgpack:"roomId"`
-	Members []MemberInfo `msgpack:"members"`
+	RoomID      string       `msgpack:"roomId"`
+	Members     []MemberInfo `msgpack:"members"`
+	HasPassword bool         `msgpack:"hasPassword"`
+	Ephemeral   int          `msgpack:"ephemeral"`
 }
 
 // MemberJoinedData 新成员加入通知。

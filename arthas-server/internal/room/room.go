@@ -25,16 +25,20 @@ type Member struct {
 
 // Room represents a single chat room with its members.
 type Room struct {
-	ID      string
-	mu      sync.RWMutex
-	members map[string]*Member
+	ID           string
+	PasswordHash string // SHA-256 hash of room password; empty string means no password.
+	Ephemeral    int    // Ephemeral message duration in seconds; 0 means disabled.
+	mu           sync.RWMutex
+	members      map[string]*Member
 }
 
-// NewRoom creates a new Room with the given ID.
-func NewRoom(id string) *Room {
+// NewRoom creates a new Room with the given ID, optional password hash, and ephemeral duration.
+func NewRoom(id, passwordHash string, ephemeral int) *Room {
 	return &Room{
-		ID:      id,
-		members: make(map[string]*Member),
+		ID:           id,
+		PasswordHash: passwordHash,
+		Ephemeral:    ephemeral,
+		members:      make(map[string]*Member),
 	}
 }
 

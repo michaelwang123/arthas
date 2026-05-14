@@ -38,6 +38,7 @@ import { decryptMessage } from '../crypto/decrypt';
 import { encodeShareKey, decodeShareKey } from '../crypto/shareKey';
 import { playNotificationSound, showDesktopNotification, playJoinSound, playLeaveSound } from '../utils/notification';
 import { buildPayload, parsePayload, makeStableId } from '../utils/payload';
+import { hashPassword } from '../utils/crypto';
 
 // ===== Types =====
 
@@ -81,6 +82,8 @@ export interface ChatState {
   roomKey: CryptoKey | null;
   shareCode: string | null;
   members: Member[];
+  hasPassword: boolean;
+  ephemeral: number;
 
   // Messages
   messages: ChatMessage[];
@@ -97,8 +100,8 @@ export interface ChatState {
 
   // Actions
   connect: () => void;
-  createRoom: (name: string) => Promise<void>;
-  joinRoom: (shareCode: string, name: string) => Promise<void>;
+  createRoom: (name: string, password?: string, ephemeral?: number) => Promise<void>;
+  joinRoom: (shareCode: string, name: string, password?: string) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   setTyping: (typing: boolean) => void;
   leaveRoom: () => void;
@@ -135,6 +138,17 @@ function recordMessageSent(): void {
   messageTimes.push(Date.now());
 }
 
+// ===== Ephemeral message removal =====
+
+function scheduleEphemeralRemoval(msgId: string, ephemeral: number): void {
+  if (ephemeral <= 0) return;
+  setTimeout(() => {
+    useChatStore.setState((state) => ({
+      messages: state.messages.filter((m) => m.id !== msgId),
+    }));
+  }, ephemeral * 1000);
+}
+
 // ===== Typing debounce state =====
 
 let typingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -159,6 +173,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   roomKey: null,
   shareCode: null,
   members: [],
+  hasPassword: false,
+  ephemeral: 0,
   messages: [],
   typingMembers: new Map(),
   muted: localStorage.getItem('arthas_muted') === 'true',
@@ -182,13 +198,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setInterval(checkConnection, 500);
   },
 
-  createRoom: async (name: string) => {
+  createRoom: async (name: string, password?: string, ephemeral?: number) => {
     const roomKey = await generateRoomKey();
-    set({ myName: name, roomKey });
-    ws.send(MSG_CREATE_ROOM, { name });
+    const hashedPwd = await hashPassword(password ?? '');
+    set({ myName: name, roomKey, ephemeral: ephemeral ?? 0 });
+    ws.send(MSG_CREATE_ROOM, { name, password: hashedPwd, ephemeral: ephemeral ?? 0 });
   },
 
-  joinRoom: async (shareCode: string, name: string) => {
+  joinRoom: async (shareCode: string, name: string, password?: string) => {
     const decoded = decodeShareKey(shareCode);
     if (!decoded) {
       // Invalid share code — add system error message
@@ -206,10 +223,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    const { roomId, keyEncoded } = decoded;
+    const { roomId, keyEncoded, ephemeral } = decoded;
     const roomKey = await importRoomKey(keyEncoded);
-    set({ myName: name, roomKey, shareCode });
-    ws.send(MSG_JOIN_ROOM, { roomId, name });
+    const hashedPwd = await hashPassword(password ?? '');
+    set({ myName: name, roomKey, shareCode, ephemeral });
+    ws.send(MSG_JOIN_ROOM, { roomId, name, password: hashedPwd });
   },
 
   sendMessage: async (text: string) => {
@@ -263,6 +281,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         replyTo: null, // Clear reply after sending
       };
     });
+
+    // Schedule ephemeral removal for sent messages
+    const { ephemeral } = get();
+    if (ephemeral > 0 && !localMsg.isSystem) {
+      scheduleEphemeralRemoval(localMsg.id, ephemeral);
+    }
   },
 
   setTyping: (typing: boolean) => {
@@ -302,6 +326,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       roomKey: null,
       shareCode: null,
       members: [],
+      hasPassword: false,
+      ephemeral: 0,
       messages: [],
       typingMembers: new Map(),
       replyTo: null,
@@ -395,11 +421,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     switch (msg.type) {
       case MSG_ROOM_CREATED: {
         const data = msg.data as RoomCreatedData;
-        const { roomKey } = get();
+        const { roomKey, ephemeral } = get();
 
-        // Generate share code asynchronously
+        // Generate share code asynchronously (includes ephemeral info)
         if (roomKey) {
-          encodeShareKey(data.roomId, roomKey).then((code) => {
+          encodeShareKey(data.roomId, roomKey, ephemeral).then((code) => {
             set({ shareCode: code });
           });
         }
@@ -419,7 +445,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // The last member in the list is us (just joined)
         const myId = members[members.length - 1]?.id ?? get().myId;
 
-        set({ roomId: data.roomId, members, myId });
+        set({
+          roomId: data.roomId,
+          members,
+          myId,
+          hasPassword: data.hasPassword ?? false,
+          ephemeral: data.ephemeral ?? 0,
+        });
         break;
       }
 
@@ -523,6 +555,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 messages: messages.length > MAX_MESSAGES ? messages.slice(-MAX_MESSAGES) : messages,
               };
             });
+
+            // Schedule ephemeral removal for received messages
+            const { ephemeral } = get();
+            if (ephemeral > 0 && !chatMsg.isSystem) {
+              scheduleEphemeralRemoval(chatMsg.id, ephemeral);
+            }
 
             // Notification: sound + desktop
             const { muted } = get();
@@ -658,6 +696,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           roomKey: null,
           shareCode: null,
           members: [],
+          hasPassword: false,
+          ephemeral: 0,
           messages: [...state.messages, systemMsg],
           typingMembers: new Map(),
           replyTo: null,
@@ -675,6 +715,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           E003: '请先加入房间',
           E004: '发送过快，请稍后再试',
           E005: '消息格式无效',
+          E006: '房间密码错误',
         };
 
         const text = errorMessages[data.code] ?? data.msg ?? '未知错误';

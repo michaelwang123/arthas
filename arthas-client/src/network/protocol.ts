@@ -28,6 +28,7 @@ export const ERR_ROOM_FULL = 'E002';
 export const ERR_NOT_IN_ROOM = 'E003';
 export const ERR_RATE_LIMITED = 'E004';
 export const ERR_INVALID_MESSAGE = 'E005';
+export const ERR_WRONG_PASSWORD = 'E006';
 
 // ===== 消息信封 =====
 
@@ -40,11 +41,14 @@ export interface Message {
 
 export interface CreateRoomData {
   name: string;
+  password?: string;
+  ephemeral?: number;
 }
 
 export interface JoinRoomData {
   roomId: string;
   name: string;
+  password?: string;
 }
 
 export interface SendMessageData {
@@ -71,6 +75,8 @@ export interface RoomCreatedData {
 export interface RoomJoinedData {
   roomId: string;
   members: MemberInfo[];
+  hasPassword: boolean;
+  ephemeral: number;
 }
 
 export interface MemberJoinedData {
