@@ -155,6 +155,8 @@ func (h *Hub) HandleMessage(client *Client, msg *Message) {
 		h.handleTyping(client, msg.Data)
 	case MsgPong:
 		h.handlePong(client, msg.Data)
+	case MsgSendReaction:
+		h.handleSendReaction(client, msg.Data)
 	default:
 		logger.Warn("Hub", "unknown message type 0x%02x from client %s", msg.Type, client.ID)
 	}
@@ -407,6 +409,60 @@ func (h *Hub) handleSendMessage(client *Client, data interface{}) {
 	r.Broadcast(client.ID, broadcastData)
 
 	// 注意：不记录 ciphertext 内容（零知识设计）
+}
+
+func (h *Hub) handleSendReaction(client *Client, data interface{}) {
+	// 1. 检查客户端是否在房间中
+	if client.RoomID == "" {
+		h.sendError(client, ErrCodeNotInRoom, "not in a room")
+		return
+	}
+
+	// 2. 解析 data 提取 iv 和 ciphertext
+	dataMap, ok := data.(map[string]interface{})
+	if !ok {
+		h.sendError(client, ErrCodeInvalidMessage, "invalid reaction data")
+		return
+	}
+
+	iv, _ := dataMap["iv"].(string)
+	ciphertext, _ := dataMap["ciphertext"].(string)
+
+	// 3. 验证 iv 和 ciphertext 非空
+	if iv == "" || ciphertext == "" {
+		h.sendError(client, ErrCodeInvalidMessage, "iv and ciphertext must be non-empty strings")
+		return
+	}
+
+	// 4. 不做频率限制（反应是轻量交互）
+
+	// 5. 查找房间
+	r := h.roomManager.GetRoom(client.RoomID)
+	if r == nil {
+		client.RoomID = ""
+		h.sendError(client, ErrCodeNotInRoom, "room no longer exists")
+		return
+	}
+
+	// 6. 构建 RelayReaction 并广播给房间内其他成员
+	now := time.Now().UnixMilli()
+	relayMsg := Message{
+		Type: MsgRelayReaction,
+		Data: RelayReactionData{
+			SenderID:   client.ID,
+			SenderName: client.Name,
+			IV:         iv,
+			Ciphertext: ciphertext,
+			T:          now,
+		},
+	}
+
+	broadcastData, err := msgpack.Marshal(relayMsg)
+	if err != nil {
+		logger.Error("Hub", "failed to marshal RelayReaction: %v", err)
+		return
+	}
+	r.Broadcast(client.ID, broadcastData)
 }
 
 func (h *Hub) handleLeaveRoom(client *Client, data interface{}) {
