@@ -33,6 +33,7 @@ import { importRoomKey } from '../crypto/keys';
 import { encryptMessage } from '../crypto/encrypt';
 import { decryptMessage } from '../crypto/decrypt';
 import { encodeShareKey, decodeShareKey } from '../crypto/shareKey';
+import { playNotificationSound, showDesktopNotification } from '../utils/notification';
 
 // ===== Types =====
 
@@ -68,6 +69,9 @@ export interface ChatState {
   messages: ChatMessage[];
   typingMembers: Map<string, number>;
 
+  // Notification
+  muted: boolean;
+
   // Actions
   connect: () => void;
   createRoom: (name: string) => Promise<void>;
@@ -75,6 +79,7 @@ export interface ChatState {
   sendMessage: (text: string) => Promise<void>;
   setTyping: (typing: boolean) => void;
   leaveRoom: () => void;
+  toggleMute: () => void;
 
   // Internal
   handleServerMessage: (msg: Message) => void;
@@ -130,6 +135,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   members: [],
   messages: [],
   typingMembers: new Map(),
+  muted: localStorage.getItem('arthas_muted') === 'true',
 
   connect: () => {
     ws.onMessage((msg: Message) => {
@@ -270,6 +276,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     messageTimes.length = 0;
   },
 
+  toggleMute: () => {
+    const newMuted = !get().muted;
+    localStorage.setItem('arthas_muted', String(newMuted));
+    set({ muted: newMuted });
+  },
+
   handleServerMessage: (msg: Message) => {
     switch (msg.type) {
       case MSG_ROOM_CREATED: {
@@ -389,6 +401,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 messages: messages.length > MAX_MESSAGES ? messages.slice(-MAX_MESSAGES) : messages,
               };
             });
+
+            // Notification: sound + desktop
+            const { muted } = get();
+            if (!muted) {
+              playNotificationSound();
+            }
+            if (document.hidden) {
+              showDesktopNotification(data.senderName);
+            }
           })
           .catch(() => {
             // Decryption failed — show placeholder

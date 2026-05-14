@@ -71,7 +71,7 @@ export function MessageInput() {
       <button
         onClick={handleSend}
         disabled={!canSend}
-        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 rounded-lg text-white font-medium transition-colors"
+        className="min-h-[44px] min-w-[44px] px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 rounded-lg text-white font-medium transition-colors"
       >
         发送
       </button>
