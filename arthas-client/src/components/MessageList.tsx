@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import type { ChatMessage, Member } from '../stores/chatStore';
 import { MessageBubble } from './MessageBubble';
@@ -43,6 +43,7 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
   const reactions = useChatStore((s) => s.reactions);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
   const sendReaction = useChatStore((s) => s.sendReaction);
+  const ephemeral = useChatStore((s) => s.ephemeral);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -119,7 +120,7 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
         // Own messages — right-aligned
         if (isOwn) {
           return (
-            <div key={msg.id} data-stable-id={msg.stableId}>
+            <EphemeralWrapper key={msg.id} msgId={msg.id} stableId={msg.stableId} ephemeral={ephemeral}>
               {showSeparator && <TimeSeparator timestamp={msg.timestamp} />}
               <div className={`flex justify-end ${animClass}`}>
                 <div className="max-w-[70%] flex flex-col items-end">
@@ -139,15 +140,23 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
                   <span className="text-xs text-gray-500 mt-0.5">
                     {formatTime(msg.timestamp)}
                   </span>
+                  {ephemeral > 0 && (
+                    <div className="h-0.5 w-full bg-gray-700 rounded-full mt-1 overflow-hidden">
+                      <div
+                        className="h-full bg-amber-500 rounded-full motion-reduce:hidden"
+                        style={{ animation: `shrink-bar ${ephemeral}s linear forwards` }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
+            </EphemeralWrapper>
           );
         }
 
         // Others' messages — left-aligned
         return (
-          <div key={msg.id} data-stable-id={msg.stableId}>
+          <EphemeralWrapper key={msg.id} msgId={msg.id} stableId={msg.stableId} ephemeral={ephemeral}>
             {showSeparator && <TimeSeparator timestamp={msg.timestamp} />}
             <div className="flex justify-start">
               <div className="max-w-[70%] flex flex-col items-start">
@@ -173,9 +182,17 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
                 <span className="text-xs text-gray-500 mt-0.5">
                   {formatTime(msg.timestamp)}
                 </span>
+                {ephemeral > 0 && (
+                  <div className="h-0.5 w-full bg-gray-700 rounded-full mt-1 overflow-hidden">
+                    <div
+                      className="h-full bg-amber-500 rounded-full motion-reduce:hidden"
+                      style={{ animation: `shrink-bar ${ephemeral}s linear forwards` }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          </EphemeralWrapper>
         );
       })}
     </div>
@@ -188,6 +205,39 @@ function TimeSeparator({ timestamp }: { timestamp: number }) {
       <div className="flex-1 h-px bg-gray-700" />
       <span className="text-xs text-gray-500">{formatSeparatorTime(timestamp)}</span>
       <div className="flex-1 h-px bg-gray-700" />
+    </div>
+  );
+}
+
+interface EphemeralWrapperProps {
+  msgId: string;
+  stableId: string;
+  ephemeral: number;
+  children: React.ReactNode;
+}
+
+function EphemeralWrapper({ msgId: _msgId, stableId, ephemeral, children }: EphemeralWrapperProps) {
+  const [fading, setFading] = useState(false);
+
+  useEffect(() => {
+    if (ephemeral <= 0) return;
+
+    const fadeDelay = (ephemeral * 1000) - 200;
+    if (fadeDelay <= 0) return;
+
+    const timer = setTimeout(() => {
+      setFading(true);
+    }, fadeDelay);
+
+    return () => clearTimeout(timer);
+  }, [ephemeral]);
+
+  return (
+    <div
+      data-stable-id={stableId}
+      className={fading ? 'opacity-0 max-h-0 transition-all duration-200' : 'transition-all duration-200'}
+    >
+      {children}
     </div>
   );
 }

@@ -16,9 +16,9 @@ func NewRoomManager() *RoomManager {
 	}
 }
 
-// CreateRoom creates a new room with the given ID and stores it.
+// CreateRoom creates a new room with the given ID, password hash, and ephemeral duration.
 // If a room with the same ID already exists, it returns the existing room.
-func (rm *RoomManager) CreateRoom(roomId string) *Room {
+func (rm *RoomManager) CreateRoom(roomId, passwordHash string, ephemeral int) *Room {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
@@ -26,7 +26,7 @@ func (rm *RoomManager) CreateRoom(roomId string) *Room {
 		return existing
 	}
 
-	r := NewRoom(roomId)
+	r := NewRoom(roomId, passwordHash, ephemeral)
 	rm.rooms[roomId] = r
 	return r
 }

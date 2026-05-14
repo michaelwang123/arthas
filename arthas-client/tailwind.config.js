@@ -21,6 +21,10 @@ export default {
           from: { opacity: '0', transform: 'translateX(8px)' },
           to: { opacity: '1', transform: 'translateX(0)' },
         },
+        'shrink-bar': {
+          from: { width: '100%' },
+          to: { width: '0%' },
+        },
       },
       animation: {
         'pulse-banner': 'pulse-banner 2s ease-in-out infinite',

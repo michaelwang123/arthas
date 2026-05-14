@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useChatStore } from '../stores/chatStore';
+import { decodeShareKey } from '../crypto/shareKey';
 
 /**
  * Home page — create or join an E2EE chat room.
@@ -12,6 +13,17 @@ export function Home() {
   const createRoom = useChatStore((s) => s.createRoom);
   const joinRoom = useChatStore((s) => s.joinRoom);
 
+  // Create room: password
+  const [showPassword, setShowPassword] = useState(false);
+  const [createPassword, setCreatePassword] = useState('');
+
+  // Create room: ephemeral
+  const [ephemeralEnabled, setEphemeralEnabled] = useState(false);
+  const [ephemeralTime, setEphemeralTime] = useState(30);
+
+  // Join room: password
+  const [joinPassword, setJoinPassword] = useState('');
+
   // Parse hash route on mount: /#/join/{shareCode}
   useEffect(() => {
     const hash = window.location.hash;
@@ -21,18 +33,35 @@ export function Home() {
     }
   }, []);
 
+  // Parse share code to detect ephemeral info
+  const parsedCode = useMemo(() => {
+    const trimmed = shareCode.trim();
+    return trimmed ? decodeShareKey(trimmed) : null;
+  }, [shareCode]);
+  const ephemeralHint = parsedCode?.ephemeral ?? 0;
+
+  // Validation
   const nicknameValid = nickname.length >= 1 && nickname.length <= 20;
-  const canCreate = nicknameValid;
+  const passwordValid = createPassword.length === 0 || (createPassword.length >= 4 && createPassword.length <= 20);
+  const canCreate = nicknameValid && passwordValid;
   const canJoin = nicknameValid && shareCode.trim().length > 0;
 
   const handleCreate = () => {
     if (!canCreate) return;
-    createRoom(nickname.trim());
+    createRoom(
+      nickname.trim(),
+      createPassword.length > 0 ? createPassword : undefined,
+      ephemeralEnabled ? ephemeralTime : undefined,
+    );
   };
 
   const handleJoin = () => {
     if (!canJoin) return;
-    joinRoom(shareCode.trim(), nickname.trim());
+    joinRoom(
+      shareCode.trim(),
+      nickname.trim(),
+      joinPassword.length > 0 ? joinPassword : undefined,
+    );
   };
 
   return (
@@ -76,14 +105,68 @@ export function Home() {
           )}
         </div>
 
-        {/* Create Room */}
-        <button
-          onClick={handleCreate}
-          disabled={!canCreate}
-          className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
-        >
-          创建房间
-        </button>
+        {/* Create Room Section */}
+        <div className="space-y-3">
+          {/* Password toggle */}
+          {!showPassword ? (
+            <button
+              type="button"
+              onClick={() => setShowPassword(true)}
+              className="text-xs text-gray-400 hover:text-indigo-400 transition-colors"
+            >
+              🔐 设置密码
+            </button>
+          ) : (
+            <div className="space-y-1">
+              <input
+                type="password"
+                maxLength={20}
+                value={createPassword}
+                onChange={(e) => setCreatePassword(e.target.value)}
+                placeholder="房间密码（4-20字符）"
+                className="w-full px-4 py-2.5 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none placeholder-gray-500 transition-colors"
+              />
+              {createPassword.length > 0 && !passwordValid && (
+                <p className="text-xs text-red-400">密码需要 4-20 个字符</p>
+              )}
+            </div>
+          )}
+
+          {/* Ephemeral checkbox + time select */}
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="ephemeral"
+              checked={ephemeralEnabled}
+              onChange={(e) => setEphemeralEnabled(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-indigo-500 focus:ring-indigo-500"
+            />
+            <label htmlFor="ephemeral" className="text-sm text-gray-300">
+              ⏱️ 阅后即焚
+            </label>
+            {ephemeralEnabled && (
+              <select
+                value={ephemeralTime}
+                onChange={(e) => setEphemeralTime(Number(e.target.value))}
+                className="ml-auto px-2 py-1 bg-gray-700 text-white text-sm rounded border border-gray-600 focus:border-indigo-500 outline-none"
+              >
+                <option value={10}>10秒</option>
+                <option value={30}>30秒</option>
+                <option value={60}>60秒</option>
+                <option value={300}>5分钟</option>
+              </select>
+            )}
+          </div>
+
+          {/* Create button */}
+          <button
+            onClick={handleCreate}
+            disabled={!canCreate}
+            className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+          >
+            创建房间
+          </button>
+        </div>
 
         {/* Divider */}
         <div className="flex items-center gap-3">
@@ -105,6 +188,23 @@ export function Home() {
             placeholder="输入分享码"
             className="w-full px-4 py-2.5 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none placeholder-gray-500 transition-colors"
           />
+
+          {/* Ephemeral hint from share code */}
+          {ephemeralHint > 0 && (
+            <p className="text-xs text-amber-400">
+              ⏱️ 此房间为阅后即焚模式（{ephemeralHint}秒）
+            </p>
+          )}
+
+          {/* Join password */}
+          <input
+            type="password"
+            value={joinPassword}
+            onChange={(e) => setJoinPassword(e.target.value)}
+            placeholder="房间密码（如有）"
+            className="w-full px-4 py-2.5 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none placeholder-gray-500 transition-colors"
+          />
+
           <button
             onClick={handleJoin}
             disabled={!canJoin}

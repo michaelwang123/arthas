@@ -19,6 +19,8 @@ export function ChatRoom() {
   const leaveRoom = useChatStore((s) => s.leaveRoom);
   const muted = useChatStore((s) => s.muted);
   const toggleMute = useChatStore((s) => s.toggleMute);
+  const hasPassword = useChatStore((s) => s.hasPassword);
+  const ephemeral = useChatStore((s) => s.ephemeral);
 
   // Mobile member drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -48,7 +50,8 @@ export function ChatRoom() {
         <div className="flex items-center gap-2">
           <span className="text-lg font-semibold">房间</span>
           <span className="text-sm text-gray-400 truncate max-w-[120px] sm:max-w-none">{roomId}</span>
-          <span className="text-green-400" title="端到端加密">🔒</span>
+          <span className="text-green-400" title={hasPassword ? '密码保护' : '端到端加密'}>{hasPassword ? '🔐' : '🔒'}</span>
+          {ephemeral > 0 && <span className="text-amber-400" title={`消息 ${ephemeral}秒后消失`}>⏱️</span>}
         </div>
         <div className="flex items-center gap-2">
           {/* Mute button */}

@@ -6,7 +6,7 @@ import (
 )
 
 func TestNewRoom(t *testing.T) {
-	r := NewRoom("test-room")
+	r := NewRoom("test-room", "", 0)
 	if r == nil {
 		t.Fatal("NewRoom returned nil")
 	}
@@ -18,8 +18,24 @@ func TestNewRoom(t *testing.T) {
 	}
 }
 
+func TestNewRoom_WithPasswordAndEphemeral(t *testing.T) {
+	r := NewRoom("secure-room", "abc123hash", 30)
+	if r == nil {
+		t.Fatal("NewRoom returned nil")
+	}
+	if r.ID != "secure-room" {
+		t.Errorf("expected ID 'secure-room', got '%s'", r.ID)
+	}
+	if r.PasswordHash != "abc123hash" {
+		t.Errorf("expected PasswordHash 'abc123hash', got '%s'", r.PasswordHash)
+	}
+	if r.Ephemeral != 30 {
+		t.Errorf("expected Ephemeral 30, got %d", r.Ephemeral)
+	}
+}
+
 func TestAddMember(t *testing.T) {
-	r := NewRoom("room-1")
+	r := NewRoom("room-1", "", 0)
 
 	err := r.AddMember(&Member{ID: "m1", Name: "Alice", Color: "#ff0000"})
 	if err != nil {
@@ -31,7 +47,7 @@ func TestAddMember(t *testing.T) {
 }
 
 func TestAddMember_Full(t *testing.T) {
-	r := NewRoom("room-full")
+	r := NewRoom("room-full", "", 0)
 
 	// Fill the room to capacity
 	for i := range MaxMembers {
@@ -56,7 +72,7 @@ func TestAddMember_Full(t *testing.T) {
 }
 
 func TestRemoveMember(t *testing.T) {
-	r := NewRoom("room-2")
+	r := NewRoom("room-2", "", 0)
 	r.AddMember(&Member{ID: "m1", Name: "Alice"})
 	r.AddMember(&Member{ID: "m2", Name: "Bob"})
 
@@ -78,7 +94,7 @@ func TestRemoveMember(t *testing.T) {
 }
 
 func TestRemoveMember_Nonexistent(t *testing.T) {
-	r := NewRoom("room-3")
+	r := NewRoom("room-3", "", 0)
 	r.AddMember(&Member{ID: "m1", Name: "Alice"})
 
 	remaining := r.RemoveMember("nonexistent")
@@ -88,7 +104,7 @@ func TestRemoveMember_Nonexistent(t *testing.T) {
 }
 
 func TestGetMember(t *testing.T) {
-	r := NewRoom("room-4")
+	r := NewRoom("room-4", "", 0)
 	r.AddMember(&Member{ID: "m1", Name: "Alice", Color: "#aaa"})
 
 	m := r.GetMember("m1")
@@ -101,7 +117,7 @@ func TestGetMember(t *testing.T) {
 }
 
 func TestGetMember_NotFound(t *testing.T) {
-	r := NewRoom("room-5")
+	r := NewRoom("room-5", "", 0)
 
 	m := r.GetMember("nonexistent")
 	if m != nil {
@@ -110,7 +126,7 @@ func TestGetMember_NotFound(t *testing.T) {
 }
 
 func TestGetMembers(t *testing.T) {
-	r := NewRoom("room-6")
+	r := NewRoom("room-6", "", 0)
 	r.AddMember(&Member{ID: "m1", Name: "Alice"})
 	r.AddMember(&Member{ID: "m2", Name: "Bob"})
 	r.AddMember(&Member{ID: "m3", Name: "Charlie"})
@@ -133,7 +149,7 @@ func TestGetMembers(t *testing.T) {
 }
 
 func TestGetMembers_Empty(t *testing.T) {
-	r := NewRoom("room-7")
+	r := NewRoom("room-7", "", 0)
 
 	members := r.GetMembers()
 	if len(members) != 0 {
@@ -142,7 +158,7 @@ func TestGetMembers_Empty(t *testing.T) {
 }
 
 func TestBroadcast(t *testing.T) {
-	r := NewRoom("room-8")
+	r := NewRoom("room-8", "", 0)
 
 	var received1, received2 [][]byte
 
@@ -188,7 +204,7 @@ func TestBroadcast(t *testing.T) {
 }
 
 func TestBroadcast_NilSendFunc(t *testing.T) {
-	r := NewRoom("room-9")
+	r := NewRoom("room-9", "", 0)
 
 	var received [][]byte
 
@@ -211,14 +227,14 @@ func TestBroadcast_NilSendFunc(t *testing.T) {
 }
 
 func TestBroadcast_EmptyRoom(t *testing.T) {
-	r := NewRoom("room-10")
+	r := NewRoom("room-10", "", 0)
 
 	// Should not panic on empty room
 	r.Broadcast("nobody", []byte("test"))
 }
 
 func TestConcurrentRoomAccess(t *testing.T) {
-	r := NewRoom("room-concurrent")
+	r := NewRoom("room-concurrent", "", 0)
 	var wg sync.WaitGroup
 
 	// Concurrently add members

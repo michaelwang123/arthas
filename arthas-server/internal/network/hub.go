@@ -198,6 +198,23 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 		return
 	}
 
+	// Parse password (SHA-256 hash from client, 64 hex chars or empty)
+	password, _ := dataMap["password"].(string)
+
+	// Validate password: if non-empty, must be exactly 64 hex characters (SHA-256 hash)
+	if password != "" && len(password) != 64 {
+		h.sendError(client, ErrCodeInvalidMessage, "invalid password format")
+		return
+	}
+
+	// Parse ephemeral — msgpack may deserialize as int64 or uint64
+	var ephemeral int
+	if v, ok := dataMap["ephemeral"].(int64); ok {
+		ephemeral = int(v)
+	} else if v, ok := dataMap["ephemeral"].(uint64); ok {
+		ephemeral = int(v)
+	}
+
 	// Generate NanoID (21 chars) for roomId
 	roomId, err := gonanoid.New()
 	if err != nil {
@@ -206,8 +223,8 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 		return
 	}
 
-	// Create the room via RoomManager
-	r := h.roomManager.CreateRoom(roomId)
+	// Create the room via RoomManager with password and ephemeral
+	r := h.roomManager.CreateRoom(roomId, password, ephemeral)
 
 	// Set client fields
 	client.Name = name
@@ -244,6 +261,8 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 				Color: client.Color,
 			},
 		},
+		HasPassword: password != "",
+		Ephemeral:   ephemeral,
 	})
 
 	logger.Info("Hub", "room %s created by client %s (%s), total rooms: %d", roomId, client.ID, name, h.roomManager.RoomCount())
@@ -265,6 +284,7 @@ func (h *Hub) handleJoinRoom(client *Client, data interface{}) {
 
 	roomId, _ := dataMap["roomId"].(string)
 	name, _ := dataMap["name"].(string)
+	password, _ := dataMap["password"].(string)
 
 	// Validate name: 1-20 characters
 	if len(name) == 0 || len([]rune(name)) > 20 {
@@ -276,6 +296,12 @@ func (h *Hub) handleJoinRoom(client *Client, data interface{}) {
 	r := h.roomManager.GetRoom(roomId)
 	if r == nil {
 		h.sendError(client, ErrCodeRoomNotFound, "room not found")
+		return
+	}
+
+	// Verify password if room is password-protected
+	if r.PasswordHash != "" && password != r.PasswordHash {
+		h.sendError(client, ErrCodeWrongPassword, "wrong password")
 		return
 	}
 
@@ -342,8 +368,10 @@ func (h *Hub) handleJoinRoom(client *Client, data interface{}) {
 
 	// Send RoomJoined to the joining client
 	h.sendToClient(client, MsgRoomJoined, RoomJoinedData{
-		RoomID:  roomId,
-		Members: members,
+		RoomID:      roomId,
+		Members:     members,
+		HasPassword: r.PasswordHash != "",
+		Ephemeral:   r.Ephemeral,
 	})
 
 	logger.Info("Hub", "client %s (%s) joined room %s", client.ID, name, roomId)
