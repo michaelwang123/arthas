@@ -45,6 +45,7 @@ graph TB
     subgraph Client["客户端 (React/TypeScript)"]
         UI[File Transfer UI<br/>FileMessage, DropZone, ProgressBar]
         Engine[File Transfer Engine<br/>chunking, queue, state]
+        Worker[WebWorker<br/>加密/解密 offload]
         Crypto[Crypto Layer<br/>encryptChunk / decryptChunk]
         WS[WebSocket Layer<br/>send / onMessage]
     end
@@ -56,12 +57,19 @@ graph TB
     end
     
     UI --> Engine
-    Engine --> Crypto
+    Engine --> Worker
+    Worker --> Crypto
     Engine --> WS
     WS <-->|msgpack binary| Hub
     Hub --> Handler
     Handler --> Room
 ```
+
+> 📚 学习要点: WebWorker 架构决策
+> 加密/解密操作通过 WebWorker 在独立线程执行，避免阻塞主线程 UI 渲染。
+> Engine 通过 postMessage 将 chunk 数据发送给 Worker，Worker 完成加密后回传结果。
+> 这确保了即使在低端设备上，文件传输也不会导致 UI 卡顿。
+> 当前版本先实现主线程方案（简单），如果性能测试发现瓶颈再迁移到 Worker。
 
 ### 与现有架构的集成点
 
@@ -205,24 +213,39 @@ func (c *Client) SendFileData(data []byte) bool {
 // 与普通 Broadcast 不同，使用 SendFileData（带超时阻塞）。
 // 如果某个接收方发送超时，记录日志但不影响其他接收方。
 //
-// 📚 学习要点: 部分成功的 Broadcast
-// 文件传输的 broadcast 允许「部分成功」：
-// - 快速接收方正常收到所有 chunk
-// - 慢速接收方可能因超时而丢失 chunk，最终传输失败
-// 这是可接受的降级行为，因为：
-// 1. 接收方有 60s 超时检测，会正确标记传输失败
-// 2. 不会因为一个慢接收方拖慢所有人
-// 3. 发送方的 ACK 计数会反映实际成功的接收方数量
+// 📚 学习要点: 并发 Broadcast 与 Worker Pool
+// 串行发送的问题：如果成员 A 的 send buffer 满了，需要等 5s 超时，
+// 这 5s 内成员 B、C、D 都无法收到 chunk，导致不必要的延迟。
+// 
+// 解决方案：并发发送给所有成员。每个成员的 SendFileData 在独立 goroutine 中执行。
+// 使用 sync.WaitGroup 等待所有发送完成（或超时），确保函数返回时所有操作已结束。
+//
+// 为什么不用无限 goroutine？
+// MaxMembers=50，每个 chunk 最多创建 49 个短生命周期 goroutine（5s 内结束）。
+// 对于 Go runtime 来说这是轻量级的（每个 goroutine 初始栈仅 2KB）。
+// 如果未来 MaxMembers 增大，可以引入 worker pool 限制并发数。
 func (r *Room) BroadcastFileData(excludeID string, data []byte) {
     r.mu.RLock()
-    defer r.mu.RUnlock()
+    members := make([]*Member, 0, len(r.members))
     for _, m := range r.members {
         if m.ID != excludeID {
-            if !m.SendFileFunc(data) {
-                logger.Warn("Room", "file data send timeout for member %s", m.ID)
-            }
+            members = append(members, m)
         }
     }
+    r.mu.RUnlock()
+
+    // 并发发送给所有接收方
+    var wg sync.WaitGroup
+    for _, m := range members {
+        wg.Add(1)
+        go func(member *Member) {
+            defer wg.Done()
+            if !member.SendFileFunc(data) {
+                logger.Warn("Room", "file data send timeout for member %s", member.ID)
+            }
+        }(m)
+    }
+    wg.Wait() // 等待所有发送完成（最多 5s）
 }
 ```
 
@@ -276,9 +299,11 @@ src/file-transfer/
 ├── chunker.ts            # 文件分片逻辑（纯函数）
 ├── encryptChunk.ts       # Chunk 级加密（复用 crypto 模式）
 ├── decryptChunk.ts       # Chunk 级解密
+├── cryptoWorker.ts       # WebWorker 加密/解密（性能优化，渐进式启用）
 ├── thumbnail.ts          # 图片缩略图生成（Canvas API）
 ├── sanitize.ts           # 文件名清理（安全）
 ├── fileTransferStore.ts  # 传输状态管理（Zustand）
+├── persistence.ts        # 传输状态持久化（sessionStorage）
 ├── sender.ts             # 发送引擎（分片、加密、排队、发送）
 ├── receiver.ts           # 接收引擎（接收、解密、重组）
 └── components/
@@ -471,6 +496,7 @@ interface FileMetadata {
   mimeType: string;         // MIME 类型
   totalChunks: number;      // 分片总数 = ceil(fileSize / 65536)
   thumbnail?: Uint8Array;   // 可选：加密前的缩略图数据 (≤50KB, JPEG)
+  chunkHashes?: string[];   // 可选：每个 chunk 明文的 SHA-256 hash (hex, 用于未来 resume 校验)
 }
 
 /** 加密后的文件元数据消息 (Client → Server) */
@@ -577,7 +603,9 @@ interface TransferState {
   mimeType: string;
   totalChunks: number;
   receivedChunks: number;       // 已接收/已发送的分片数
+  lastReceivedIndex: number;    // 最后成功接收的 chunk 索引（用于未来 resume 和进度恢复）
   chunks: (Uint8Array | null)[]; // 接收方: 解密后的分片缓冲区
+  chunkHashes?: string[];        // 可选：从 metadata 获取的 chunk hash 列表
   thumbnail?: string;            // data URL (解密后的缩略图)
   blobUrl?: string;              // 完成后的下载 URL
   error?: string;                // 错误信息
@@ -587,6 +615,7 @@ interface TransferState {
   senderName: string;
   ackCount: number;              // 发送方: 已确认接收的人数
   totalReceivers: number;        // 发送方: 总接收人数
+  chatMessageId: string;         // 对应的聊天消息占位符 ID（用于 ephemeral 清理）
 }
 
 /** 文件传输 Store 状态 */
@@ -1039,6 +1068,343 @@ func (h *Hub) handleFileChunk(client *Client, data interface{}) {
 }
 ```
 
+## 扩展性设计与未来演进
+
+> 📚 学习要点: 可扩展架构（Extensible Architecture）
+> 好的设计不仅解决当前问题，还为未来演进预留扩展点。
+> 以下设计决策在当前版本中不实现完整功能，但通过预留字段和接口，
+> 使得未来版本可以在不破坏兼容性的前提下增加能力。
+
+### 1. 断点续传预留（Resume/Partial Retry）
+
+**当前版本行为：** 传输失败后需要完全重新发送，不支持从断点继续。
+
+**预留设计：** `TransferState` 中的 `lastReceivedIndex` 字段记录最后成功接收的 chunk 索引。
+
+```typescript
+// 📚 学习要点: 为什么当前不实现 Resume？
+// 1. 复杂度高：需要新增 MSG_RESUME_TRANSFER 协议消息
+// 2. 安全考量：resume 需要验证发送方身份未变（防止中间人注入 chunk）
+// 3. 场景有限：5MB 文件在正常网络下 <10s 完成，重传成本低
+// 4. 服务器无状态：服务器不存储任何传输历史，resume 只能在双方都在线时触发
+//
+// 未来实现路径：
+// 1. 接收方断线重连后，检查 sessionStorage 中的 lastReceivedIndex
+// 2. 发送方如果仍在线且传输未超时，发送 MSG_RESUME_REQUEST(transferId, fromIndex)
+// 3. 发送方从 fromIndex 开始重新发送剩余 chunk
+// 4. 需要 chunkHashes 验证已收到的 chunk 完整性（防止内存中的数据被篡改）
+
+// 未来 Resume 协议扩展（预留，当前不实现）
+// export const MSG_SEND_FILE_RESUME  = 0x0D;  // 请求从指定 index 继续
+// export const MSG_RELAY_FILE_RESUME = 0x1F;  // 中转 resume 请求
+
+interface ResumeRequestData {
+  transferId: string;
+  fromIndex: number;        // 从此 index 开始重新发送
+  receivedHashes: string[]; // 已收到 chunk 的 hash（用于校验）
+}
+```
+
+### 2. Chunk Hash 完整性校验
+
+**当前版本行为：** 依赖 AES-GCM 的 authentication tag 做完整性校验（解密失败 = 数据损坏）。
+
+**预留设计：** `FileMetadata` 中的可选 `chunkHashes` 字段。
+
+```typescript
+// 📚 学习要点: 为什么需要额外的 Hash？
+// AES-GCM auth tag 已经保证了密文完整性，为什么还需要明文 hash？
+//
+// 场景 1: Resume 校验
+// 接收方断线重连后，内存中的已解密 chunk 可能已被 GC 回收。
+// 如果从 sessionStorage 恢复了 lastReceivedIndex，需要验证
+// 之前解密的 chunk 是否仍然正确（防止内存损坏或 bug）。
+//
+// 场景 2: 并行下载验证（未来 P2P 模式）
+// 如果未来支持从多个 peer 并行下载不同 chunk，
+// 需要独立验证每个 chunk 的正确性（不依赖加密层）。
+//
+// 当前版本：chunkHashes 字段为 optional，发送方可以选择不生成。
+// 生成 hash 的开销：SHA-256(64KB) ≈ 0.1ms（Web Crypto API 硬件加速）
+// 80 chunks × 64 chars/hash = 5120 chars 额外 metadata 开销（可接受）
+
+async function generateChunkHashes(chunks: ArrayBuffer[]): Promise<string[]> {
+  return Promise.all(chunks.map(async (chunk) => {
+    const hash = await crypto.subtle.digest('SHA-256', chunk);
+    return Array.from(new Uint8Array(hash))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  }));
+}
+
+// 接收方验证（可选，仅当 metadata 包含 chunkHashes 时）
+async function verifyChunk(chunk: ArrayBuffer, expectedHash: string): Promise<boolean> {
+  const hash = await crypto.subtle.digest('SHA-256', chunk);
+  const actual = Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  return actual === expectedHash;
+}
+```
+
+### 3. WebWorker 加密卸载
+
+**当前版本行为：** 加密/解密在主线程执行。NFR-1 要求每 chunk 不超过 50ms。
+
+**渐进式迁移策略：**
+
+```typescript
+// 📚 学习要点: WebWorker 渐进式迁移
+// 阶段 1（当前）：主线程加密，简单直接
+// 阶段 2（性能优化）：检测到主线程阻塞时自动切换到 Worker
+// 阶段 3（完全 Worker）：所有加密操作在 Worker 中执行
+//
+// 为什么不一开始就用 Worker？
+// 1. Worker 通信有 postMessage 序列化开销（Transferable 可缓解）
+// 2. Worker 中的 CryptoKey 不能直接传递（需要 exportKey/importKey）
+// 3. 调试 Worker 比主线程困难
+// 4. 64KB chunk 的 AES-GCM 加密在现代设备上 <5ms（远低于 50ms 阈值）
+//
+// 触发迁移的信号：
+// - 性能测试发现 encryptChunk 耗时 > 20ms（接近阈值）
+// - 用户报告文件传输时 UI 卡顿
+// - 需要支持更大的 chunk size（如 256KB）
+
+// cryptoWorker.ts — WebWorker 实现骨架
+// 📚 学习要点: Transferable Objects
+// postMessage 默认会复制数据（structured clone），对于 64KB chunk 这意味着
+// 额外的内存分配和复制开销。使用 Transferable 可以「转移」所有权而非复制：
+// worker.postMessage({ chunk }, [chunk]) — chunk 的所有权转移给 Worker，
+// 主线程不再能访问该 ArrayBuffer（变为 detached 状态）。
+
+interface CryptoWorkerMessage {
+  type: 'encrypt' | 'decrypt';
+  id: number;              // 请求 ID，用于匹配响应
+  chunk: ArrayBuffer;      // Transferable
+  keyData: ArrayBuffer;    // 导出的 raw key（Transferable）
+  iv?: ArrayBuffer;        // 解密时提供
+}
+
+interface CryptoWorkerResponse {
+  type: 'result' | 'error';
+  id: number;
+  data?: ArrayBuffer;      // 加密/解密结果（Transferable）
+  iv?: ArrayBuffer;        // 加密时生成的 IV
+  error?: string;
+}
+
+// 主线程适配器（透明切换主线程/Worker）
+class CryptoAdapter {
+  private worker: Worker | null = null;
+  private useWorker = false;
+  private pendingRequests = new Map<number, { resolve: Function; reject: Function }>();
+  private nextId = 0;
+
+  constructor() {
+    // 📚 学习要点: Feature Detection
+    // 检测 Worker 是否可用（某些环境如 SSR 不支持）
+    if (typeof Worker !== 'undefined') {
+      try {
+        this.worker = new Worker(
+          new URL('./cryptoWorker.ts', import.meta.url),
+          { type: 'module' }
+        );
+        this.worker.onmessage = this.handleResponse.bind(this);
+        this.useWorker = true;
+      } catch {
+        // Worker 创建失败，回退到主线程
+        this.useWorker = false;
+      }
+    }
+  }
+
+  async encryptChunk(key: CryptoKey, chunk: ArrayBuffer): Promise<{ iv: Uint8Array; data: Uint8Array }> {
+    if (!this.useWorker) {
+      // 回退：主线程加密
+      return encryptChunkMainThread(key, chunk);
+    }
+    // Worker 加密（Transferable 传输，零拷贝）
+    return this.postToWorker('encrypt', chunk, key);
+  }
+
+  // ... decrypt 类似
+}
+```
+
+### 4. 传输状态持久化（sessionStorage）
+
+**当前版本行为：** 页面刷新后所有传输状态丢失，进行中的传输无法恢复。
+
+**持久化策略：**
+
+```typescript
+// 📚 学习要点: 为什么用 sessionStorage 而非 localStorage？
+// - sessionStorage: 标签页关闭后清除，适合临时传输状态
+// - localStorage: 永久存储，需要手动清理，可能积累垃圾数据
+// 
+// 文件传输是临时操作，关闭标签页后传输必然失败（WebSocket 断开），
+// 因此 sessionStorage 的生命周期完美匹配。
+//
+// 持久化内容（不含 chunks buffer）：
+// - transferId, status, fileName, fileSize, mimeType
+// - totalChunks, receivedChunks, lastReceivedIndex
+// - startTime, senderId, senderName
+// - direction, error
+//
+// 不持久化的内容：
+// - chunks[] — 太大（最多 5MB），且刷新后无法恢复加密上下文
+// - blobUrl — Blob URL 在页面刷新后失效
+// - roomKey — 安全原因，不存储密钥
+
+const STORAGE_KEY = 'arthas_file_transfers';
+
+interface PersistedTransferState {
+  transferId: string;
+  direction: TransferDirection;
+  status: TransferStatus;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  totalChunks: number;
+  receivedChunks: number;
+  lastReceivedIndex: number;
+  startTime: number;
+  senderId: string;
+  senderName: string;
+  error?: string;
+}
+
+// persistence.ts — 持久化模块
+
+/**
+ * 保存传输状态到 sessionStorage（去除大数据字段）。
+ * 在每次状态变更时调用（debounced，最多 500ms 一次）。
+ */
+function persistTransfers(transfers: Map<string, TransferState>): void {
+  const persisted: PersistedTransferState[] = [];
+  transfers.forEach((t) => {
+    // 只持久化活跃状态的传输
+    if (t.status === 'sending' || t.status === 'receiving' || t.status === 'pending') {
+      persisted.push({
+        transferId: t.transferId,
+        direction: t.direction,
+        status: t.status,
+        fileName: t.fileName,
+        fileSize: t.fileSize,
+        mimeType: t.mimeType,
+        totalChunks: t.totalChunks,
+        receivedChunks: t.receivedChunks,
+        lastReceivedIndex: t.lastReceivedIndex,
+        startTime: t.startTime,
+        senderId: t.senderId,
+        senderName: t.senderName,
+      });
+    }
+  });
+  
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
+  } catch {
+    // sessionStorage 满或不可用，静默忽略
+  }
+}
+
+/**
+ * 页面加载时恢复传输状态。
+ * 所有恢复的传输标记为 'failed'（因为 WebSocket 已断开，无法继续）。
+ * 这样用户至少能看到「传输已中断」而非完全消失。
+ */
+function restoreTransfers(): Map<string, TransferState> {
+  const transfers = new Map<string, TransferState>();
+  
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return transfers;
+    
+    const persisted: PersistedTransferState[] = JSON.parse(raw);
+    for (const p of persisted) {
+      transfers.set(p.transferId, {
+        ...p,
+        status: 'failed',  // 刷新后无法继续，标记为失败
+        error: '页面刷新，传输已中断',
+        chunks: [],
+        lastChunkTime: 0,
+        ackCount: 0,
+        totalReceivers: 0,
+        chatMessageId: '',
+      });
+    }
+    
+    // 清理已恢复的数据
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // 解析失败，忽略
+  }
+  
+  return transfers;
+}
+```
+
+### 5. 并发 Broadcast 优化（已集成到流控章节）
+
+并发 Broadcast 的设计已在「流控与背压设计」章节的 `BroadcastFileData` 中实现。
+核心改进：从串行遍历改为并发 goroutine + WaitGroup，避免一个慢接收方阻塞其他成员。
+
+**未来扩展：Worker Pool 模式**
+
+```go
+// 📚 学习要点: 何时需要 Worker Pool？
+// 当前设计：每个 chunk broadcast 创建 N-1 个 goroutine（N = 房间成员数）
+// MaxMembers=50 时，每个 chunk 最多 49 个 goroutine，每个最多存活 5s。
+// 
+// 极端场景：80 chunks × 49 goroutines = 3920 个 goroutine（峰值）
+// Go runtime 轻松处理（每个 goroutine 初始栈 2KB，总计 ~8MB）。
+//
+// 但如果未来 MaxMembers 增大到 500+，或支持多文件并发传输，
+// 可能需要引入 Worker Pool 限制并发 goroutine 数量：
+
+// 未来优化：带并发限制的 BroadcastFileData
+const maxConcurrentSends = 20 // 最多同时向 20 个成员发送
+
+func (r *Room) BroadcastFileDataPooled(excludeID string, data []byte) {
+    r.mu.RLock()
+    members := make([]*Member, 0, len(r.members))
+    for _, m := range r.members {
+        if m.ID != excludeID {
+            members = append(members, m)
+        }
+    }
+    r.mu.RUnlock()
+
+    // Semaphore pattern: buffered channel 限制并发
+    sem := make(chan struct{}, maxConcurrentSends)
+    var wg sync.WaitGroup
+    
+    for _, m := range members {
+        wg.Add(1)
+        sem <- struct{}{} // 获取信号量（满时阻塞）
+        go func(member *Member) {
+            defer wg.Done()
+            defer func() { <-sem }() // 释放信号量
+            if !member.SendFileFunc(data) {
+                logger.Warn("Room", "file data send timeout for member %s", member.ID)
+            }
+        }(m)
+    }
+    wg.Wait()
+}
+```
+
+### 扩展性总结
+
+| 扩展点 | 当前版本 | 预留机制 | 未来触发条件 |
+|--------|---------|---------|-------------|
+| 断点续传 | 不支持，失败需重传 | `lastReceivedIndex` 字段 + `chunkHashes` | 用户反馈大文件传输体验差 |
+| Chunk 校验 | 依赖 GCM auth tag | `chunkHashes?: string[]` 可选字段 | 实现 resume 或 P2P 模式 |
+| WebWorker | 主线程加密 | `CryptoAdapter` 透明切换 | 性能测试 >20ms/chunk |
+| 状态持久化 | 刷新后丢失 | `persistence.ts` + sessionStorage | V1 即实现（用户体验） |
+| 并发 Broadcast | 并发 goroutine | Worker Pool 预留 | MaxMembers > 100 |
+
 ## Testing Strategy
 
 ### 测试方法概述
@@ -1139,3 +1505,12 @@ func (h *Hub) handleFileChunk(client *Client, data interface{}) {
 - **SendFileData 超时行为测试**
 - **handleClientDisconnect 清理活跃传输测试**
 - **cleanupStaleTransfers 定时清理测试**
+- **BroadcastFileData 并发发送测试**（验证慢接收方不阻塞快接收方）
+- **BroadcastFileData WaitGroup 正确性**（所有 goroutine 在函数返回前结束）
+
+### 扩展性相关测试
+
+- **sessionStorage 持久化/恢复**（写入 → 刷新模拟 → 恢复为 failed 状态）
+- **CryptoAdapter 回退**（Worker 不可用时回退到主线程）
+- **chunkHashes 生成与验证**（SHA-256 round-trip）
+- **lastReceivedIndex 正确更新**（每次成功接收 chunk 后递增）
