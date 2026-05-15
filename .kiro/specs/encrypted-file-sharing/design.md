@@ -284,9 +284,134 @@ function getAdaptiveDelay(): number {
 | 层级 | 机制 | 作用 |
 |------|------|------|
 | 客户端 | 10ms 基础延迟 + bufferedAmount 自适应 | 防止客户端发送过快 |
+| 客户端 | RTT 趋势检测 + 动态调整 | 感知网络拥塞，提前降速 |
 | 服务器 | SendFileData 5s 超时 | 防止慢接收方拖住整个系统 |
 | 服务器 | 1 active transfer per client | 防止单客户端占用过多资源 |
 | 接收方 | 60s 无新 chunk 超时 | 检测并清理失败的传输 |
+
+### RTT 感知的网络质量自适应
+
+> 📚 学习要点: 基于 RTT 的拥塞检测
+> `bufferedAmount` 只能检测本地发送队列的积压，无法感知网络链路的拥塞。
+> 例如：bufferedAmount 为 0（数据已交给 OS 网络栈），但网络实际已拥塞。
+> 
+> 利用现有的 Ping/Pong 机制测量 RTT（Round-Trip Time），
+> 当 RTT 持续增大时，说明网络拥塞正在发生，应主动降低发送速率。
+> 这类似于 TCP 的拥塞控制思想（但更简化）。
+
+```typescript
+// 📚 学习要点: 简化版拥塞控制
+// TCP 使用复杂的 AIMD（Additive Increase Multiplicative Decrease）算法。
+// 我们使用更简单的策略：
+// - 维护最近 5 次 RTT 的滑动窗口
+// - 如果最新 RTT > 平均 RTT × 1.5，认为网络拥塞，增加延迟
+// - 如果最新 RTT < 平均 RTT × 0.8，认为网络恢复，减少延迟
+// 这不需要精确的拥塞控制，只需要一个"网络变差了"的信号。
+
+const RTT_WINDOW_SIZE = 5;
+const RTT_CONGESTION_FACTOR = 1.5;
+const RTT_RECOVERY_FACTOR = 0.8;
+
+let rttHistory: number[] = [];
+let rttBasedMultiplier = 1.0;
+
+/**
+ * 记录最新的 RTT 值（从 Ping/Pong 机制获取）。
+ * 在 chatStore 的 handlePong 中调用。
+ */
+function recordRtt(rtt: number): void {
+  rttHistory.push(rtt);
+  if (rttHistory.length > RTT_WINDOW_SIZE) {
+    rttHistory.shift();
+  }
+  
+  if (rttHistory.length < 3) return; // 数据不足，不调整
+  
+  const avgRtt = rttHistory.reduce((a, b) => a + b, 0) / rttHistory.length;
+  const latestRtt = rttHistory[rttHistory.length - 1];
+  
+  if (latestRtt > avgRtt * RTT_CONGESTION_FACTOR) {
+    // 网络拥塞：增加延迟倍数（最多 3x）
+    rttBasedMultiplier = Math.min(rttBasedMultiplier * 1.5, 3.0);
+  } else if (latestRtt < avgRtt * RTT_RECOVERY_FACTOR) {
+    // 网络恢复：减少延迟倍数（最低 1x）
+    rttBasedMultiplier = Math.max(rttBasedMultiplier * 0.7, 1.0);
+  }
+}
+
+/**
+ * 综合自适应延迟：结合 bufferedAmount 和 RTT 两个信号。
+ */
+function getAdaptiveDelayWithRtt(): number {
+  const bufferDelay = getAdaptiveDelay(); // 基于 bufferedAmount
+  return Math.min(bufferDelay * rttBasedMultiplier, MAX_CHUNK_DELAY_MS);
+}
+```
+
+### 离线检测与主动暂停
+
+> 📚 学习要点: navigator.onLine 与 offline 事件
+> 浏览器提供了网络状态检测 API：
+> - `navigator.onLine`: 当前是否在线（布尔值）
+> - `window.addEventListener('offline', ...)`: 网络断开时触发
+> - `window.addEventListener('online', ...)`: 网络恢复时触发
+>
+> 注意：这些 API 不完全可靠（某些情况下 onLine=true 但实际无法访问服务器），
+> 但作为"快速反馈"机制，比等待 WebSocket 超时（可能需要 30s+）要好得多。
+
+```typescript
+// sender.ts — 离线检测集成
+// 📚 学习要点: 为什么主动暂停比被动超时好？
+// 被动超时：网络断开 → 继续发送 chunk → bufferedAmount 增长 → 
+//          最终 WebSocket 超时关闭 → 传输标记失败（可能需要 10-30s）
+// 主动暂停：网络断开 → 立即暂停发送 → 显示"网络断开，等待重连..."
+//          → 网络恢复 → 检查 WebSocket 状态 → 继续或标记失败（<1s 反馈）
+
+let isPaused = false;
+
+function setupOfflineDetection(): void {
+  window.addEventListener('offline', () => {
+    isPaused = true;
+    // 立即更新 UI：显示暂停状态
+    const { activeSendId } = useFileTransferStore.getState();
+    if (activeSendId) {
+      updateTransferStatus(activeSendId, 'paused_offline');
+    }
+    console.warn('[FileTransfer] Network offline, pausing transfer');
+  });
+
+  window.addEventListener('online', () => {
+    isPaused = false;
+    // 检查 WebSocket 是否仍然连接
+    if (ws.isConnected()) {
+      // WebSocket 仍在，恢复传输
+      console.log('[FileTransfer] Network online, resuming transfer');
+      resumeActiveSend();
+    } else {
+      // WebSocket 已断开，等待重连后由 reconnect 逻辑处理
+      console.log('[FileTransfer] Network online but WebSocket disconnected, waiting for reconnect');
+    }
+  });
+}
+
+// 发送循环中检查暂停状态
+async function sendFileChunks(file: File, roomKey: CryptoKey, transferId: string): Promise<void> {
+  for await (const { index, data } of streamChunks(file)) {
+    // 离线暂停：等待网络恢复
+    while (isPaused) {
+      await delay(500); // 每 500ms 检查一次
+      // 如果超过 60s 仍然离线，标记传输失败
+      if (Date.now() - lastOnlineTime > 60_000) {
+        throw new Error('网络断开超过 60 秒，传输失败');
+      }
+    }
+    
+    const { iv, ciphertext } = await encryptChunk(roomKey, data);
+    ws.send(MSG_SEND_FILE_CHUNK, { transferId, index, iv, data: ciphertext });
+    await delay(getAdaptiveDelayWithRtt());
+  }
+}
+```
 
 
 ## Components and Interfaces
@@ -627,6 +752,62 @@ interface FileTransferState {
 }
 ```
 
+### 传输队列优先级
+
+> 📚 学习要点: 智能队列调度
+> 默认队列是严格 FIFO（先进先出），但可以通过优先级优化用户体验：
+> - 小文件（<100KB）传输快（1-2 个 chunk），先完成能提升感知速度
+> - 用户可能想优先发送某个文件（如紧急截图）
+>
+> 设计选择：当前版本使用 FIFO + 可选的手动调整，不自动重排序。
+> 原因：自动重排序可能让用户困惑（"为什么我先选的文件后发送？"）。
+
+```typescript
+// fileTransferStore.ts — 队列管理
+
+/**
+ * 将队列中的传输移动到指定位置。
+ * 用于用户手动调整发送顺序（拖拽排序）。
+ * 
+ * 📚 学习要点: 为什么不自动按文件大小排序？
+ * 1. 用户预期：先选择的文件应该先发送（最小惊讶原则）
+ * 2. 大文件可能更紧急（用户主动选择的顺序有意义）
+ * 3. 自动排序增加了不可预测性
+ * 但提供手动调整能力，让用户在需要时可以优化。
+ */
+function reorderQueue(transferId: string, newIndex: number): void {
+  const { sendQueue } = useFileTransferStore.getState();
+  const currentIndex = sendQueue.indexOf(transferId);
+  if (currentIndex === -1 || currentIndex === newIndex) return;
+  
+  const updated = [...sendQueue];
+  updated.splice(currentIndex, 1);
+  updated.splice(newIndex, 0, transferId);
+  
+  useFileTransferStore.setState({ sendQueue: updated });
+}
+
+/**
+ * 将小文件自动提升到队列前端（可选行为，默认关闭）。
+ * 仅在用户启用"智能排序"时生效。
+ * 
+ * 阈值：100KB 以下的文件视为"小文件"（1-2 个 chunk，<200ms 完成）。
+ */
+const SMALL_FILE_THRESHOLD = 102400; // 100KB
+
+function insertWithPriority(transferId: string, fileSize: number): void {
+  const { sendQueue } = useFileTransferStore.getState();
+  
+  if (fileSize <= SMALL_FILE_THRESHOLD && sendQueue.length > 0) {
+    // 小文件插入到队列前端（但不打断正在发送的传输）
+    useFileTransferStore.setState({ sendQueue: [transferId, ...sendQueue] });
+  } else {
+    // 正常追加到队列末尾
+    useFileTransferStore.setState({ sendQueue: [...sendQueue, transferId] });
+  }
+}
+```
+
 ### 并发接收限制
 
 > 📚 学习要点: 内存保护策略
@@ -790,6 +971,65 @@ type RelayFileAckData struct {
 额外开销: 80 × 28 = 2,240 bytes (0.04%) — 可忽略
 ```
 
+#### 流式分片（Streaming Chunking）
+
+> 📚 学习要点: 为什么使用 File.slice() 而非一次性读取？
+> 如果先将整个 5MB 文件读入内存（`await file.arrayBuffer()`），
+> 再进行分片，会导致峰值内存占用 = 文件大小 × 2（原始 + 分片副本）。
+> 在移动端或低内存设备上，10MB 峰值内存可能触发浏览器 OOM。
+>
+> 使用 `File.slice(start, end)` 按需读取每个 chunk：
+> - 内存占用 = 1 个 chunk 大小（64KB）+ 加密后的 chunk（~64KB）
+> - 峰值内存 ≈ 128KB，与文件大小无关
+> - 浏览器可以直接从磁盘读取指定范围，无需加载整个文件
+
+```typescript
+/**
+ * 流式分片发送：逐片读取、加密、发送，避免一次性加载整个文件到内存。
+ *
+ * 📚 学习要点: File.slice() 的零拷贝特性
+ * File 对象是对磁盘文件的引用（Blob），slice() 不会复制数据，
+ * 只是创建一个指向原始文件特定范围的新 Blob 引用。
+ * 只有调用 arrayBuffer() 时才真正读取磁盘数据到内存。
+ * 这意味着即使文件有 5MB，内存中同时只有 1 个 64KB chunk。
+ */
+async function* streamChunks(file: File): AsyncGenerator<{ index: number; data: ArrayBuffer }> {
+  const CHUNK_SIZE = 65536;
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const slice = file.slice(start, end);
+    const data = await slice.arrayBuffer();
+    yield { index: i, data };
+  }
+}
+
+// sender.ts 中的使用方式
+async function sendFileChunks(file: File, roomKey: CryptoKey, transferId: string): Promise<void> {
+  for await (const { index, data } of streamChunks(file)) {
+    const { iv, ciphertext } = await encryptChunk(roomKey, data);
+    ws.send(MSG_SEND_FILE_CHUNK, { transferId, index, iv, data: ciphertext });
+    await delay(getAdaptiveDelay()); // 自适应限速
+  }
+}
+```
+
+#### Transfer_ID 碰撞概率分析
+
+> 📚 学习要点: NanoID 碰撞概率量化
+> Transfer_ID 使用 NanoID 21 chars（默认 alphabet = A-Za-z0-9_-，共 64 字符）。
+> 信息熵 = 21 × log2(64) = 21 × 6 = **126 bits**。
+>
+> 碰撞概率（Birthday Problem 近似）：
+> - 假设系统每秒产生 1000 个传输（极端场景）
+> - 运行 1 年 = 1000 × 86400 × 365 ≈ 3.15 × 10^10 个 ID
+> - 碰撞概率 ≈ n² / (2 × 2^126) ≈ (3.15×10^10)² / (2 × 2^126) ≈ 5.8 × 10^-18
+>
+> 这比硬件错误率（~10^-15）还低 3 个数量级，可以安全忽略。
+> 即使在单个房间内（最多 50 人同时传输），碰撞概率更是微乎其微。
+
 ### WebSocket 消息大小计算
 
 ```
@@ -910,6 +1150,37 @@ function handleFileChunk(data: RelayFileChunkData, roomKey: CryptoKey): void {
 
 **Validates: Requirements 4.1, 4.4 (extended), 流控设计**
 
+### Property 14: Duplicate chunk idempotency
+
+*For any* incoming chunk message whose `index` corresponds to a chunk already received and stored (i.e., `chunks[index] !== null`), the receiver SHALL silently ignore the duplicate without overwriting the existing data, without incrementing `receivedChunks`, and without triggering any side effects. Receiving the same chunk twice SHALL produce the same final result as receiving it once.
+
+**Validates: Requirements 5.9 (TCP ordering), defensive programming**
+
+```typescript
+// receiver.ts — 重复 chunk 幂等处理
+function handleFileChunk(data: RelayFileChunkData, roomKey: CryptoKey): void {
+  const transfer = transfers.get(data.transferId);
+  if (!transfer) return; // Property 11
+
+  if (data.index < 0 || data.index >= transfer.totalChunks) return; // Property 12
+
+  // Property 14: 幂等性 — 已收到的 chunk 不重复处理
+  // 📚 学习要点: 为什么需要幂等检查？
+  // 虽然 TCP 保证不重复，但应用层可能因以下原因收到重复 chunk：
+  // 1. 未来实现 resume 时，发送方可能重发边界 chunk
+  // 2. 代码 bug 导致 handleFileChunk 被调用两次
+  // 3. 防御性编程：即使不应该发生，也不应该导致错误
+  // 
+  // 如果不检查，重复 chunk 会导致 receivedChunks 计数错误，
+  // 可能提前触发"所有 chunk 已收齐"的判断。
+  if (transfer.chunks[data.index] !== null) {
+    return; // 已收到，静默忽略
+  }
+
+  // ... 正常解密和存储逻辑
+}
+```
+
 ## Ephemeral Mode 集成
 
 > 📚 学习要点: Ephemeral 与文件传输的交互
@@ -956,6 +1227,64 @@ function handleEphemeralExpiry(transferId: string): void {
 }
 ```
 
+## 密钥与成员变更
+
+> 📚 学习要点: 密钥轮换与文件传输的交互
+> Arthas 当前使用房间创建时生成的单一 Room_Key，所有成员共享同一密钥。
+> 如果未来引入密钥轮换（Key Rotation），文件传输需要特殊处理。
+
+### 当前设计（无密钥轮换）
+
+当前版本中，Room_Key 在房间创建时生成，通过 shareCode 分发给所有成员。
+密钥在房间生命周期内不变，因此文件传输不存在密钥不一致问题。
+
+### 新成员加入时的行为
+
+```typescript
+// 📚 学习要点: 新成员与进行中的传输
+// 场景：文件传输进行到第 40/80 个 chunk 时，新成员 C 加入房间。
+// 
+// 行为分析：
+// 1. C 不会收到 MSG_RELAY_FILE_META（已经发送过了）
+// 2. C 会收到第 41-80 个 chunk（服务器 broadcast 给所有当前成员）
+// 3. 但 C 没有 metadata，不知道 transferId 对应什么文件
+// 4. 根据 Property 11，C 会静默丢弃这些 chunk（unknown transferId）
+//
+// 这是正确的行为：
+// - 新成员不应该收到加入前的文件（与聊天消息一致）
+// - 不会产生错误或异常状态
+// - 不会浪费 C 的内存（chunk 被立即丢弃）
+
+// 无需额外代码，Property 11 的 unknown transferId 丢弃机制自然处理了这个场景。
+```
+
+### 未来密钥轮换的影响（预留考虑）
+
+```typescript
+// 📚 学习要点: 如果未来实现密钥轮换
+// 假设未来引入「成员加入时轮换密钥」的安全增强：
+// 
+// 问题：传输进行中密钥轮换，后续 chunk 用新密钥加密？
+// 
+// 设计决策：文件传输期间不触发密钥轮换。
+// 原因：
+// 1. 一次传输最多 80 chunks × 10ms = 800ms，时间窗口很短
+// 2. 传输使用发起时的密钥，整个传输过程密钥一致
+// 3. 如果传输期间发生密钥轮换，已发送的 chunk 仍用旧密钥，
+//    接收方用旧密钥解密（接收方在传输开始时已获得密钥）
+// 4. 新成员（触发轮换的人）不会收到进行中的传输（Property 11 保护）
+//
+// 简化规则：
+// - 文件传输使用 initiateTransfer() 时刻的 roomKey
+// - 传输过程中 roomKey 变更不影响进行中的传输
+// - 新密钥仅用于新发起的传输
+
+interface TransferCryptoContext {
+  transferId: string;
+  roomKey: CryptoKey;  // 传输发起时的密钥快照（不随轮换变化）
+}
+```
+
 ## Error Handling
 
 ### 错误分类与处理策略
@@ -987,6 +1316,85 @@ function handleEphemeralExpiry(transferId: string): void {
 // 4. 对于 meta: 验证 client.activeTransferID == ""（无其他活跃传输）
 // 5. 对于 chunk/complete/cancel: 验证 transferId == client.activeTransferID
 // 6. 验证失败 → sendError(client, ErrCodeInvalidMessage, ...)
+```
+
+### 客户端文件类型验证（Magic Bytes）
+
+> 📚 学习要点: Magic Bytes 与 MIME Type 一致性
+> 文件的 MIME type 来自浏览器的 `file.type` 属性，但这可以被伪造
+> （例如将 .exe 重命名为 .jpg）。Magic bytes（文件头部的固定字节序列）
+> 是更可靠的文件类型标识。
+>
+> 虽然服务器不检查文件内容（零知识），但客户端可以在发送前做基本验证，
+> 防止用户误发恶意文件或伪装文件。这是一种"善意提醒"而非强制限制。
+
+```typescript
+// sanitize.ts — 文件类型 Magic Bytes 验证
+
+/**
+ * 📚 学习要点: 常见文件的 Magic Bytes
+ * 每种文件格式在文件头部有固定的字节序列（签名）：
+ * - PNG: 89 50 4E 47 (‰PNG)
+ * - JPEG: FF D8 FF
+ * - GIF: 47 49 46 38 (GIF8)
+ * - PDF: 25 50 44 46 (%PDF)
+ * - ZIP: 50 4B 03 04 (PK..)
+ * - WebP: 52 49 46 46 ... 57 45 42 50 (RIFF...WEBP)
+ */
+const MAGIC_BYTES: Record<string, { bytes: number[]; offset: number }[]> = {
+  'image/png':  [{ bytes: [0x89, 0x50, 0x4E, 0x47], offset: 0 }],
+  'image/jpeg': [{ bytes: [0xFF, 0xD8, 0xFF], offset: 0 }],
+  'image/gif':  [{ bytes: [0x47, 0x49, 0x46, 0x38], offset: 0 }],
+  'image/webp': [{ bytes: [0x52, 0x49, 0x46, 0x46], offset: 0 },
+                 { bytes: [0x57, 0x45, 0x42, 0x50], offset: 8 }],
+  'application/pdf': [{ bytes: [0x25, 0x50, 0x44, 0x46], offset: 0 }],
+  'application/zip': [{ bytes: [0x50, 0x4B, 0x03, 0x04], offset: 0 }],
+};
+
+/**
+ * 验证文件头部 magic bytes 与声明的 MIME type 是否一致。
+ * 仅对已知类型做验证，未知类型直接通过（不阻止发送）。
+ * 
+ * @returns true 如果一致或无法验证，false 如果明确不一致
+ */
+async function validateMagicBytes(file: File): Promise<{ valid: boolean; warning?: string }> {
+  const expectedMagic = MAGIC_BYTES[file.type];
+  if (!expectedMagic) {
+    return { valid: true }; // 未知类型，不验证
+  }
+  
+  // 只读取前 16 字节（足够检查所有已知 magic bytes）
+  const header = await file.slice(0, 16).arrayBuffer();
+  const bytes = new Uint8Array(header);
+  
+  for (const { bytes: expected, offset } of expectedMagic) {
+    for (let i = 0; i < expected.length; i++) {
+      if (bytes[offset + i] !== expected[i]) {
+        return {
+          valid: false,
+          warning: `文件内容与类型 ${file.type} 不匹配，可能是伪装文件`,
+        };
+      }
+    }
+  }
+  
+  return { valid: true };
+}
+
+// 在 sender.ts 的 initiateTransfer 中调用
+async function initiateTransfer(file: File): Promise<void> {
+  // ... 大小验证 ...
+  
+  // Magic bytes 验证（非阻塞，仅警告）
+  const { valid, warning } = await validateMagicBytes(file);
+  if (!valid && warning) {
+    // 显示警告但不阻止发送（用户可能有合理原因）
+    console.warn('[FileTransfer]', warning);
+    // 可选：在 UI 中显示警告提示
+  }
+  
+  // ... 继续正常流程 ...
+}
 ```
 
 ### 内存安全
@@ -1065,6 +1473,319 @@ func (h *Hub) handleFileChunk(client *Client, data interface{}) {
     
     // 使用 BroadcastFileData（带超时）而非普通 Broadcast
     r.BroadcastFileData(client.ID, broadcastData)
+}
+```
+
+## UI/UX 设计细节
+
+### 无障碍（Accessibility）设计
+
+> 📚 学习要点: Web 无障碍（WCAG 2.1）
+> 无障碍设计确保视障、运动障碍等用户也能使用文件传输功能。
+> 关键原则：可感知（Perceivable）、可操作（Operable）、可理解（Understandable）。
+
+#### 进度条无障碍
+
+```tsx
+// ProgressBar.tsx — 无障碍进度条
+// 📚 学习要点: aria-valuenow 与屏幕阅读器
+// 屏幕阅读器（如 VoiceOver、NVDA）会读出 progressbar 的当前值。
+// 设置 aria-valuemin/max/now 让辅助技术能正确报告进度。
+// aria-label 提供上下文（"文件名 传输进度"），避免只读出数字。
+
+<div
+  role="progressbar"
+  aria-valuenow={progress}
+  aria-valuemin={0}
+  aria-valuemax={100}
+  aria-label={`${fileName} 传输进度 ${progress}%`}
+  className="h-2 bg-gray-700 rounded-full overflow-hidden"
+>
+  <div
+    className="h-full bg-blue-500 transition-all duration-300"
+    style={{ width: `${progress}%` }}
+  />
+</div>
+```
+
+#### 文件状态实时通知
+
+```tsx
+// FileMessage.tsx — 状态变更通知
+// 📚 学习要点: aria-live 区域
+// aria-live="polite" 告诉屏幕阅读器：当内容变化时，
+// 等用户当前操作完成后再播报变化（不打断用户）。
+// 用于传输完成、失败等状态变更通知。
+
+<div aria-live="polite" aria-atomic="true" className="sr-only">
+  {status === 'complete' && `${fileName} 传输完成，可以下载`}
+  {status === 'failed' && `${fileName} 传输失败: ${error}`}
+  {status === 'cancelled' && `${fileName} 传输已取消`}
+</div>
+```
+
+#### 键盘操作支持
+
+```tsx
+// 📚 学习要点: 键盘可操作性
+// 所有交互元素必须可通过键盘操作（Tab 导航 + Enter/Space 激活）。
+// 原生 <button> 自带键盘支持，避免用 <div onClick> 模拟按钮。
+
+// 取消按钮 — 使用语义化 button
+<button
+  onClick={() => cancelTransfer(transferId)}
+  aria-label={`取消传输 ${fileName}`}
+  className="text-red-400 hover:text-red-300 p-1 rounded"
+>
+  ✕
+</button>
+
+// 下载按钮 — 明确的 aria-label
+<button
+  onClick={() => downloadFile(transferId)}
+  aria-label={`下载文件 ${fileName}`}
+  className="text-blue-400 hover:text-blue-300 p-2 rounded"
+>
+  ⬇️ 下载
+</button>
+
+// DropZone — 键盘可触发文件选择
+<div
+  role="button"
+  tabIndex={0}
+  aria-label="拖放文件到此处，或按 Enter 选择文件"
+  onKeyDown={(e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      fileInputRef.current?.click();
+    }
+  }}
+>
+  拖放文件到此处
+</div>
+```
+
+#### 动画与 prefers-reduced-motion
+
+```css
+/* 📚 学习要点: 尊重用户的动画偏好
+ * 某些用户（如前庭障碍患者）对动画敏感，
+ * 操作系统提供了"减少动画"设置。
+ * CSS 媒体查询 prefers-reduced-motion 检测此设置。
+ */
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar-fill {
+    transition: none; /* 禁用进度条动画 */
+  }
+  .drop-zone-pulse {
+    animation: none; /* 禁用拖拽区域脉冲动画 */
+  }
+}
+```
+
+### 移动端交互适配
+
+> 📚 学习要点: 触摸设备的文件选择
+> HTML5 Drag and Drop API 在移动端浏览器中支持有限：
+> - iOS Safari: 不支持 drag/drop 文件
+> - Android Chrome: 部分支持，但体验差
+> 因此移动端需要不同的交互方式。
+
+```typescript
+// 📚 学习要点: 设备检测策略
+// 不使用 User-Agent 嗅探（不可靠），而是检测触摸能力。
+// 'ontouchstart' in window 检测设备是否支持触摸事件。
+// 注意：某些笔记本同时支持触摸和鼠标，因此不能完全禁用 DropZone，
+// 而是在纯触摸设备上不显示拖拽提示文案。
+
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+```
+
+```tsx
+// DropZone.tsx — 移动端适配
+// 📚 学习要点: 条件渲染拖拽覆盖层
+// 移动端不显示 "拖放文件到此处" 的全屏覆盖层（因为无法拖拽）。
+// 但保留文件选择按钮（通过 <input type="file"> 触发系统文件选择器）。
+
+function DropZone({ children }: { children: React.ReactNode }) {
+  const [isDragging, setIsDragging] = useState(false);
+  const isTouchDevice = useMemo(
+    () => 'ontouchstart' in window || navigator.maxTouchPoints > 0,
+    []
+  );
+
+  // 移动端：不注册 drag 事件监听器（节省性能）
+  useEffect(() => {
+    if (isTouchDevice) return; // 触摸设备跳过 drag 监听
+    
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      setIsDragging(true);
+    };
+    const handleDragLeave = () => setIsDragging(false);
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      // 处理拖拽的文件
+      if (e.dataTransfer?.files.length) {
+        handleFileSelection(e.dataTransfer.files[0]);
+      }
+    };
+
+    document.addEventListener('dragover', handleDragOver);
+    document.addEventListener('dragleave', handleDragLeave);
+    document.addEventListener('drop', handleDrop);
+    return () => {
+      document.removeEventListener('dragover', handleDragOver);
+      document.removeEventListener('dragleave', handleDragLeave);
+      document.removeEventListener('drop', handleDrop);
+    };
+  }, [isTouchDevice]);
+
+  return (
+    <>
+      {children}
+      {/* 拖拽覆盖层：仅在非触摸设备 + 正在拖拽时显示 */}
+      {!isTouchDevice && isDragging && (
+        <div className="fixed inset-0 bg-blue-500/20 border-4 border-dashed border-blue-400 
+                        flex items-center justify-center z-50"
+             aria-hidden="true">
+          <span className="text-2xl text-blue-300">拖放文件到此处</span>
+        </div>
+      )}
+    </>
+  );
+}
+```
+
+#### 移动端文件选择按钮
+
+```tsx
+// FileAttachButton.tsx — 移动端友好的文件选择
+// 📚 学习要点: 触摸目标大小
+// WCAG 2.5.5 要求触摸目标至少 44×44 CSS 像素。
+// 移动端的附件按钮需要足够大，方便手指点击。
+
+<button
+  onClick={() => fileInputRef.current?.click()}
+  aria-label="选择文件"
+  className="p-3 min-w-[44px] min-h-[44px] flex items-center justify-center
+             text-gray-400 hover:text-gray-200 rounded-lg
+             active:bg-gray-700 touch-manipulation"
+>
+  📎
+</button>
+
+{/* 隐藏的 file input — accept 属性限制可选文件类型 */}
+<input
+  ref={fileInputRef}
+  type="file"
+  className="hidden"
+  accept="image/*,.pdf,.txt,.zip,.doc,.docx"
+  onChange={(e) => {
+    const file = e.target.files?.[0];
+    if (file) handleFileSelection(file);
+    e.target.value = ''; // 重置，允许重复选择同一文件
+  }}
+/>
+```
+
+### Chunk 到达微交互动画
+
+> 📚 学习要点: 微交互（Micro-interaction）与感知速度
+> 用户对"正在发生什么"的感知比实际速度更重要。
+> 一个静止的进度条（即使在增长）给人"卡住了"的感觉。
+> 每收到一个 chunk 时的微动画（脉冲/闪烁）给用户"数据正在流入"的实时反馈，
+> 即使实际速度没变，感知体验也会更好。
+
+```tsx
+// ProgressBar.tsx — 带 chunk 到达脉冲的进度条
+// 📚 学习要点: CSS 动画 + React 状态驱动
+// 每次 receivedChunks 变化时，触发一个短暂的脉冲动画。
+// 使用 CSS animation + key 技巧强制重新触发动画。
+
+function ProgressBar({ progress, receivedChunks, fileName }: ProgressBarProps) {
+  const [pulseKey, setPulseKey] = useState(0);
+  const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+  
+  // 每次收到新 chunk 时触发脉冲
+  useEffect(() => {
+    if (!prefersReducedMotion) {
+      setPulseKey((k) => k + 1);
+    }
+  }, [receivedChunks, prefersReducedMotion]);
+
+  return (
+    <div
+      role="progressbar"
+      aria-valuenow={progress}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={`${fileName} 传输进度 ${progress}%`}
+      className="relative h-2 bg-gray-700 rounded-full overflow-hidden"
+    >
+      {/* 主进度条 */}
+      <div
+        className="h-full bg-blue-500 transition-all duration-300
+                   motion-reduce:transition-none"
+        style={{ width: `${progress}%` }}
+      />
+      
+      {/* Chunk 到达脉冲效果 */}
+      {!prefersReducedMotion && (
+        <div
+          key={pulseKey}
+          className="absolute top-0 right-0 h-full w-4 
+                     bg-gradient-to-r from-transparent to-blue-300
+                     animate-pulse-once opacity-0"
+          style={{ left: `calc(${progress}% - 16px)` }}
+        />
+      )}
+    </div>
+  );
+}
+```
+
+```css
+/* 📚 学习要点: 一次性动画（One-shot Animation）
+ * 普通的 animate-pulse 是无限循环的。
+ * 我们需要"触发一次然后消失"的效果。
+ * 使用 animation-fill-mode: forwards 保持最终状态（opacity: 0）。
+ * 通过 React key 变化强制重新挂载元素，重新触发动画。
+ */
+@keyframes pulse-once {
+  0% { opacity: 0.8; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(2); }
+}
+
+.animate-pulse-once {
+  animation: pulse-once 0.3s ease-out forwards;
+}
+
+/* 尊重用户动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-once {
+    animation: none;
+  }
+}
+```
+
+```typescript
+// 📚 学习要点: useMediaQuery hook
+// 检测用户的 prefers-reduced-motion 设置。
+// 使用 matchMedia API 实时监听变化（用户可能在使用中切换设置）。
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(
+    () => window.matchMedia(query).matches
+  );
+  
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, [query]);
+  
+  return matches;
 }
 ```
 
@@ -1404,6 +2125,91 @@ func (r *Room) BroadcastFileDataPooled(excludeID string, data []byte) {
 | WebWorker | 主线程加密 | `CryptoAdapter` 透明切换 | 性能测试 >20ms/chunk |
 | 状态持久化 | 刷新后丢失 | `persistence.ts` + sessionStorage | V1 即实现（用户体验） |
 | 并发 Broadcast | 并发 goroutine | Worker Pool 预留 | MaxMembers > 100 |
+| 密钥轮换 | 单一 Room_Key | `TransferCryptoContext` 密钥快照 | 引入 Key Rotation 功能时 |
+| 流式分片 | File.slice() 按需读取 | AsyncGenerator streamChunks | V1 即实现（内存优化） |
+| RTT 自适应 | bufferedAmount + RTT | `rttBasedMultiplier` 动态调整 | V1 即实现（网络质量感知） |
+| 队列优先级 | FIFO + 手动调整 | `reorderQueue()` + 小文件优先 | V2 用户体验优化 |
+| Magic Bytes | 非阻塞警告 | `validateMagicBytes()` | V1 即实现（安全提醒） |
+| 离线检测 | offline 事件 + 主动暂停 | `isPaused` + 60s 超时 | V1 即实现（快速反馈） |
+| Chunk 微动画 | 脉冲效果 | `animate-pulse-once` + reduced-motion | V1 即实现（感知速度） |
+
+### 实现优先级与路线图（MoSCoW）
+
+> 📚 学习要点: MoSCoW 优先级分类法
+> MoSCoW 是一种需求优先级排序方法：
+> - **Must have**: 没有就不能发布的核心功能
+> - **Should have**: 重要但不阻塞发布，可以在发布后快速补充
+> - **Could have**: 锦上添花，有时间就做
+> - **Won't have (this time)**: 明确不在本次范围内，避免范围蔓延
+
+#### Must Have（V1 必须实现）
+
+| 功能 | 原因 | 预估工作量 |
+|------|------|-----------|
+| 核心分片加密传输 | 功能基础，无此则无功能 | 3-4 天 |
+| 流式分片 (File.slice) | 内存安全，移动端必需 | 0.5 天 |
+| 服务器端中转 + 背压 | 传输可靠性保证 | 2 天 |
+| 进度条 + 状态显示 | 基本用户体验 | 1 天 |
+| 取消传输 | 用户控制权 | 0.5 天 |
+| 超时处理 (60s) | 资源泄漏防护 | 0.5 天 |
+| 文件名清理 | 安全必需 | 0.5 天 |
+| Chunk 索引验证 | 安全必需 | 0.5 天 |
+| 离线检测 + 暂停 | 快速失败反馈 | 0.5 天 |
+| Magic Bytes 验证 | 安全提醒 | 0.5 天 |
+
+**V1 总预估：~10 天**
+
+#### Should Have（V1.1 应该实现）
+
+| 功能 | 原因 | 预估工作量 |
+|------|------|-----------|
+| 图片缩略图预览 | 图片是最常见的分享类型 | 1 天 |
+| 拖拽上传 + 粘贴 | 便捷交互 | 1 天 |
+| RTT 自适应限速 | 网络质量感知 | 0.5 天 |
+| sessionStorage 持久化 | 刷新后状态可见 | 0.5 天 |
+| Chunk 微动画 | 感知速度提升 | 0.5 天 |
+| 无障碍 (aria) | 包容性设计 | 0.5 天 |
+| 移动端适配 | 触摸设备支持 | 0.5 天 |
+| ACK 送达确认 | 发送方知道谁收到了 | 0.5 天 |
+| Ephemeral 集成 | 与现有功能一致 | 0.5 天 |
+
+**V1.1 总预估：~6 天**
+
+#### Could Have（V2 可以实现）
+
+| 功能 | 原因 | 预估工作量 |
+|------|------|-----------|
+| WebWorker 加密 | 低端设备性能 | 2 天 |
+| 队列优先级调整 | 用户体验优化 | 0.5 天 |
+| Chunk Hash 校验 | 为 resume 做准备 | 0.5 天 |
+| Worker Pool Broadcast | 大房间优化 | 1 天 |
+| 重复 Chunk 幂等性 | 防御性编程 | 0.5 天 |
+
+#### Won't Have（本次不做）
+
+| 功能 | 原因 |
+|------|------|
+| 断点续传 | 复杂度高，5MB 限制下重传成本低 |
+| P2P 直连传输 | 架构变更太大，需要 WebRTC |
+| 文件持久化存储 | 违反零知识架构 |
+| 多文件并发传输 | 增加复杂度，队列机制已足够 |
+| 视频/音频流式播放 | 超出文件分享范围 |
+
+#### 建议实现顺序
+
+```
+Week 1: Must Have 核心功能
+  Day 1-2: 协议定义 + 服务器端 handler + 背压
+  Day 3-4: 客户端分片加密 + 流式发送
+  Day 5:   接收引擎 + 重组 + 下载
+
+Week 2: Must Have 安全 + Should Have 体验
+  Day 1:   超时/取消/离线检测/索引验证/Magic Bytes
+  Day 2:   进度条 + 状态 UI + Chunk 微动画
+  Day 3:   缩略图 + 拖拽 + 粘贴
+  Day 4:   无障碍 + 移动端 + RTT 自适应
+  Day 5:   ACK + Ephemeral + sessionStorage + 集成测试
+```
 
 ## Testing Strategy
 
@@ -1466,6 +2272,7 @@ func (r *Room) BroadcastFileDataPooled(excludeID string, data []byte) {
 | P9: Validation | `validateFileSize()` | `fc.nat({max: 10_000_000})` |
 | P12: Index Bounds | `handleFileChunk()` | `fc.nat({max: 100000})` with random totalChunks |
 | P13: Backpressure | `SendFileData()` (Go) | Go testing with mock slow writer |
+| P14: Idempotency | `handleFileChunk()` | Duplicate index sequences |
 
 ### 单元测试覆盖
 
@@ -1477,9 +2284,16 @@ func (r *Room) BroadcastFileDataPooled(excludeID string, data []byte) {
 - 超时处理
 - 取消流程
 - **Chunk 索引越界验证**（index = -1, 0, totalChunks-1, totalChunks, 65535）
+- **重复 Chunk 幂等性**（同一 index 发送两次，receivedChunks 只增加一次）
 - **并发接收限制**（第 6 个传输被丢弃）
 - **ChatFileMessage 占位符插入和状态同步**
 - **Ephemeral 模式下的传输完成后倒计时**
+- **流式分片内存占用**（验证 streamChunks 不一次性加载整个文件）
+- **Transfer_ID 唯一性**（1000 次生成无碰撞）
+- **Magic Bytes 验证**（PNG/JPEG/GIF/PDF/ZIP 正确识别，伪装文件检测）
+- **RTT 自适应延迟**（RTT 增大时延迟倍数增加，RTT 恢复时倍数降低）
+- **离线暂停/恢复**（offline 事件触发暂停，online 事件恢复）
+- **队列优先级调整**（reorderQueue 正确移动元素）
 
 ### 集成测试覆盖
 
@@ -1494,6 +2308,15 @@ func (r *Room) BroadcastFileDataPooled(excludeID string, data []byte) {
 - **服务器端活跃传输限制（第二个传输被拒绝）**
 - **服务器端超时清理（90s 兜底）**
 - **消息路由：文件传输消息正确分发到 fileTransferStore**
+- **无障碍：进度条 aria 属性正确更新**
+- **无障碍：状态变更触发 aria-live 通知**
+- **移动端：触摸设备不渲染拖拽覆盖层**
+- **移动端：文件选择按钮触摸目标 ≥ 44px**
+- **新成员加入时进行中的传输不受影响**（Property 11 保护）
+- **离线检测：网络断开时传输暂停，恢复后继续**
+- **离线检测：离线超过 60s 传输标记失败**
+- **Chunk 微动画：prefers-reduced-motion 时不渲染脉冲**
+- **Magic Bytes：伪装文件显示警告但不阻止发送**
 
 ### Go 服务器端测试
 
@@ -1514,3 +2337,264 @@ func (r *Room) BroadcastFileDataPooled(excludeID string, data []byte) {
 - **CryptoAdapter 回退**（Worker 不可用时回退到主线程）
 - **chunkHashes 生成与验证**（SHA-256 round-trip）
 - **lastReceivedIndex 正确更新**（每次成功接收 chunk 后递增）
+
+### 性能基准测试计划
+
+> 📚 学习要点: 性能测试的科学方法
+> 性能测试需要明确三个要素：
+> 1. **测试环境**：在什么硬件/软件上测试（结果才可复现）
+> 2. **测量方法**：用什么工具测量什么指标
+> 3. **通过标准**：什么结果算"通过"（避免主观判断）
+
+#### 测试环境定义
+
+| 设备类别 | 代表设备 | 用途 |
+|---------|---------|------|
+| 低端移动 | Android (4GB RAM, Snapdragon 665) | 验证内存安全和 UI 不卡顿 |
+| 中端移动 | iPhone SE 3 (4GB RAM, A15) | 验证 iOS Safari 兼容性 |
+| 桌面标准 | Chrome on i5/8GB RAM | 主要开发和测试环境 |
+| 桌面低端 | Chrome with CPU 4x throttling | 模拟低端桌面设备 |
+
+#### 性能指标与通过标准
+
+| 指标 | 测量方法 | 通过标准 | 对应需求 |
+|------|---------|---------|---------|
+| encryptChunk 耗时 | `performance.now()` 包裹 | ≤ 50ms (P95) | NFR-1 |
+| decryptChunk 耗时 | `performance.now()` 包裹 | ≤ 50ms (P95) | NFR-1 |
+| 缩略图生成耗时 | `performance.now()` 包裹 | ≤ 500ms | NFR-3 |
+| 主线程阻塞 | Long Task API (`PerformanceObserver`) | 无 >100ms 长任务 | NFR-1 |
+| 内存峰值 | `performance.memory` (Chrome) | ≤ 15MB 增量/传输 | NFR-4 |
+| 传输总耗时 (5MB) | 端到端计时 | ≤ 10s (本地网络) | 用户体验 |
+| UI 帧率 | Chrome DevTools Performance | ≥ 55fps 传输期间 | 用户体验 |
+
+#### 测量代码示例
+
+```typescript
+// 📚 学习要点: Performance API 精确计时
+// performance.now() 提供微秒级精度（DOMHighResTimeStamp），
+// 比 Date.now() 的毫秒精度更适合性能测量。
+// 注意：某些浏览器出于安全考虑会降低精度（如 Firefox 的 2ms 舍入）。
+
+async function benchmarkEncryptChunk(iterations = 100): Promise<{
+  mean: number;
+  p95: number;
+  max: number;
+}> {
+  const key = await generateRoomKey();
+  const chunk = crypto.getRandomValues(new Uint8Array(65536)).buffer;
+  const times: number[] = [];
+  
+  for (let i = 0; i < iterations; i++) {
+    const start = performance.now();
+    await encryptChunk(key, chunk);
+    times.push(performance.now() - start);
+  }
+  
+  times.sort((a, b) => a - b);
+  return {
+    mean: times.reduce((a, b) => a + b) / times.length,
+    p95: times[Math.floor(times.length * 0.95)],
+    max: times[times.length - 1],
+  };
+}
+
+// Long Task 检测
+const longTaskObserver = new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) {
+    if (entry.duration > 100) {
+      console.warn(`[Perf] Long task detected: ${entry.duration.toFixed(1)}ms`);
+    }
+  }
+});
+longTaskObserver.observe({ entryTypes: ['longtask'] });
+```
+
+## 浏览器兼容性矩阵
+
+> 📚 学习要点: 渐进增强（Progressive Enhancement）
+> 不是所有浏览器都支持所有 API。设计应遵循渐进增强原则：
+> - 核心功能使用广泛支持的 API（Web Crypto、File API）
+> - 增强功能使用较新 API，不可用时优雅降级（WebWorker、navigator.onLine）
+
+### 核心 API 兼容性
+
+| API | Chrome | Firefox | Safari | Edge | 用途 | 降级方案 |
+|-----|--------|---------|--------|------|------|---------|
+| Web Crypto API | 37+ ✅ | 34+ ✅ | 11+ ✅ | 79+ ✅ | AES-GCM 加密 | 无（必需） |
+| File.slice() | 21+ ✅ | 13+ ✅ | 7+ ✅ | 79+ ✅ | 流式分片 | 无（必需） |
+| Blob.arrayBuffer() | 76+ ✅ | 69+ ✅ | 14+ ✅ | 79+ ✅ | 读取 chunk | FileReader 回退 |
+| MessagePack (ArrayBuffer) | 全部 ✅ | 全部 ✅ | 全部 ✅ | 全部 ✅ | 二进制协议 | 无（JS 库） |
+| WebSocket (binary) | 16+ ✅ | 11+ ✅ | 7+ ✅ | 79+ ✅ | 传输通道 | 无（必需） |
+| Canvas API (toBlob) | 50+ ✅ | 19+ ✅ | 11+ ✅ | 79+ ✅ | 缩略图生成 | 跳过缩略图 |
+| URL.createObjectURL | 23+ ✅ | 19+ ✅ | 7+ ✅ | 79+ ✅ | 文件下载 | 无（必需） |
+
+### 增强 API 兼容性
+
+| API | Chrome | Firefox | Safari | Edge | 用途 | 降级方案 |
+|-----|--------|---------|--------|------|------|---------|
+| WebWorker | 4+ ✅ | 3.5+ ✅ | 4+ ✅ | 79+ ✅ | 加密卸载 | 主线程回退 |
+| Worker + CryptoKey | ✅ | ✅ | ⚠️ 15.4+ | ✅ | Worker 中加密 | exportKey 传递 |
+| navigator.onLine | ✅ | ✅ | ✅ | ✅ | 离线检测 | 仅依赖 WS 超时 |
+| PerformanceObserver (longtask) | 58+ ✅ | ❌ | ❌ | 79+ ✅ | 性能监控 | 跳过监控 |
+| Drag and Drop API | ✅ | ✅ | ✅ | ✅ | 拖拽上传 | 仅按钮选择 |
+| Clipboard API (read) | 66+ ✅ | 87+ ✅ | 13.1+ ✅ | 79+ ✅ | 粘贴图片 | 仅 paste 事件 |
+| sessionStorage | ✅ | ✅ | ✅ | ✅ | 状态持久化 | 跳过持久化 |
+| matchMedia (prefers-reduced-motion) | 74+ ✅ | 63+ ✅ | 10.1+ ✅ | 79+ ✅ | 动画偏好 | 默认启用动画 |
+
+### Safari 特殊注意事项
+
+```typescript
+// 📚 学习要点: Safari 的 WebWorker + CryptoKey 限制
+// Safari 15.4 之前，CryptoKey 对象不能通过 postMessage 传递给 Worker。
+// 解决方案：在 Worker 中使用 crypto.subtle.importKey() 重新导入密钥。
+//
+// 检测方式：
+const canTransferCryptoKey = (() => {
+  try {
+    // 尝试 structured clone CryptoKey（Safari < 15.4 会抛异常）
+    const mc = new MessageChannel();
+    // 实际检测需要异步，这里用 feature flag
+    return !(/^((?!chrome|android).)*safari/i.test(navigator.userAgent) &&
+             parseInt(navigator.userAgent.match(/Version\/(\d+)/)?.[1] ?? '99') < 15);
+  } catch {
+    return false;
+  }
+})();
+
+// Worker 中的密钥处理
+// 如果不能传递 CryptoKey，则传递 raw key bytes，Worker 内部 importKey
+async function getWorkerKey(roomKey: CryptoKey): Promise<ArrayBuffer | CryptoKey> {
+  if (canTransferCryptoKey) {
+    return roomKey; // 直接传递
+  }
+  // 导出为 raw bytes，Worker 内部重新 import
+  return await crypto.subtle.exportKey('raw', roomKey);
+}
+```
+
+## 安全威胁模型（STRIDE）
+
+> 📚 学习要点: STRIDE 威胁建模
+> STRIDE 是微软提出的威胁分类框架，每个字母代表一类威胁：
+> - **S**poofing（伪装）：冒充他人身份
+> - **T**ampering（篡改）：修改数据
+> - **R**epudiation（抵赖）：否认操作
+> - **I**nformation Disclosure（信息泄露）：未授权访问数据
+> - **D**enial of Service（拒绝服务）：使系统不可用
+> - **E**levation of Privilege（权限提升）：获取未授权的能力
+>
+> 对每个威胁，分析攻击面、影响和缓解措施。
+
+### 威胁分析
+
+| 威胁类型 | 攻击场景 | 影响 | 缓解措施 | 残余风险 |
+|---------|---------|------|---------|---------|
+| **S** 伪装 TransferID | 攻击者发送伪造的 chunk（使用猜测的 transferId） | 接收方 buffer 被污染 | Property 11: unknown ID 丢弃；NanoID 126-bit 不可猜测 | 极低 |
+| **S** 伪装发送方 | 攻击者冒充房间成员发送文件 | 接收方收到恶意文件 | 服务器验证 client.RoomID；AES-GCM 加密需要 roomKey | 需要获取 roomKey 才能伪装 |
+| **T** 篡改 chunk 数据 | 中间人修改加密后的 chunk | 接收方解密失败 | AES-GCM auth tag 检测篡改；解密失败 → 中止传输 | 无（密码学保证） |
+| **T** 篡改 chunk 顺序 | 服务器重排 chunk 顺序 | 文件重组错误 | TCP 保序 + chunk index 字段；接收方按 index 存储 | 无（协议保证） |
+| **T** 篡改 metadata | 修改文件名/大小 | 用户被误导 | Metadata 整体 AES-GCM 加密 | 无（密码学保证） |
+| **R** 否认发送 | 发送方否认发送过文件 | 无法追责 | 服务器日志记录 transferId + senderId（不记录内容） | 可接受（临时聊天场景） |
+| **I** 服务器侧信道 | 服务器通过 metadata 大小推断文件类型 | 部分隐私泄露 | Metadata 加密；服务器只看到 transferId 和 chunk 大小 | 文件大小可推断（已知限制） |
+| **I** 内存残留 | 传输完成后 chunk 数据残留在内存 | 其他 JS 代码可能访问 | cleanupTransfer 立即清零；Blob URL revoke | JS 无法真正清零内存（GC 控制） |
+| **D** 大量小文件轰炸 | 攻击者快速发起大量传输 | 服务器资源耗尽 | 1 active transfer/client；队列限制 3；服务器端 90s 超时 | 50 个客户端 × 1 传输 = 可控 |
+| **D** 超大 chunk | 发送超过 64KB 的 chunk | 服务器内存压力 | maxMessageSize=100KB 硬限制；超过则 WebSocket 断开 | 无（协议层保护） |
+| **D** 慢速接收方 DoS | 故意不消费 send buffer | 阻塞其他接收方 | 并发 BroadcastFileData + 5s 超时跳过 | 无（超时保护） |
+| **E** 越权发送 | 非房间成员发送文件 | 房间被污染 | 服务器验证 client.RoomID != "" | 无（服务器端强制） |
+| **E** 越权接收 | 非房间成员接收文件 | 数据泄露 | Broadcast 只发给 room.members；加密需要 roomKey | 无（双重保护） |
+
+### 攻击面图
+
+```mermaid
+graph LR
+    subgraph Attacker["攻击者能力"]
+        A1[伪造 WebSocket 消息]
+        A2[监听网络流量]
+        A3[控制恶意客户端]
+        A4[获取 roomKey]
+    end
+    
+    subgraph Defenses["防御层"]
+        D1[服务器验证 RoomID]
+        D2[AES-256-GCM 加密]
+        D3[NanoID 不可猜测]
+        D4[消息大小限制]
+        D5[频率/并发限制]
+    end
+    
+    A1 -->|被阻止| D1
+    A2 -->|被阻止| D2
+    A3 -->|被限制| D5
+    A4 -->|需要 shareCode| D2
+```
+
+### 安全设计决策总结
+
+```typescript
+// 📚 学习要点: 纵深防御（Defense in Depth）
+// 安全设计不依赖单一防线，而是多层防护：
+//
+// 第 1 层：传输加密（AES-256-GCM）
+//   → 即使服务器被入侵，也无法读取文件内容
+//
+// 第 2 层：身份验证（服务器验证 RoomID）
+//   → 非房间成员无法发送/接收文件消息
+//
+// 第 3 层：输入验证（index bounds, magic bytes, file size）
+//   → 防止恶意输入导致客户端崩溃
+//
+// 第 4 层：资源限制（1 transfer/client, 5 concurrent receives, 60s timeout）
+//   → 防止 DoS 攻击耗尽资源
+//
+// 第 5 层：内存安全（cleanupTransfer, Blob URL revoke）
+//   → 防止敏感数据残留
+//
+// 已知接受的风险：
+// - 文件大小可被服务器推断（chunk 数量 × 64KB）
+// - JS 内存无法真正清零（依赖 GC）
+// - 服务器可以看到谁在传输文件给谁（metadata 级别）
+```
+
+## 文档维护说明
+
+> 📚 学习要点: 大型设计文档的可维护性
+> 当文档超过 1000 行时，单文件维护变得困难：
+> - 多人协作时合并冲突频繁
+> - 查找特定内容需要大量滚动
+> - 修改一处可能影响其他部分的一致性
+>
+> 建议在文档稳定后（进入实现阶段），按以下方式拆分：
+
+### 建议的文档拆分方案
+
+```
+.kiro/specs/encrypted-file-sharing/
+├── design.md                    # 主文档：概述 + 架构 + 索引（~200 行）
+├── design-protocol.md           # 协议定义：消息类型 + 数据结构（~300 行）
+├── design-flow-control.md       # 流控与背压：SendFileData + 自适应（~200 行）
+├── design-security.md           # 安全：STRIDE + 加密 + 验证（~300 行）
+├── design-ui.md                 # UI/UX：无障碍 + 移动端 + 动画（~300 行）
+├── design-extensibility.md      # 扩展性：12 个扩展点 + 路线图（~400 行）
+├── design-testing.md            # 测试：属性测试 + 基准 + 兼容性（~300 行）
+├── requirements.md              # 需求文档（已有）
+└── tasks.md                     # 实现任务（已有）
+```
+
+### 拆分时机
+
+| 阶段 | 文档状态 | 建议 |
+|------|---------|------|
+| 设计评审中 | 频繁修改 | **保持单文件**（方便整体审阅和一致性检查） |
+| 评审通过后 | 基本稳定 | **执行拆分**（进入实现阶段，多人并行开发） |
+| 实现过程中 | 偶尔修改 | 拆分后的子文档独立修改，减少冲突 |
+
+### 当前文档状态
+
+- **总行数**: ~2400 行
+- **章节数**: 15 个主要章节
+- **正确性属性**: 14 个
+- **扩展点**: 12 个
+- **测试用例**: ~60 个
+- **代码示例**: ~40 个
+
+**当前建议：保持单文件**，直到设计评审完成并进入实现阶段。
