@@ -22,19 +22,42 @@ const (
 	// 发送缓冲区大小
 	sendBufferSize = 256
 
-	// 最大消息大小
-	maxMessageSize = 4096
+	// 📚 学习要点: maxMessageSize 的计算依据
+	// 文件传输中最大的单条消息是 MSG_SEND_FILE_CHUNK：
+	//   - 64KB 明文 chunk + 16B GCM auth tag + 12B IV = ~65,564 bytes 加密数据
+	//   - msgpack 信封（type + data map header + transferId + index）≈ 50 bytes
+	//   - 总计 ≈ 65,614 bytes
+	// 设置为 100KB (102,400) 提供了充足的余量，同时防止恶意客户端发送超大消息。
+	// 之前的 4096 字节限制仅适用于纯文本聊天消息场景。
+	maxMessageSize = 102400
+
+	// 📚 学习要点: 文件传输发送超时
+	// SendFileData 使用带超时的阻塞发送，防止慢接收方拖住整个系统。
+	// 5 秒超时的选择依据：
+	// - 足够长：正常网络波动（1-2s）不会误判为超时
+	// - 足够短：不会让发送方等待过久（影响其他接收方的体验）
+	// - 与客户端 60s 传输超时配合：即使某个接收方超时，发送方仍继续发送给其他人
+	fileDataSendTimeout = 5 * time.Second
 )
 
-// 📚 学习要点: Upgrader 配置
+// 📚 学习要点: Upgrader 配置与缓冲区大小
 // ReadBufferSize/WriteBufferSize 控制 WebSocket 帧的读写缓冲区大小。
-// 1024 字节对于聊天消息足够（我们的消息上限是 4096 字节）。
+// 设置为 128KB (131072) 以适应文件传输场景：
+// - 单个文件分片加密后约 65KB + msgpack 信封
+// - 128KB 缓冲区确保单个 WebSocket 帧能容纳完整的文件分片消息
+// - 如果缓冲区小于消息大小，gorilla/websocket 会自动分配临时缓冲区（性能损失）
+//
+// 📚 学习要点: 内存影响分析
+// 每个 WebSocket 连接占用 ReadBufferSize + WriteBufferSize = 256KB 缓冲区。
+// 50 个并发连接 = 50 × 256KB = 12.5MB — 对服务器来说完全可接受。
+// 之前 1024 字节的配置仅适用于纯文本聊天消息场景。
+//
 // CheckOrigin 是安全关键函数，在 HTTP → WebSocket 升级前调用。
 // 如果 CheckOrigin 返回 false，gorilla/websocket 会返回 HTTP 403 并
 // 产生包含 "origin not allowed" 的错误。
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
+	ReadBufferSize:  131072,
+	WriteBufferSize: 131072,
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		if CheckOriginAllowed(origin) {
@@ -83,6 +106,17 @@ type Client struct {
 	// 消息频率限制：滑动窗口时间戳
 	msgTimestamps []int64
 	msgMu         sync.Mutex
+
+	// 📚 学习要点: 文件传输活跃状态追踪（服务器端最小状态）
+	// 服务器保持零知识架构，但需要追踪「每个客户端是否有活跃传输」以实现：
+	// 1. 限制每客户端同时只有 1 个活跃传输（防止资源滥用）
+	// 2. 客户端断线时清理传输状态（通知接收方发送 CANCEL）
+	// 3. 传输超时清理（COMPLETE/CANCEL 消息丢失时的兜底机制）
+	//
+	// 注意：服务器只追踪 transferId 和时间戳，不存储任何文件内容。
+	// activeTransferID 为空字符串表示当前没有活跃传输。
+	activeTransferID string    // 当前活跃传输的 ID（空字符串 = 无活跃传输）
+	transferStartAt  time.Time // 传输开始时间（用于服务器端超时清理）
 }
 
 // ServeWs 处理 WebSocket 升级请求，创建 Client 并启动读写 goroutine。
@@ -224,6 +258,51 @@ func (c *Client) Send(data []byte) {
 	case c.send <- data:
 	default:
 		// 缓冲区满，丢弃
+	}
+}
+
+// SendFileData 为文件传输消息提供带超时的阻塞发送。
+// 与普通 Send() 不同，此方法会等待 send channel 有空间，
+// 而不是在缓冲区满时静默丢弃。
+//
+// 📚 学习要点: 背压（Backpressure）设计 — 为什么文件传输需要阻塞发送？
+//
+// 普通聊天消息使用非阻塞 Send() 是正确的设计：
+// - 聊天消息丢失一条不影响整体体验（用户可以重新发送）
+// - 阻塞会导致 Hub.Run() goroutine 被慢客户端拖住，影响所有用户
+// - sendBufferSize=256 对聊天消息绰绰有余（每秒最多几条消息）
+//
+// 但文件传输场景完全不同：
+// - 丢失任何一个 chunk 都会导致整个传输失败（接收方永远收不齐所有分片）
+// - 发送方以 10ms 间隔发送 80 个 chunk（5MB 文件），服务器 broadcast 给 N-1 个接收方
+// - 如果某个接收方网络慢，其 send channel 填满后 chunk 被非阻塞 Send() 丢弃
+// - 接收方永远无法重组完整文件 → 60s 后超时 → 用户体验极差
+//
+// 解决方案：为文件传输提供独立的发送方法，带 5s 超时：
+//   - 成功（true）：chunk 进入 send channel，将被 writePump 发送到客户端
+//   - 超时（false）：接收方 send buffer 持续满 5s，认为该接收方传输失败
+//     调用方（BroadcastFileData）记录警告但不影响其他接收方的传输
+//
+// 📚 学习要点: 为什么不直接修改 Send() 为阻塞？
+//  1. Send() 被 Hub.Run() 的消息路由逻辑调用（如 Broadcast）
+//  2. 如果 Send() 阻塞，一个慢客户端会拖住整个 Hub 事件循环
+//  3. Hub 事件循环被阻塞 = 所有客户端的消息都无法处理 = 全局卡死
+//  4. 文件传输的 BroadcastFileData 使用独立 goroutine 并发发送，
+//     即使某个接收方阻塞 5s，也不影响 Hub 主循环和其他接收方
+//
+// 📚 学习要点: time.After 的 GC 影响
+// time.After(duration) 创建一个 Timer，即使 select 走了另一个 case，
+// Timer 也要等到超时后才会被 GC 回收。对于高频调用（每个 chunk 对每个接收方），
+// 这可能产生大量短生命周期 Timer 对象。
+// 在当前场景下（最多 80 chunks × 49 接收方 = 3920 次调用/传输），
+// 这个开销可以接受。如果未来需要优化，可以改用 time.NewTimer + timer.Stop()。
+func (c *Client) SendFileData(data []byte) bool {
+	select {
+	case c.send <- data:
+		return true
+	case <-time.After(fileDataSendTimeout):
+		// 接收方 send buffer 持续满 5s，认为该接收方传输失败
+		return false
 	}
 }
 

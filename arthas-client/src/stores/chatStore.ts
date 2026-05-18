@@ -21,6 +21,16 @@ import {
   MSG_MEMBER_TYPING,
   MSG_ROOM_CLOSED,
   MSG_ERROR,
+  // 文件传输中转消息类型（Server → Client, 0x1A-0x1E）
+  // 📚 学习要点: 文件传输消息路由
+  // chatStore 作为所有服务器消息的统一入口，负责将文件传输消息分发给 fileTransferStore。
+  // 这种「中央路由 + 委托处理」模式保持了消息处理的单一入口点，
+  // 同时通过委托实现了关注点分离（chatStore 不需要了解文件传输的内部逻辑）。
+  MSG_RELAY_FILE_META,
+  MSG_RELAY_FILE_CHUNK,
+  MSG_RELAY_FILE_COMPLETE,
+  MSG_RELAY_FILE_CANCEL,
+  MSG_RELAY_FILE_ACK,
   type Message,
   type RoomCreatedData,
   type RoomJoinedData,
@@ -36,6 +46,7 @@ import { importRoomKey } from '../crypto/keys';
 import { encryptMessage } from '../crypto/encrypt';
 import { decryptMessage } from '../crypto/decrypt';
 import { encodeShareKey, decodeShareKey } from '../crypto/shareKey';
+import { useFileTransferStore } from '../file-transfer/fileTransferStore';
 import { playNotificationSound, showDesktopNotification, playJoinSound, playLeaveSound } from '../utils/notification';
 import { buildPayload, parsePayload, makeStableId } from '../utils/payload';
 import { hashPassword } from '../utils/crypto';
@@ -522,6 +533,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         // Play leave sound
         if (!get().muted) playLeaveSound();
+
+        // 📚 学习要点: 成员离开时中止相关文件传输
+        // 当发送方离开房间时，其所有正在进行的文件传输都无法继续完成。
+        // 调用 handleSenderLeft() 将该发送方的所有接收中传输标记为 failed，
+        // 让接收方立即看到"发送方已离开，传输中断"的反馈，
+        // 而不是等待 60 秒超时才显示失败（更好的用户体验）。
+        // 同时释放接收缓冲区内存，防止无用数据占用内存。
+        useFileTransferStore.getState().handleSenderLeft(data.id);
         break;
       }
 
@@ -680,6 +699,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const { typingMembers } = get();
         typingMembers.forEach((handle) => clearTimeout(handle));
 
+        // 📚 学习要点: 房间关闭时中止所有文件传输
+        // 房间关闭意味着所有成员都将断开连接，任何进行中的文件传输都无法继续。
+        // 必须在清理房间状态之前调用 abortAllTransfers()，
+        // 因为 abortAllTransfers() 需要将所有非终态传输标记为 failed 并释放缓冲区内存。
+        // 这确保了：
+        // 1. 接收方的 chunk 缓冲区被释放（防止内存泄漏）
+        // 2. 发送方的发送循环被停止（防止继续发送到已关闭的连接）
+        // 3. UI 正确显示传输失败状态（而非永远停留在"传输中"）
+        useFileTransferStore.getState().abortAllTransfers();
+
         const systemMsg: ChatMessage = {
           id: generateMessageId(),
           stableId: '',
@@ -703,6 +732,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
           replyTo: null,
           reactions: new Map(),
         }));
+        break;
+      }
+
+      // ===== 文件传输中转消息（Server → Client, 0x1A-0x1E）=====
+      // 📚 学习要点: 消息路由委托模式（Message Routing Delegation）
+      // chatStore 是所有服务器消息的统一入口点（单一职责：消息分发）。
+      // 文件传输消息不在 chatStore 中处理，而是委托给 fileTransferStore.handleFileMessage()。
+      // 这种设计的优势：
+      // 1. chatStore 保持简洁，只负责路由，不包含文件传输业务逻辑
+      // 2. fileTransferStore 独立管理传输状态（缓冲区、进度、超时），与消息数组解耦
+      // 3. 可测试性：文件传输逻辑可以独立于 chatStore 进行单元测试
+      // 4. 内存隔离：传输状态（可能包含 5MB 缓冲区）不会污染 chatStore 的状态树
+      case MSG_RELAY_FILE_META:
+      case MSG_RELAY_FILE_CHUNK:
+      case MSG_RELAY_FILE_COMPLETE:
+      case MSG_RELAY_FILE_CANCEL:
+      case MSG_RELAY_FILE_ACK: {
+        // 将所有文件传输消息统一委托给 fileTransferStore 处理
+        // fileTransferStore.handleFileMessage() 内部会根据 msg.type 进行二次路由：
+        // - META → 解密 metadata → 准备接收缓冲区 → 插入聊天占位符
+        // - CHUNK → 验证 → 解密 → 存入缓冲区 → 更新进度
+        // - COMPLETE → 验证完整性 → 重组文件 → 发送 ACK
+        // - CANCEL → 释放缓冲区 → 显示取消信息
+        // - ACK → 更新发送方的已送达计数
+        useFileTransferStore.getState().handleFileMessage(msg);
         break;
       }
 
