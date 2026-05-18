@@ -1,6 +1,8 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import type { Member } from '../stores/chatStore'
 import { MemberList } from './MemberList'
+import { useTranslation } from '../i18n'
+import { LanguageSwitcher } from '../i18n/components/LanguageSwitcher'
 
 interface MemberDrawerProps {
   open: boolean
@@ -20,6 +22,7 @@ interface MemberDrawerProps {
  * - Body scroll lock 防止背景滚动
  */
 export function MemberDrawer({ open, onClose, members, triggerRef }: MemberDrawerProps) {
+  const { t } = useTranslation();
   const drawerRef = useRef<HTMLDivElement>(null)
   const closeBtnRef = useRef<HTMLButtonElement>(null)
 
@@ -75,7 +78,7 @@ export function MemberDrawer({ open, onClose, members, triggerRef }: MemberDrawe
   if (!open) return null
 
   return (
-    <div ref={drawerRef} role="dialog" aria-modal="true" aria-label="成员列表">
+    <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={t('member.drawer.title')}>
       {/* 遮罩层 */}
       <div
         className="fixed inset-0 bg-black/50 z-40"
@@ -85,17 +88,21 @@ export function MemberDrawer({ open, onClose, members, triggerRef }: MemberDrawe
       {/* 面板 */}
       <div className="fixed top-0 right-0 h-full w-64 bg-gray-800 border-l border-gray-700 z-50 animate-slide-in-right motion-reduce:animate-none overflow-y-auto">
         <div className="flex items-center justify-between p-3 border-b border-gray-700">
-          <h2 className="text-sm font-semibold text-gray-300">成员列表</h2>
+          <h2 className="text-sm font-semibold text-gray-300">{t('member.drawer.title')}</h2>
           <button
             ref={closeBtnRef}
             onClick={onClose}
-            aria-label="关闭成员列表"
+            aria-label={t('member.close')}
             className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-white transition-colors"
           >
             ✕
           </button>
         </div>
         <MemberList members={members} />
+        {/* Language switcher (mobile) */}
+        <div className="border-t border-gray-700 p-4">
+          <LanguageSwitcher />
+        </div>
       </div>
     </div>
   )

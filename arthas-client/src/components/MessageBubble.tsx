@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { linkify, truncateUrl } from '../utils/linkify'
 import { ReactionPanel, getReactionPanelPosition } from './ReactionPanel'
+import { useTranslation } from '../i18n'
 import type { ReplyData, Reaction } from '../stores/chatStore'
 
 interface MessageBubbleProps {
@@ -27,6 +28,7 @@ export function MessageBubble({
   text, isOwn, canCopy, isDecryptFailed,
   reply, reactions, myId, onReply, onReact, onScrollToMessage,
 }: MessageBubbleProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false)
   const [showReactionPanel, setShowReactionPanel] = useState(false)
   const [reactionPosition, setReactionPosition] = useState<'above' | 'below'>('above')
@@ -143,7 +145,7 @@ export function MessageBubble({
             onClick={(e) => { e.stopPropagation(); onScrollToMessage?.(reply.stableId) }}
             className="mb-1.5 px-2 py-1 bg-black/20 border-l-2 border-gray-400 rounded text-xs cursor-pointer hover:bg-black/30 transition-colors"
             role="button"
-            aria-label={`跳转到 ${reply.senderName} 的消息`}
+            aria-label={t('message.jumpTo', { name: reply.senderName })}
           >
             <span className="text-gray-300 font-medium">{reply.senderName}</span>
             <p className="text-gray-400 truncate mt-0.5">{reply.preview}</p>
@@ -164,7 +166,7 @@ export function MessageBubble({
           {onReply && (
             <button
               onClick={(e) => { e.stopPropagation(); onReply() }}
-              aria-label="回复"
+              aria-label={t('message.reply')}
               className="w-6 h-6 flex items-center justify-center bg-gray-600 rounded-full text-xs hover:bg-gray-500"
             >
               ↩
@@ -173,14 +175,14 @@ export function MessageBubble({
           <button
             ref={reactBtnRef}
             onClick={(e) => { e.stopPropagation(); handleReactClick() }}
-            aria-label="添加反应"
+            aria-label={t('message.addReaction')}
             className="w-6 h-6 flex items-center justify-center bg-gray-600 rounded-full text-xs hover:bg-gray-500"
           >
             😊
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); handleCopy() }}
-            aria-label="复制消息"
+            aria-label={t('message.copy')}
             className="w-6 h-6 flex items-center justify-center bg-gray-600 rounded-full text-xs hover:bg-gray-500"
           >
             {copied ? '✓' : '📋'}
@@ -191,7 +193,7 @@ export function MessageBubble({
       {/* Copied toast */}
       {copied && (
         <span className="absolute -top-6 right-0 text-xs text-green-400 bg-gray-900 px-1.5 py-0.5 rounded whitespace-nowrap z-10">
-          已复制
+          {t('message.copied')}
         </span>
       )}
 

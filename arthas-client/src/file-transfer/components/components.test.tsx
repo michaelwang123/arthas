@@ -269,7 +269,7 @@ describe('FileAttachButton — 文件选择触发', () => {
     const clickSpy = vi.spyOn(fileInput, 'click');
 
     // 点击按钮
-    const button = screen.getByRole('button', { name: '添加附件' });
+    const button = screen.getByRole('button', { name: 'Attach file' });
     fireEvent.click(button);
 
     expect(clickSpy).toHaveBeenCalledTimes(1);
@@ -284,7 +284,7 @@ describe('FileAttachButton — 文件选择触发', () => {
     const clickSpy = vi.spyOn(fileInput, 'click');
 
     // button 元素天然支持 Enter 键激活（触发 click 事件）
-    const button = screen.getByRole('button', { name: '添加附件' });
+    const button = screen.getByRole('button', { name: 'Attach file' });
     // 模拟 Enter 键按下 — 在真实浏览器中会触发 click
     fireEvent.click(button);
     expect(clickSpy).toHaveBeenCalled();
@@ -325,7 +325,7 @@ describe('FileMessage 下载按钮 — Blob URL 管理', () => {
     render(<FileMessage transferId={transfer.transferId} />);
 
     // 找到下载按钮（通过 aria-label）
-    const downloadButton = screen.getByLabelText('下载文件');
+    const downloadButton = screen.getByLabelText('Download file');
     expect(downloadButton).toBeInTheDocument();
 
     // Mock document.createElement 来追踪 <a> 元素的创建
@@ -381,7 +381,7 @@ describe('FileMessage 取消按钮 — cancelTransfer 调用', () => {
     render(<FileMessage transferId={transfer.transferId} />);
 
     // 找到取消按钮（通过 aria-label）
-    const cancelButton = screen.getByLabelText('取消文件传输');
+    const cancelButton = screen.getByLabelText('Cancel file transfer');
     expect(cancelButton).toBeInTheDocument();
 
     // 点击取消按钮

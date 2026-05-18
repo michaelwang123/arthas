@@ -36,6 +36,7 @@ import { getFileTypeIcon, sanitizeFileName } from '../sanitize';
 import { CHUNK_SIZE } from '../types';
 import { calculateSpeed, calculateEta } from '../progress';
 import { ProgressBar } from './ProgressBar';
+import { useTranslation } from '../../i18n';
 
 // ============================================================================
 // Props 接口
@@ -158,6 +159,8 @@ export function FileMessage({ transferId }: FileMessageProps) {
   // 状态订阅
   // ==========================================================================
 
+  const { t } = useTranslation();
+
   /**
    * 📚 学习要点: Zustand Selector 的浅比较优化
    * useFileTransferStore 使用 Object.is 比较 selector 返回值。
@@ -275,7 +278,7 @@ export function FileMessage({ transferId }: FileMessageProps) {
     return (
       <div className="flex items-center gap-2 px-3 py-2 bg-gray-700 rounded-lg text-gray-400 text-sm">
         <span>📁</span>
-        <span>文件信息加载中...</span>
+        <span>{t('file.loading')}</span>
       </div>
     );
   }
@@ -297,7 +300,7 @@ export function FileMessage({ transferId }: FileMessageProps) {
   const transferredBytes = transfer.receivedChunks * CHUNK_SIZE;
 
   // 生成状态文本
-  const statusText = getStatusText(transfer.status, isSender, transfer.ackCount, transfer.totalReceivers);
+  const statusText = getStatusText(transfer.status, isSender, transfer.ackCount, transfer.totalReceivers, t);
 
   return (
     <div className="max-w-[280px] rounded-lg bg-gray-800 border border-gray-700 overflow-hidden">
@@ -307,7 +310,7 @@ export function FileMessage({ transferId }: FileMessageProps) {
           className="relative cursor-pointer group"
           onClick={isComplete && transfer.blobUrl ? handleDownload : undefined}
           role={isComplete && transfer.blobUrl ? 'button' : undefined}
-          aria-label={isComplete ? '点击下载完整图片' : '图片传输中'}
+          aria-label={isComplete ? t('file.clickDownloadImage') : '图片传输中'}
           tabIndex={isComplete && transfer.blobUrl ? 0 : undefined}
           onKeyDown={(e) => {
             if ((e.key === 'Enter' || e.key === ' ') && isComplete && transfer.blobUrl) {
@@ -340,7 +343,7 @@ export function FileMessage({ transferId }: FileMessageProps) {
                             flex items-center justify-center transition-colors duration-150">
               <span className="text-white text-sm font-medium opacity-0 group-hover:opacity-100
                               transition-opacity duration-150">
-                点击下载
+                {t('file.clickDownload')}
               </span>
             </div>
           )}
@@ -376,8 +379,8 @@ export function FileMessage({ transferId }: FileMessageProps) {
               className="w-8 h-8 flex items-center justify-center rounded-full
                          bg-red-600/20 hover:bg-red-600/40 text-red-400
                          transition-colors duration-150"
-              aria-label="取消文件传输"
-              title="取消传输"
+              aria-label={t('file.cancel')}
+              title={t('file.cancel')}
             >
               ✕
             </button>
@@ -390,8 +393,8 @@ export function FileMessage({ transferId }: FileMessageProps) {
               className="w-8 h-8 flex items-center justify-center rounded-full
                          bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400
                          transition-colors duration-150"
-              aria-label="下载文件"
-              title="下载文件"
+              aria-label={t('file.download')}
+              title={t('file.download')}
             >
               ⬇️
             </button>
@@ -434,7 +437,7 @@ export function FileMessage({ transferId }: FileMessageProps) {
           {/* 发送方：已送达计数 */}
           {isSender && isComplete && transfer.totalReceivers > 0 && (
             <span className="text-gray-400 ml-2">
-              已送达 ({transfer.ackCount}/{transfer.totalReceivers})
+              {t('file.delivered', { count: transfer.ackCount, total: transfer.totalReceivers })}
             </span>
           )}
         </div>
@@ -454,30 +457,32 @@ export function FileMessage({ transferId }: FileMessageProps) {
  * @param isSender - 是否为发送方
  * @param ackCount - 已确认接收的人数
  * @param totalReceivers - 总接收人数
+ * @param t - 翻译函数
  * @returns 状态文本字符串
  */
 function getStatusText(
   status: string,
   isSender: boolean,
   _ackCount: number,
-  totalReceivers: number
+  totalReceivers: number,
+  t: (key: import('../../i18n').TranslationKey, params?: Record<string, string | number>) => string
 ): string {
   switch (status) {
     case 'pending':
-      return isSender ? '等待发送...' : '准备接收...';
+      return isSender ? t('file.status.pending.send') : t('file.status.pending.receive');
     case 'sending':
-      return '发送中...';
+      return t('file.status.sending');
     case 'receiving':
-      return '接收中...';
+      return t('file.status.receiving');
     case 'complete':
       if (isSender && totalReceivers > 0) {
-        return `已完成`;
+        return t('file.status.complete');
       }
-      return '传输完成';
+      return t('file.status.complete');
     case 'failed':
-      return '传输失败';
+      return t('file.status.failed');
     case 'cancelled':
-      return isSender ? '已取消' : '发送方已取消';
+      return isSender ? t('file.status.cancelled') : t('file.status.senderCancelled');
     default:
       return '';
   }

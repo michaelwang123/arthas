@@ -1,14 +1,16 @@
 import type { Member } from '../stores/chatStore';
+import { useTranslation } from '../i18n';
 
 interface MemberListProps {
   members: Member[];
 }
 
 export function MemberList({ members }: MemberListProps) {
+  const { t } = useTranslation();
   return (
     <div className="p-3">
       <h3 className="text-sm font-semibold text-gray-400 mb-2">
-        在线成员 ({members.length})
+        {t('member.title')} ({members.length})
       </h3>
       <ul className="space-y-1">
         {members.map((member) => (

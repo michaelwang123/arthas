@@ -3,20 +3,22 @@
  * 控制在 < 20KB，覆盖 95% 日常使用场景。
  */
 
+import type { TranslationKey } from '../i18n';
+
 export interface EmojiCategory {
-  name: string
+  nameKey: TranslationKey
   icon: string
   emojis: string[]
 }
 
 export const emojiCategories: EmojiCategory[] = [
   {
-    name: '最近',
+    nameKey: 'emoji.category.recent',
     icon: '🕐',
     emojis: [], // 动态填充
   },
   {
-    name: '表情',
+    nameKey: 'emoji.category.smileys',
     icon: '😊',
     emojis: [
       '😀', '😃', '😄', '😁', '😂', '🤣', '😅', '😊', '😇', '🙂',
@@ -28,7 +30,7 @@ export const emojiCategories: EmojiCategory[] = [
     ],
   },
   {
-    name: '手势',
+    nameKey: 'emoji.category.gestures',
     icon: '👋',
     emojis: [
       '👍', '👎', '👊', '✊', '🤛', '🤜', '👏', '🙌', '👐', '🤲',
@@ -37,7 +39,7 @@ export const emojiCategories: EmojiCategory[] = [
     ],
   },
   {
-    name: '心形',
+    nameKey: 'emoji.category.hearts',
     icon: '❤️',
     emojis: [
       '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔',
@@ -45,7 +47,7 @@ export const emojiCategories: EmojiCategory[] = [
     ],
   },
   {
-    name: '动物',
+    nameKey: 'emoji.category.animals',
     icon: '🐱',
     emojis: [
       '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯',
@@ -54,7 +56,7 @@ export const emojiCategories: EmojiCategory[] = [
     ],
   },
   {
-    name: '食物',
+    nameKey: 'emoji.category.food',
     icon: '🍕',
     emojis: [
       '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍒',
@@ -63,7 +65,7 @@ export const emojiCategories: EmojiCategory[] = [
     ],
   },
   {
-    name: '活动',
+    nameKey: 'emoji.category.activities',
     icon: '⚽',
     emojis: [
       '⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🎱', '🏓', '🎮', '🕹️',
@@ -72,7 +74,7 @@ export const emojiCategories: EmojiCategory[] = [
     ],
   },
   {
-    name: '旅行',
+    nameKey: 'emoji.category.travel',
     icon: '✈️',
     emojis: [
       '🚗', '🚕', '🚌', '🚀', '✈️', '🚁', '🛸', '🏠', '🏖️', '🏔️',
@@ -80,7 +82,7 @@ export const emojiCategories: EmojiCategory[] = [
     ],
   },
   {
-    name: '符号',
+    nameKey: 'emoji.category.symbols',
     icon: '💯',
     emojis: [
       '💯', '✅', '❌', '⭕', '❗', '❓', '‼️', '⁉️', '💡', '🔥',

@@ -1,4 +1,5 @@
 import type { Member } from '../stores/chatStore';
+import { useTranslation } from '../i18n';
 
 interface TypingIndicatorProps {
   typingMembers: Map<string, number>;
@@ -6,6 +7,8 @@ interface TypingIndicatorProps {
 }
 
 export function TypingIndicator({ typingMembers, members }: TypingIndicatorProps) {
+  const { t } = useTranslation();
+
   if (typingMembers.size === 0) {
     return <div className="h-6" />;
   }
@@ -16,7 +19,7 @@ export function TypingIndicator({ typingMembers, members }: TypingIndicatorProps
 
   return (
     <div className="h-6 text-sm italic text-gray-400">
-      {names.join(', ')} 正在输入...
+      {names.join(', ')} {t('typing.indicator')}
     </div>
   );
 }

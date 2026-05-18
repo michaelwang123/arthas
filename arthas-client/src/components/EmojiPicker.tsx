@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, type RefObject } from 'react'
 import { emojiCategories, getRecentEmojis, addRecentEmoji } from '../utils/emojiData'
+import { useTranslation } from '../i18n'
 
 interface EmojiPickerProps {
   onSelect: (emoji: string) => void
@@ -17,6 +18,7 @@ interface EmojiPickerProps {
  * - 最近使用 emoji 持久化
  */
 export function EmojiPicker({ onSelect, onClose, excludeRef }: EmojiPickerProps) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(0)
   const [recentEmojis, setRecentEmojis] = useState<string[]>(getRecentEmojis())
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -51,7 +53,7 @@ export function EmojiPicker({ onSelect, onClose, excludeRef }: EmojiPickerProps)
     <div
       ref={pickerRef}
       role="dialog"
-      aria-label="选择表情"
+      aria-label={t('emoji.select')}
       className="fixed bottom-16 left-0 right-0 z-30 mx-2 md:absolute md:bottom-full md:left-auto md:right-0 md:mx-0 md:mb-2 md:w-80
                  bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden"
     >
@@ -59,9 +61,9 @@ export function EmojiPicker({ onSelect, onClose, excludeRef }: EmojiPickerProps)
       <div className="flex overflow-x-auto border-b border-gray-700 px-1 py-1 gap-0.5 scrollbar-none">
         {categories.map((cat, i) => (
           <button
-            key={cat.name}
+            key={cat.nameKey}
             onClick={() => setActiveTab(i)}
-            aria-label={cat.name}
+            aria-label={t(cat.nameKey)}
             className={`shrink-0 w-8 h-8 flex items-center justify-center rounded text-lg
               ${activeTab === i ? 'bg-gray-600' : 'hover:bg-gray-700'}`}
           >
@@ -74,7 +76,7 @@ export function EmojiPicker({ onSelect, onClose, excludeRef }: EmojiPickerProps)
       <div className="h-48 overflow-y-auto p-2">
         {activeCategory.emojis.length === 0 ? (
           <div className="flex items-center justify-center h-full text-sm text-gray-500">
-            {activeTab === 0 ? '暂无最近使用' : '无内容'}
+            {activeTab === 0 ? t('emoji.noRecent') : ''}
           </div>
         ) : (
           <div className="grid grid-cols-8 gap-0.5">

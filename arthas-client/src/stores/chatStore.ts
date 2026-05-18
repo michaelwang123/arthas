@@ -50,6 +50,8 @@ import { useFileTransferStore } from '../file-transfer/fileTransferStore';
 import { playNotificationSound, showDesktopNotification, playJoinSound, playLeaveSound } from '../utils/notification';
 import { buildPayload, parsePayload, makeStableId } from '../utils/payload';
 import { hashPassword } from '../utils/crypto';
+import { useI18nStore } from '../i18n/store';
+import { translate } from '../i18n/translate';
 
 // ===== Types =====
 
@@ -220,12 +222,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const decoded = decodeShareKey(shareCode);
     if (!decoded) {
       // Invalid share code — add system error message
+      const locale = useI18nStore.getState().locale;
       const errorMsg: ChatMessage = {
         id: generateMessageId(),
         stableId: '',
         senderId: 'system',
         senderName: 'System',
-        text: '分享码无效',
+        text: translate(locale, 'system.invalidShareCode'),
         timestamp: Date.now(),
         isMine: false,
         isSystem: true,
@@ -247,12 +250,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Rate limiting check
     if (isRateLimited()) {
+      const locale = useI18nStore.getState().locale;
       const errorMsg: ChatMessage = {
         id: generateMessageId(),
         stableId: '',
         senderId: 'system',
         senderName: 'System',
-        text: '发送过快，请稍后再试',
+        text: translate(locale, 'system.rateLimited'),
         timestamp: Date.now(),
         isMine: false,
         isSystem: true,
@@ -470,12 +474,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const data = msg.data as MemberJoinedData;
         const newMember: Member = { id: data.id, name: data.name, color: data.color };
 
+        const locale = useI18nStore.getState().locale;
         const systemMsg: ChatMessage = {
           id: generateMessageId(),
           stableId: '',
           senderId: 'system',
           senderName: 'System',
-          text: `${data.name} 加入了房间`,
+          text: translate(locale, 'system.userJoined', { name: data.name }),
           timestamp: Date.now(),
           isMine: false,
           isSystem: true,
@@ -501,12 +506,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const leavingMember = get().members.find((m) => m.id === data.id);
         const memberName = leavingMember?.name ?? 'Unknown';
 
+        const locale = useI18nStore.getState().locale;
         const systemMsg: ChatMessage = {
           id: generateMessageId(),
           stableId: '',
           senderId: 'system',
           senderName: 'System',
-          text: `${memberName} 离开了房间`,
+          text: translate(locale, 'system.userLeft', { name: memberName }),
           timestamp: Date.now(),
           isMine: false,
           isSystem: true,
@@ -592,12 +598,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           })
           .catch(() => {
             // Decryption failed — show placeholder
+            const locale = useI18nStore.getState().locale;
             const errorMsg: ChatMessage = {
               id: generateMessageId(),
               stableId: makeStableId(data.senderId, data.t),
               senderId: data.senderId,
               senderName: data.senderName,
-              text: '无法解密此消息',
+              text: translate(locale, 'system.decryptFailed'),
               timestamp: data.t,
               isMine: false,
               isSystem: false,
@@ -709,12 +716,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // 3. UI 正确显示传输失败状态（而非永远停留在"传输中"）
         useFileTransferStore.getState().abortAllTransfers();
 
+        const locale = useI18nStore.getState().locale;
         const systemMsg: ChatMessage = {
           id: generateMessageId(),
           stableId: '',
           senderId: 'system',
           senderName: 'System',
-          text: '房间已关闭',
+          text: translate(locale, 'system.roomClosed'),
           timestamp: Date.now(),
           isMine: false,
           isSystem: true,
@@ -763,16 +771,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       case MSG_ERROR: {
         const data = msg.data as ErrorData;
 
-        const errorMessages: Record<string, string> = {
-          E001: '房间不存在或已关闭',
-          E002: '房间已满，无法加入',
-          E003: '请先加入房间',
-          E004: '发送过快，请稍后再试',
-          E005: '消息格式无效',
-          E006: '房间密码错误',
+        const locale = useI18nStore.getState().locale;
+        const errorKeys: Record<string, 'error.E001' | 'error.E002' | 'error.E003' | 'error.E004' | 'error.E005' | 'error.E006'> = {
+          E001: 'error.E001',
+          E002: 'error.E002',
+          E003: 'error.E003',
+          E004: 'error.E004',
+          E005: 'error.E005',
+          E006: 'error.E006',
         };
 
-        const text = errorMessages[data.code] ?? data.msg ?? '未知错误';
+        const key = errorKeys[data.code];
+        const text = key ? translate(locale, key) : (data.msg ?? 'Unknown error');
 
         const errorMsg: ChatMessage = {
           id: generateMessageId(),

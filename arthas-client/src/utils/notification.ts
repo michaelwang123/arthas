@@ -7,6 +7,9 @@
  * - 桌面通知使用 tag 合并同类，避免通知堆积
  */
 
+import { useI18nStore } from '../i18n/store'
+import { translate } from '../i18n/translate'
+
 let audioCtx: AudioContext | null = null
 let initialized = false
 
@@ -71,7 +74,7 @@ export function showDesktopNotification(senderName: string): void {
   if (!document.hidden) return
 
   new Notification('Arthas Chat', {
-    body: `${senderName} 发来了新消息`,
+    body: translate(useI18nStore.getState().locale, 'notification.newMessage', { name: senderName }),
     icon: '/favicon.ico',
     tag: 'arthas-msg',
   })
