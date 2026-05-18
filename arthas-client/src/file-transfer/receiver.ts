@@ -161,11 +161,22 @@ export async function handleFileMeta(
     const ivBuffer = fromBase64Url(data.iv);
     const iv = new Uint8Array(ivBuffer);
 
+    // 📚 学习要点: msgpack 共享缓冲区问题
+    // @msgpack/msgpack 解码时使用共享内部缓冲区，data.ciphertext 的 .buffer
+    // 可能指向更大的 ArrayBuffer。必须使用 slice() 提取正确的字节范围。
+    const ciphertextArr = data.ciphertext instanceof Uint8Array
+      ? data.ciphertext
+      : new Uint8Array(data.ciphertext as ArrayLike<number>);
+    const ciphertextBuffer = ciphertextArr.buffer.slice(
+      ciphertextArr.byteOffset,
+      ciphertextArr.byteOffset + ciphertextArr.byteLength
+    );
+
     // 解密 ciphertext → 明文 JSON bytes
     const plaintextBuffer = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
+      { name: 'AES-GCM', iv: ivBuffer },
       roomKey,
-      (data.ciphertext as Uint8Array).buffer as ArrayBuffer
+      ciphertextBuffer
     );
 
     // 解码 UTF-8 → JSON string → FileMetadata 对象

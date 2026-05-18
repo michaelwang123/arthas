@@ -75,10 +75,22 @@ export async function decryptChunk(
   // 而 Web Crypto API 要求 BufferSource（基于 ArrayBuffer，不含 SharedArrayBuffer）。
   // 在浏览器环境中，Uint8Array.buffer 始终是 ArrayBuffer（SharedArrayBuffer 需要
   // Cross-Origin-Isolation headers 才能使用），因此 `as ArrayBuffer` 断言是安全的。
+  // 📚 学习要点: 为什么使用 slice() 而非直接传 .buffer？
+  // @msgpack/msgpack 解码时使用共享内部缓冲区，返回的 Uint8Array 的 .buffer
+  // 可能指向一个更大的 ArrayBuffer（byteOffset != 0, byteLength != array.length）。
+  // 如果直接传 .buffer 给 Web Crypto API，它会使用整个 ArrayBuffer 的内容，
+  // 而非 Uint8Array 指定的子范围，导致解密失败。
+  // 使用 .slice() 创建一个独立的 ArrayBuffer 副本，确保字节范围正确。
+  const ivBuffer = iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength);
+  const ciphertextBuffer = ciphertext.buffer.slice(
+    ciphertext.byteOffset,
+    ciphertext.byteOffset + ciphertext.byteLength
+  );
+
   const plaintextBuffer = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
+    { name: 'AES-GCM', iv: ivBuffer },
     key,
-    ciphertext.buffer as ArrayBuffer
+    ciphertextBuffer
   );
 
   return plaintextBuffer;

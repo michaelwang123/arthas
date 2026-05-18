@@ -34,6 +34,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useFileTransferStore } from '../fileTransferStore';
 import { getFileTypeIcon, sanitizeFileName } from '../sanitize';
 import { CHUNK_SIZE } from '../types';
+import { calculateSpeed, calculateEta } from '../progress';
 import { ProgressBar } from './ProgressBar';
 
 // ============================================================================
@@ -405,9 +406,8 @@ export function FileMessage({ transferId }: FileMessageProps) {
         <div className="px-3 pb-2">
           <ProgressBar
             progress={progress}
-            startTime={transfer.startTime}
-            transferredBytes={transferredBytes}
-            totalBytes={transfer.fileSize}
+            speed={calculateSpeed(transferredBytes, Date.now() - transfer.startTime)}
+            eta={calculateEta(transfer.fileSize - transferredBytes, calculateSpeed(transferredBytes, Date.now() - transfer.startTime))}
           />
         </div>
       )}
