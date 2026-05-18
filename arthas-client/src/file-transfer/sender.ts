@@ -208,9 +208,6 @@ let rttBasedMultiplier = 1.0;
 /** 是否因网络离线而暂停发送 */
 let isPaused = false;
 
-/** 最后一次在线的时间戳（用于 60s 离线超时判断） */
-let lastOnlineTime = Date.now();
-
 /** 离线检测是否已初始化（防止重复注册事件监听器） */
 let offlineDetectionInitialized = false;
 
@@ -337,7 +334,7 @@ export function setupOfflineDetection(): void {
 
   window.addEventListener('offline', () => {
     isPaused = true;
-    lastOnlineTime = Date.now(); // 记录离线开始时间
+    // TODO: 实现 60s 离线超时判断（记录离线开始时间）
 
     // 更新活跃传输的 UI 状态（如果有的话）
     const { activeSendId } = useFileTransferStore.getState();
@@ -348,7 +345,7 @@ export function setupOfflineDetection(): void {
 
   window.addEventListener('online', () => {
     isPaused = false;
-    lastOnlineTime = Date.now(); // 重置在线时间
+    // TODO: 实现 60s 离线超时判断（重置在线时间）
 
     // 检查 WebSocket 是否仍然连接
     if (isConnected()) {

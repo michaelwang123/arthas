@@ -33,8 +33,11 @@
 
 - 🔒 **端到端加密** — AES-256-GCM，服务器零知识
 - ⚡ **实时通信** — WebSocket 全双工，消息即时送达
-- 🔑 **密钥即邀请** — 一个字符串同时包含房间地址和解密密钥
-- 🗑️ **阅后即焚** — 无持久化，所有人离开房间自动销毁
+- � **加密文件分享** — 分片加密传输，图片缩略图预览，拖拽/粘贴上传
+- �🔑 **密钥即邀请** — 一个字符串同时包含房间地址和解密密钥
+- 🗑️ **阅后即焚** — 可选定时消失（10s/30s/60s/5min），纯客户端实现
+- 💬 **消息回复 & 反应** — 引用回复 + emoji 反应，数据加密传输
+- 🔐 **房间密码** — 可选密码保护，防止分享码泄露后被陌生人加入
 - 🚫 **无需注册** — 无账号体系，打开即用
 
 ---
@@ -82,6 +85,11 @@ arthas/
 ├── arthas-client/          # 前端
 │   └── src/
 │       ├── crypto/         # E2EE 加密层 (Web Crypto API)
+│       ├── file-transfer/  # 加密文件分享模块
+│       │   ├── components/ # FileMessage, ProgressBar, DropZone, FileAttachButton
+│       │   ├── sender.ts   # 发送引擎（分片加密 + 流控）
+│       │   ├── receiver.ts # 接收引擎（解密重组 + 超时）
+│       │   └── ...         # types, chunker, thumbnail, persistence
 │       ├── pages/          # 首页 / 聊天室
 │       ├── components/     # 消息列表 / 成员 / 分享
 │       ├── network/        # WebSocket + MessagePack
@@ -93,7 +101,6 @@ arthas/
 │       └── network/        # Hub + Client + 协议
 └── docs/
     ├── technical_architecture.md
-    ├── backlog.md
     └── roadmap.md
 ```
 
@@ -128,14 +135,28 @@ arthas/
 
 ---
 
+## 自托管部署
+
+除了 Vercel + HF Spaces 的托管方案，Arthas 支持完全自托管，让你对数据和基础设施拥有完全控制权。
+
+| 方案 | 适用场景 | 说明 |
+|------|----------|------|
+| **Tier 1 — 单二进制** | 本地/内网/开发 | 零依赖，下载即运行，Go embed 内嵌前端 |
+| **Tier 2 — Docker Compose** | 公网生产环境 | Caddy 自动 HTTPS + Go 后端，一键部署 |
+
+👉 完整指南：[自托管部署文档](official_doc/self-hosting.md)
+
+---
+
 ## 文档
 
 - [技术架构](docs/technical_architecture.md)
 - [功能待办](docs/backlog.md)
 - [路线图](docs/roadmap.md)
+- [自托管部署](official_doc/self-hosting.md)
 
 ---
 
 ## 当前状态
 
-开发中 — 房间系统 + E2EE 加密 + 实时聊天
+Phase 6 差异化功能全部完成 — 加密聊天 + 文件分享 + 回复反应 + 密码保护 + 阅后即焚

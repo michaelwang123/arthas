@@ -81,11 +81,11 @@ export async function decryptChunk(
   // 如果直接传 .buffer 给 Web Crypto API，它会使用整个 ArrayBuffer 的内容，
   // 而非 Uint8Array 指定的子范围，导致解密失败。
   // 使用 .slice() 创建一个独立的 ArrayBuffer 副本，确保字节范围正确。
-  const ivBuffer = iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength);
+  const ivBuffer = iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength) as ArrayBuffer;
   const ciphertextBuffer = ciphertext.buffer.slice(
     ciphertext.byteOffset,
     ciphertext.byteOffset + ciphertext.byteLength
-  );
+  ) as ArrayBuffer;
 
   const plaintextBuffer = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: ivBuffer },

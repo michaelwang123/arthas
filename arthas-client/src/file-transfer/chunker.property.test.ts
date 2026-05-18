@@ -63,7 +63,7 @@ describe('Property: Chunk split/reassemble round-trip', () => {
           const buffer = generateTestBuffer(size);
 
           // 创建 File 对象（streamChunks 的输入类型）
-          const file = new File([buffer], 'test.bin');
+          const file = new File([buffer as BlobPart], 'test.bin');
 
           // 收集所有分片
           const chunks: { index: number; data: ArrayBuffer }[] = [];
@@ -114,7 +114,7 @@ describe('Property: Chunk split/reassemble round-trip', () => {
     const size = 5_242_880;
     const buffer = generateTestBuffer(size);
 
-    const file = new File([buffer], 'max-size.bin');
+    const file = new File([buffer as BlobPart], 'max-size.bin');
 
     const chunks: { index: number; data: ArrayBuffer }[] = [];
     for await (const chunk of streamChunks(file)) {
@@ -162,7 +162,7 @@ describe('Property: Chunk split/reassemble round-trip', () => {
 
   it('handles boundary value: exactly CHUNK_SIZE bytes (single full chunk)', async () => {
     const buffer = generateTestBuffer(CHUNK_SIZE);
-    const file = new File([buffer], 'one-chunk.bin');
+    const file = new File([buffer as BlobPart], 'one-chunk.bin');
 
     const chunks: { index: number; data: ArrayBuffer }[] = [];
     for await (const chunk of streamChunks(file)) {
@@ -182,7 +182,7 @@ describe('Property: Chunk split/reassemble round-trip', () => {
   it('handles boundary value: CHUNK_SIZE + 1 bytes (two chunks, last is 1 byte)', async () => {
     const size = CHUNK_SIZE + 1;
     const buffer = generateTestBuffer(size);
-    const file = new File([buffer], 'boundary.bin');
+    const file = new File([buffer as BlobPart], 'boundary.bin');
 
     const chunks: { index: number; data: ArrayBuffer }[] = [];
     for await (const chunk of streamChunks(file)) {

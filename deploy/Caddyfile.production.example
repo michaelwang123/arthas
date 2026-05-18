@@ -1,0 +1,66 @@
+# ============================================================================
+# Arthas Self-Hosted — Production Caddyfile (HTTPS)
+# ============================================================================
+#
+# 📚 学习要点: 这是生产环境 Caddyfile 的参考模板
+# 实际运行时使用的 Caddyfile 由 deploy.sh 自动生成（不提交到 Git）。
+# 此文件仅作为文档参考，帮助用户理解配置结构和自定义选项。
+#
+# 使用方式:
+#   1. 运行 ./deploy.sh，脚本会根据 .env 中的 DOMAIN 自动生成 Caddyfile
+#   2. 如需自定义，可复制此文件为 Caddyfile 并修改
+#
+# ============================================================================
+
+# 📚 学习要点: Caddy 全局配置块（Global Options Block）
+# 花括号 {} 在文件顶部（不带站点地址）表示全局配置。
+# email 指令告诉 Caddy 使用哪个邮箱注册 Let's Encrypt 账户：
+# - 证书到期前 Let's Encrypt 会发送提醒邮件到此地址
+# - 这是 ACME 协议的要求，用于账户恢复和通知
+# {$EMAIL} 语法表示从 Caddy 进程的环境变量中读取 EMAIL 的值
+# （Docker Compose 通过 environment 字段将 .env 中的值传递给容器）
+{
+    email {$EMAIL}
+}
+
+# 📚 学习要点: 站点地址与自动 HTTPS
+# {$DOMAIN} 从环境变量读取域名（如 chat.example.com）。
+# 当 Caddy 看到一个合法域名作为站点地址时，会自动：
+# 1. 监听 443 端口并启用 HTTPS
+# 2. 通过 ACME HTTP-01 challenge 向 Let's Encrypt 申请 TLS 证书
+# 3. 监听 80 端口并将所有 HTTP 请求 301 重定向到 HTTPS
+# 4. 在证书到期前自动续期（无需人工干预）
+# 这就是为什么 Caddy 被称为"自动 HTTPS"——零配置即可获得生产级 TLS。
+{$DOMAIN} {
+    # 📚 学习要点: reverse_proxy 与 WebSocket
+    # Caddy 的 reverse_proxy 指令自动处理 WebSocket 升级（Upgrade: websocket）。
+    # 不需要像 Nginx 那样手动配置 proxy_set_header Upgrade/Connection。
+    # "backend" 是 Docker Compose 中定义的服务名，Docker DNS 自动解析为容器 IP。
+    # :8080 是 Go 后端监听的内部端口（不暴露给宿主机）。
+    reverse_proxy backend:8080
+
+    # 📚 学习要点: 安全响应头（Security Headers）
+    # 这些 header 由 Caddy 添加到所有响应中，提供纵深防御：
+    header {
+        # X-Content-Type-Options: nosniff
+        # 阻止浏览器"嗅探"响应的 MIME 类型。
+        # 防止攻击者上传伪装为图片的 HTML/JS 文件被浏览器执行。
+        X-Content-Type-Options nosniff
+
+        # X-Frame-Options: DENY
+        # 禁止任何网站通过 <iframe> 嵌入此页面。
+        # 防止点击劫持（Clickjacking）攻击：
+        # 攻击者在透明 iframe 中加载目标页面，诱导用户点击。
+        X-Frame-Options DENY
+
+        # Referrer-Policy: no-referrer
+        # 导航到外部链接时不发送 Referer 头。
+        # 对于 E2EE 聊天应用，防止房间 URL 或路径信息泄露给第三方。
+        Referrer-Policy no-referrer
+
+        # -Server: 删除 Server 响应头
+        # 隐藏服务器软件信息（默认会暴露 "Caddy"）。
+        # 减少攻击面——攻击者无法通过 Server 头判断使用的软件版本。
+        -Server
+    }
+}

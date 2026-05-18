@@ -14,7 +14,6 @@ import {
   getRttMultiplier,
   getIsPaused,
   setIsPaused,
-  setupOfflineDetection,
 } from './sender';
 
 describe('RTT-aware congestion detection', () => {

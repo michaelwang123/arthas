@@ -3,7 +3,30 @@ import { MSG_PING, MSG_PONG, type Message } from './protocol'
 
 // ===== 配置 =====
 
-const DEFAULT_WS_URL = 'ws://localhost:8080/ws'
+/**
+ * 📚 学习要点: 相对 WebSocket URL 的自动推导
+ * 自托管模式下，前端和后端通过同一域名访问（Go 服务器同时服务两者）。
+ * 通过 location.protocol 和 location.host 自动构建 WebSocket URL：
+ * - HTTPS 页面 -> wss://（加密 WebSocket）
+ * - HTTP 页面 -> ws://（非加密 WebSocket）
+ * 这消除了构建时注入 VITE_WS_URL 的需求，换域名无需重新构建镜像。
+ *
+ * 优先级链：connect(url) 参数 > VITE_WS_URL 环境变量 > getDefaultWsUrl() 推导
+ * - 开发模式：.env.development 设置 VITE_WS_URL，指向本地后端
+ * - Vercel 部署：.env.production 设置 VITE_WS_URL，指向 HF Spaces 后端
+ * - 自托管模式：不设置 VITE_WS_URL，自动使用相对 URL（同域访问）
+ */
+export function getDefaultWsUrl(): string {
+  // SSR 或测试环境中 window 不存在，回退到 localhost 默认值
+  if (typeof window === 'undefined') {
+    return 'ws://localhost:8080/ws'
+  }
+  // 根据页面协议推导 WebSocket 协议：HTTPS -> wss, HTTP -> ws
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/ws`
+}
+
+const DEFAULT_WS_URL = getDefaultWsUrl()
 const BACKOFF_INITIAL_MS = 1000
 const BACKOFF_MAX_MS = 30000
 
