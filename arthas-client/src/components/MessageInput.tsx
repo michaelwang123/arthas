@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import { EmojiPicker } from './EmojiPicker';
+import { FileAttachButton } from '../file-transfer/components/FileAttachButton';
+import { useFileTransferStore } from '../file-transfer/fileTransferStore';
 
 const MAX_LENGTH = 500;
 const SHOW_COUNT_THRESHOLD = 400;
@@ -76,6 +78,54 @@ export function MessageInput() {
     }
   };
 
+  /**
+   * 处理粘贴事件：检测剪贴板中的图片文件并发起文件传输。
+   *
+   * 📚 学习要点: 非阻塞式文件传输发起
+   * 粘贴处理只拦截图片类型的剪贴板数据，不干扰正常的文本粘贴。
+   * 调用 initiateTransfer 是同步的（将文件加入传输队列），
+   * 实际的加密和发送在后台异步进行，不阻塞文本消息的发送。
+   *
+   * 📚 学习要点: 为什么只处理图片粘贴？
+   * 1. 剪贴板中的非图片文件无法通过 paste 事件获取实际文件内容
+   * 2. 文本粘贴应正常插入输入框（不应被拦截为文件传输）
+   * 3. 图片是最常见的剪贴板文件类型（截图、复制的图片）
+   *
+   * @see requirements.md — Requirement 1.6(c), 12.8
+   */
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    const clipboardData = e.clipboardData;
+    if (!clipboardData) return;
+
+    const items = clipboardData.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+
+      // 只处理文件类型且 MIME 为图片的条目
+      if (item.kind !== 'file') continue;
+      if (!item.type.startsWith('image/')) continue;
+
+      const blob = item.getAsFile();
+      if (!blob) continue;
+
+      // 创建带时间戳的文件名，避免多次粘贴时文件名冲突
+      const timestamp = Date.now();
+      const fileName = `clipboard-${timestamp}.png`;
+      const file = new File([blob], fileName, { type: blob.type || 'image/png' });
+
+      // 异步发起文件传输，不阻塞文本消息发送
+      useFileTransferStore.getState().initiateTransfer(file);
+
+      // 阻止默认粘贴行为（防止浏览器将图片数据插入输入框）
+      e.preventDefault();
+
+      // 只处理第一个图片文件
+      break;
+    }
+  }, []);
+
   const insertEmoji = (emoji: string) => {
     const input = inputRef.current;
     const start = input?.selectionStart ?? text.length;
@@ -131,6 +181,7 @@ export function MessageInput() {
             value={text}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={replyTo ? '输入回复...' : '输入消息...'}
             maxLength={MAX_LENGTH}
             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 transition-colors"
@@ -141,6 +192,10 @@ export function MessageInput() {
             </span>
           )}
         </div>
+
+        {/* 文件附件按钮 — 位于发送按钮左侧，提供文件选择入口 */}
+        {/* @see requirements.md — Requirement 12.1 */}
+        <FileAttachButton />
 
         {/* Send button */}
         <button

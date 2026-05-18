@@ -13,6 +13,11 @@ export default {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.7' },
         },
+        'pulse-once': {
+          '0%': { opacity: '1' },
+          '50%': { opacity: '0.6' },
+          '100%': { opacity: '1' },
+        },
         'slide-in-right': {
           from: { transform: 'translateX(100%)' },
           to: { transform: 'translateX(0)' },
@@ -28,6 +33,7 @@ export default {
       },
       animation: {
         'pulse-banner': 'pulse-banner 2s ease-in-out infinite',
+        'pulse-once': 'pulse-once 0.3s ease-in-out 1',
         'slide-in-right': 'slide-in-right 0.2s ease-out',
         'slide-in-msg': 'slide-in-msg 0.2s ease-out',
       },

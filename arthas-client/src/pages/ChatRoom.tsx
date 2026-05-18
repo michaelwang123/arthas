@@ -7,6 +7,7 @@ import { MemberDrawer } from '../components/MemberDrawer';
 import { ShareKey } from '../components/ShareKey';
 import { TypingIndicator } from '../components/TypingIndicator';
 import { ConnectionBanner } from '../components/ConnectionBanner';
+import { DropZone } from '../file-transfer/components/DropZone';
 import { initAudio, requestNotificationPermission } from '../utils/notification';
 
 export function ChatRoom() {
@@ -84,8 +85,8 @@ export function ChatRoom() {
 
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Chat area (messages + typing + input) */}
-        <div className="flex flex-col flex-1 overflow-hidden">
+        {/* Chat area (messages + typing + input) — 包裹 DropZone 实现拖拽上传覆盖层 */}
+        <DropZone>
           {/* Message List */}
           <MessageList messages={messages} myId={myId} members={members} />
 
@@ -98,7 +99,7 @@ export function ChatRoom() {
           <div className="px-4 py-3 bg-gray-800 border-t border-gray-700 shrink-0">
             <MessageInput />
           </div>
-        </div>
+        </DropZone>
 
         {/* Member List Sidebar (desktop only) */}
         <aside className="w-56 bg-gray-800 border-l border-gray-700 overflow-y-auto shrink-0 hidden md:block">

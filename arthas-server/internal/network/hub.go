@@ -11,6 +11,25 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 )
 
+// 📚 学习要点: 服务器端传输超时 — 兜底清理机制
+// 正常流程中，文件传输通过 MSG_SEND_FILE_COMPLETE 或 MSG_SEND_FILE_CANCEL 消息结束，
+// 此时服务器会清除客户端的 activeTransferID。
+// 但如果这些终止消息丢失（网络异常、客户端崩溃但 TCP 连接未断开），
+// activeTransferID 会永远残留，导致该客户端无法发起新的文件传输。
+//
+// serverTransferTimeout 设置为 90 秒，比客户端的 60 秒超时稍长。
+// 这确保正常的客户端超时流程优先触发（客户端 60s 超时 → 发送 CANCEL → 服务器清除状态），
+// 服务器端 90s 清理仅作为最后的兜底机制。
+//
+// staleTransferCheckInterval 设置为 30 秒，是清理频率与性能开销的平衡：
+// - 太频繁（如 5s）：每次遍历所有客户端的开销不必要
+// - 太稀疏（如 5min）：过期传输可能阻塞客户端过久
+// - 30s 意味着最坏情况下，过期传输在 90s + 30s = 120s 后被清理
+const (
+	serverTransferTimeout      = 90 * time.Second // 服务器端传输超时（兜底清理阈值）
+	staleTransferCheckInterval = 30 * time.Second // 过期传输检查间隔
+)
+
 // Hub 管理所有 WebSocket 连接，并将消息路由到对应的房间处理逻辑。
 //
 // 📚 学习要点: CSP 并发模型与关闭顺序
@@ -72,6 +91,17 @@ func NewHub() *Hub {
 // 使得每次循环迭代都会匹配到该 case，从而退出 for 循环。
 // 这是 Go 中实现「可取消事件循环」的标准模式。
 func (h *Hub) Run() {
+	// 📚 学习要点: 定时器（Ticker）用于周期性任务
+	// time.NewTicker 创建一个定时器，每隔指定时间向其 C channel 发送当前时间。
+	// 这里用于周期性扫描并清理超时的文件传输状态。
+	//
+	// 📚 学习要点: defer ticker.Stop() 防止资源泄漏
+	// Ticker 在创建后会持续运行，即使没有人从 C channel 读取。
+	// 如果 Run() 退出但 Ticker 未停止，底层的 runtime timer 会一直存在（内存泄漏）。
+	// defer 确保无论 Run() 如何退出（正常 return 或 panic），Ticker 都会被停止。
+	staleTransferTicker := time.NewTicker(staleTransferCheckInterval)
+	defer staleTransferTicker.Stop()
+
 	for {
 		select {
 		case <-h.done:
@@ -96,6 +126,21 @@ func (h *Hub) Run() {
 			// 断线自动离开房间
 			h.handleClientDisconnect(client)
 			logger.Info("Hub", "client %s disconnected, total: %d", client.ID, h.clientCount())
+
+		case <-staleTransferTicker.C:
+			// 📚 学习要点: 定时清理过期传输（Stale Transfer Cleanup）
+			// 每 30 秒触发一次，扫描所有客户端，清理超过 90 秒的活跃传输。
+			// 这是一个兜底机制，处理以下异常场景：
+			// 1. 客户端发送了 Meta 但从未发送 Complete/Cancel（bug 或恶意行为）
+			// 2. Complete/Cancel 消息在网络中丢失（极端网络条件）
+			// 3. 客户端进程崩溃但 TCP 连接未立即断开（TCP keepalive 延迟）
+			//
+			// 📚 学习要点: 为什么在 select 中处理而非独立 goroutine？
+			// 将 ticker 放在 Run() 的 select 中（而非启动独立 goroutine）的好处：
+			// - 与 done channel 自然集成：Run() 退出时 ticker 自动停止
+			// - 无需额外的同步机制：cleanupStaleTransfers 在 Run() goroutine 中执行
+			// - 生命周期清晰：ticker 的生命周期与 Hub 完全一致
+			h.cleanupStaleTransfers()
 		}
 	}
 }
@@ -141,6 +186,22 @@ func (h *Hub) Wait() {
 }
 
 // HandleMessage 解析原始消息并根据类型路由到对应的处理函数。
+//
+// 📚 学习要点: 消息路由与频率限制的分层设计
+// HandleMessage 是一个纯路由器（dispatcher），不做任何业务逻辑判断。
+// 频率限制（rate limiting）不在此处集中实施，而是由各 handler 自行决定：
+//
+//   - 聊天消息 (MsgSendMessage): 使用 IsRateLimited() 滑动窗口限流
+//     → 防止刷屏，10 秒内最多 N 条消息
+//
+//   - 文件传输 (MsgSendFileMeta/Chunk/Complete/Cancel/Ack): 不使用 IsRateLimited()
+//     → 文件传输有自己的并发控制机制：每客户端最多 1 个活跃传输 (activeTransferID)
+//     → 原因：文件传输需要高频发送 chunk（每 10ms 一个），
+//     如果套用聊天的频率限制（10 秒 N 条），传输会被频繁阻断
+//     → 安全保障：activeTransferID 检查确保客户端只能为自己的活跃传输发送数据
+//
+// 这种「每个 handler 自治」的设计比「集中式前置检查」更灵活：
+// 不同消息类型有不同的流量特征，统一限流策略无法兼顾所有场景。
 func (h *Hub) HandleMessage(client *Client, msg *Message) {
 	switch msg.Type {
 	case MsgCreateRoom:
@@ -157,6 +218,25 @@ func (h *Hub) HandleMessage(client *Client, msg *Message) {
 		h.handlePong(client, msg.Data)
 	case MsgSendReaction:
 		h.handleSendReaction(client, msg.Data)
+
+	// --- 文件传输消息 (0x08-0x0C) ---
+	// 📚 学习要点: 文件传输消息的频率限制豁免
+	// 这些消息类型不经过 IsRateLimited() 检查（Requirements 4.9）。
+	// 替代方案：handleFileMeta 中的 activeTransferID 检查确保
+	// 每个客户端同时只有 1 个活跃传输，这比时间窗口限流更适合文件传输场景。
+	// handleFileChunk 验证 transferId 必须匹配 activeTransferID，
+	// 防止未授权的数据注入。
+	case MsgSendFileMeta:
+		h.handleFileMeta(client, msg.Data)
+	case MsgSendFileChunk:
+		h.handleFileChunk(client, msg.Data)
+	case MsgSendFileComplete:
+		h.handleFileComplete(client, msg.Data)
+	case MsgSendFileCancel:
+		h.handleFileCancel(client, msg.Data)
+	case MsgSendFileAck:
+		h.handleFileAck(client, msg.Data)
+
 	default:
 		logger.Warn("Hub", "unknown message type 0x%02x from client %s", msg.Type, client.ID)
 	}
@@ -233,6 +313,9 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 		Color: client.Color,
 		SendFunc: func(data []byte) {
 			client.Send(data)
+		},
+		SendFileFunc: func(data []byte) bool {
+			return client.SendFileData(data)
 		},
 	}
 	if err := r.AddMember(member); err != nil {
@@ -321,6 +404,9 @@ func (h *Hub) handleJoinRoom(client *Client, data interface{}) {
 		Color: client.Color,
 		SendFunc: func(data []byte) {
 			client.Send(data)
+		},
+		SendFileFunc: func(data []byte) bool {
+			return client.SendFileData(data)
 		},
 	}
 	if err := r.AddMember(member); err != nil {
@@ -584,12 +670,621 @@ func (h *Hub) handlePong(client *Client, data interface{}) {
 	}
 }
 
+// handleFileChunk 处理客户端发送的加密文件分片（MSG_SEND_FILE_CHUNK, 0x09）。
+// 服务器不解密、不存储、不检查分片内容，仅验证传输状态后原样转发给房间内其他在线成员。
+// 这是文件传输中最高频的消息（5MB 文件 = 80 次调用），性能路径需要尽量精简。
+//
+// 📚 学习要点: 零知识中转的数据流
+// 客户端发送 SendFileChunkData → 服务器提取路由信息（transferId, index）→
+// 附加发送方身份（senderId）→ 构建 RelayFileChunkData → BroadcastFileData 给房间成员。
+// 服务器对 iv 和 data 字段完全不透明处理（直接转发原始字节），
+// 无法推断文件内容、类型或任何有意义的信息。
+//
+// 📚 学习要点: 为什么使用 BroadcastFileData 而非普通 Broadcast？
+// 普通 Broadcast 使用非阻塞 Send()，缓冲区满时静默丢弃消息。
+// 文件分片丢失 = 接收方永远无法重组完整文件 → 传输必然失败。
+// BroadcastFileData 使用带 5s 超时的阻塞发送（SendFileFunc），
+// 确保分片要么成功进入接收方的 send buffer，要么明确超时失败。
+// 同时使用并发 goroutine 发送，慢接收方不会拖住快接收方。
+func (h *Hub) handleFileChunk(client *Client, data interface{}) {
+	// 1. 验证客户端在房间中
+	if client.RoomID == "" {
+		h.sendError(client, ErrCodeNotInRoom, "not in a room")
+		return
+	}
+
+	// 2. 解析 data map — msgpack 将消息体解码为 map[string]interface{}
+	dataMap, ok := data.(map[string]interface{})
+	if !ok {
+		h.sendError(client, ErrCodeInvalidMessage, "invalid file chunk data")
+		return
+	}
+
+	// 3. 提取字段
+	// transferId: 传输会话标识（明文字符串，用于路由和状态验证）
+	transferId, _ := dataMap["transferId"].(string)
+	if transferId == "" {
+		h.sendError(client, ErrCodeInvalidMessage, "missing transferId")
+		return
+	}
+
+	// 📚 学习要点: 使用 toInt() 解析 index 的必要性
+	// vmihailenco/msgpack/v5 将小正整数解码为最小适配类型：
+	//   0-127 → int8, 128-255 → uint8, 256-32767 → int16, ...
+	// 直接 dataMap["index"].(int) 会 panic（类型不匹配）。
+	// toInt() 统一处理所有整数类型，安全转换为 Go int。
+	// 文件分片索引范围：0 到 79（5MB / 64KB = 80 chunks），
+	// 所以 msgpack 会将其编码为 int8 或 uint8。
+	index := toInt(dataMap["index"])
+
+	// 📚 学习要点: []byte 在 msgpack 中的解码行为
+	// msgpack bin 格式的数据在解码到 interface{} 时，
+	// vmihailenco/msgpack/v5 会将其解码为 []byte 类型。
+	// 这与 string 类型（msgpack str 格式）不同。
+	// iv 和 data 字段在客户端使用 Uint8Array 发送，
+	// msgpack 编码为 bin 格式，服务器端自然解码为 []byte。
+	iv, _ := dataMap["iv"].([]byte)
+	chunkData, _ := dataMap["data"].([]byte)
+
+	// 4. 验证 iv 和 data 非空（基本完整性检查，不检查内容）
+	if len(iv) == 0 || len(chunkData) == 0 {
+		h.sendError(client, ErrCodeInvalidMessage, "iv and data must be non-empty")
+		return
+	}
+
+	// 5. 验证 transferId 匹配客户端的活跃传输
+	// 📚 学习要点: 为什么需要验证 activeTransferID？
+	// 防止以下攻击/错误场景：
+	// - 恶意客户端伪造 transferId，向其他人的传输注入垃圾数据
+	// - 客户端 bug 导致发送了错误的 transferId
+	// - 客户端在传输完成/取消后继续发送残留的 chunk
+	// 服务器通过 activeTransferID 确保：只有正在进行活跃传输的客户端
+	// 才能发送 chunk，且 chunk 的 transferId 必须与活跃传输匹配。
+	if client.activeTransferID != transferId {
+		h.sendError(client, ErrCodeInvalidMessage, "transferId does not match active transfer")
+		return
+	}
+
+	// 6. 查找房间
+	r := h.roomManager.GetRoom(client.RoomID)
+	if r == nil {
+		client.RoomID = ""
+		h.sendError(client, ErrCodeNotInRoom, "room no longer exists")
+		return
+	}
+
+	// 7. 构建 RelayFileChunkData 并通过 BroadcastFileData 转发
+	// 📚 学习要点: 服务器附加 senderId 的安全意义
+	// senderId 由服务器从已认证的 Client 对象中提取（client.ID），
+	// 而非信任客户端自行声明。这防止了身份伪造攻击：
+	// 恶意客户端无法冒充其他用户发送文件分片。
+	relayMsg := Message{
+		Type: MsgRelayFileChunk,
+		Data: RelayFileChunkData{
+			SenderID:   client.ID,
+			TransferID: transferId,
+			Index:      index,
+			IV:         iv,
+			Data:       chunkData,
+		},
+	}
+
+	broadcastData, err := msgpack.Marshal(relayMsg)
+	if err != nil {
+		logger.Error("Hub", "failed to marshal RelayFileChunk: %v", err)
+		return
+	}
+
+	// 📚 学习要点: BroadcastFileData 的阻塞语义
+	// 此调用会阻塞直到所有接收方的发送完成（或超时），最多 5s。
+	// 这是可接受的，因为 handleFileChunk 在 Hub.HandleMessage 中被调用，
+	// 而 HandleMessage 由 client.readPump 调用（每个客户端独立的 goroutine）。
+	// 一个客户端的 BroadcastFileData 阻塞不会影响其他客户端的消息处理。
+	r.BroadcastFileData(client.ID, broadcastData)
+}
+
+// handleFileAck 处理接收方发送的文件接收确认（MSG_SEND_FILE_ACK, 0x0C）。
+// 接收方成功接收并重组完整文件后发送此确认。
+// 服务器将此确认定向转发给原始发送方（非广播），
+// 发送方据此更新 UI 显示 "已送达 (N/M)"。
+//
+// 📚 学习要点: ACK 的定向转发 vs 广播
+// 与其他文件传输消息（Meta/Chunk/Complete/Cancel）的广播模式不同，
+// ACK 只需要发送给原始发送方一人。原因：
+// 1. ACK 的语义是「接收方 → 发送方」的确认，其他接收方不需要知道
+// 2. 减少不必要的网络流量：N-2 个无关成员不会收到 ACK
+// 3. 发送方需要统计 ACK 数量来显示送达状态，其他人不需要这个信息
+//
+// 📚 学习要点: 如何找到原始发送方？
+// ACK 消息只包含 transferId，不包含 senderId（接收方可能不知道发送方的 client ID）。
+// 服务器通过遍历同房间的所有客户端，找到 activeTransferID 匹配的那个客户端。
+// 这依赖于：发送方的 activeTransferID 在收到所有 ACK 之前不会被清除。
+// 如果找不到匹配的发送方（可能已断线或传输已超时清理），ACK 被静默丢弃。
+func (h *Hub) handleFileAck(client *Client, data interface{}) {
+	// 1. 验证客户端在房间中（发送 ACK 的是接收方）
+	if client.RoomID == "" {
+		h.sendError(client, ErrCodeNotInRoom, "not in a room")
+		return
+	}
+
+	// 2. 解析 data map
+	dataMap, ok := data.(map[string]interface{})
+	if !ok {
+		h.sendError(client, ErrCodeInvalidMessage, "invalid file ack data")
+		return
+	}
+
+	// 3. 提取 transferId
+	transferId, _ := dataMap["transferId"].(string)
+	if transferId == "" {
+		h.sendError(client, ErrCodeInvalidMessage, "missing transferId")
+		return
+	}
+
+	// 4. 查找房间（验证房间仍然存在）
+	if h.roomManager.GetRoom(client.RoomID) == nil {
+		client.RoomID = ""
+		h.sendError(client, ErrCodeNotInRoom, "room no longer exists")
+		return
+	}
+
+	// 5. 在同房间的客户端中找到原始发送方
+	// 📚 学习要点: 遍历查找发送方的策略
+	// 方案选择：遍历 Hub 的 clients map，找到同房间且 activeTransferID 匹配的客户端。
+	// 为什么不用 room.GetMembers()？
+	// - Room.Member 结构体不包含 activeTransferID 字段（状态最小化原则）
+	// - activeTransferID 是 Client 级别的状态，只有 Hub 层能访问
+	// 为什么不在 SendFileAckData 中包含 senderId？
+	// - 接收方可能不知道发送方的 client ID（虽然 RelayFileMeta 中有 senderId，
+	//   但为了协议简洁性，ACK 只需要 transferId 就足够路由）
+	// - 服务器端查找的开销很小（MaxMembers=50，遍历一次 O(N) 其中 N = 总连接数）
+	//
+	// 📚 学习要点: 读锁保护并发访问
+	// h.clients map 可能被 Hub.Run() goroutine 修改（register/unregister），
+	// 使用 RLock 确保遍历期间 map 不会被并发修改。
+	// 注意：这里只读取 client 的字段（RoomID, activeTransferID），
+	// 不修改任何状态，所以读锁足够。
+	var sender *Client
+	h.mu.RLock()
+	for c := range h.clients {
+		if c.RoomID == client.RoomID && c.activeTransferID == transferId {
+			sender = c
+			break
+		}
+	}
+	h.mu.RUnlock()
+
+	// 6. 如果找不到发送方，静默丢弃 ACK
+	// 📚 学习要点: 为什么静默丢弃而非返回错误？
+	// 找不到发送方的可能原因：
+	// - 发送方已断线（activeTransferID 被清理）
+	// - 传输已超时（服务器端 90s 清理机制已清除 activeTransferID）
+	// - 发送方已开始新的传输（activeTransferID 被覆盖）
+	// 这些都是正常的边缘情况，不是接收方的错误。
+	// 返回错误会让接收方困惑（"我明明收到了完整文件，为什么 ACK 失败？"）。
+	// 发送方通过 ACK 缺失 + 超时来感知这种情况，不需要额外通知。
+	if sender == nil {
+		logger.Warn("Hub", "file ACK from %s: no sender found for transferId %s (sender may have disconnected)",
+			client.ID, transferId)
+		return
+	}
+
+	// 7. 构建 RelayFileAckData 并定向发送给原始发送方
+	// 📚 学习要点: ReceiverID vs SenderID
+	// RelayFileAckData 使用 ReceiverID（而非 SenderID），因为：
+	// - 这条消息的方向是「接收方 → 服务器 → 发送方」
+	// - 发送方需要知道「谁确认了接收」来更新送达计数
+	// - 所以携带的是确认者（接收方）的 ID
+	relayMsg := Message{
+		Type: MsgRelayFileAck,
+		Data: RelayFileAckData{
+			ReceiverID: client.ID,
+			TransferID: transferId,
+		},
+	}
+
+	ackData, err := msgpack.Marshal(relayMsg)
+	if err != nil {
+		logger.Error("Hub", "failed to marshal RelayFileAck: %v", err)
+		return
+	}
+
+	// 定向发送给发送方（使用普通 Send，ACK 是轻量消息，丢失可接受）
+	sender.Send(ackData)
+}
+
 // handleClientDisconnect 处理客户端断线，自动离开所在房间。
+// 如果客户端有活跃的文件传输，先广播取消信号给房间成员，再执行离开逻辑。
+//
+// 📚 学习要点: 断线清理的顺序性
+// 必须先广播 CANCEL 再离开房间，因为 handleLeaveRoom 会将客户端从房间成员列表中移除。
+// 如果先离开再广播，BroadcastFileData 找不到房间或成员列表已变更，可能导致通知丢失。
 func (h *Hub) handleClientDisconnect(client *Client) {
-	// 如果客户端在某个房间中，执行离开逻辑
 	if client.RoomID != "" {
+		// 如果有活跃传输，广播 CANCEL 给房间成员（通知接收方释放缓冲区）
+		if client.activeTransferID != "" {
+			h.broadcastFileCancelForDisconnect(client)
+			client.activeTransferID = ""
+		}
 		h.handleLeaveRoom(client, nil)
 	}
+}
+
+// broadcastFileCancelForDisconnect 在客户端断线时广播文件传输取消信号。
+// 通知房间内其他成员：发送方已断线，应丢弃该传输的分片缓冲区。
+//
+// 📚 学习要点: 孤立传输清理（Orphaned Transfer Cleanup）
+// 正常流程中，传输通过 MSG_SEND_FILE_COMPLETE 或 MSG_SEND_FILE_CANCEL 结束。
+// 但如果发送方突然断线（网络中断、浏览器崩溃），这些消息永远不会到达。
+// 接收方会一直等待新 chunk，直到 60s 超时才标记失败。
+// 服务器主动广播 CANCEL 可以让接收方立即释放资源，提升用户体验。
+func (h *Hub) broadcastFileCancelForDisconnect(client *Client) {
+	r := h.roomManager.GetRoom(client.RoomID)
+	if r == nil {
+		return
+	}
+
+	// 构建 RelayFileCancel 消息
+	relayMsg := Message{
+		Type: MsgRelayFileCancel,
+		Data: RelayFileCancelData{
+			SenderID:   client.ID,
+			TransferID: client.activeTransferID,
+		},
+	}
+	data, err := msgpack.Marshal(relayMsg)
+	if err != nil {
+		logger.Error("Hub", "failed to marshal RelayFileCancel for disconnect: %v", err)
+		return
+	}
+
+	// 使用普通 Broadcast（非 BroadcastFileData），因为 CANCEL 是轻量控制消息，
+	// 不需要带超时的阻塞发送语义。
+	r.Broadcast(client.ID, data)
+	logger.Info("Hub", "broadcast file cancel for disconnected client %s, transferId=%s",
+		client.ID, client.activeTransferID)
+}
+
+// cleanupStaleTransfers 扫描所有客户端，清理超过 serverTransferTimeout（90秒）的活跃传输。
+// 由 Hub.Run() 中的 30 秒定时器周期性调用。
+//
+// 📚 学习要点: 兜底清理机制的必要性
+// 正常情况下，文件传输通过以下方式结束：
+//   - 发送方发送 MSG_SEND_FILE_COMPLETE → handleFileComplete 清除 activeTransferID
+//   - 发送方发送 MSG_SEND_FILE_CANCEL → handleFileCancel 清除 activeTransferID
+//   - 发送方断线 → handleClientDisconnect 清除 activeTransferID
+//
+// 但存在以下异常场景，上述机制都无法触发：
+//   - 客户端进程崩溃但 TCP 连接未断开（TCP keepalive 默认 2 小时才检测到）
+//   - 客户端 bug 导致发送了 Meta 但从未发送 Complete/Cancel
+//   - 网络分区：客户端认为已发送 Complete，但消息在网络中丢失
+//
+// 如果不清理，该客户端的 activeTransferID 会永远非空，
+// 导致其无法发起新的文件传输（handleFileMeta 中的并发检查会拒绝）。
+//
+// 📚 学习要点: RLock 读锁 vs Lock 写锁的选择
+// 这里使用 RLock（读锁）遍历 clients map，因为：
+// - 我们只读取 map 的键（遍历），不增删 map 条目
+// - 修改的是 client 的字段（activeTransferID），不是 map 本身
+// - 读锁允许与其他读操作（如 clientCount）并发执行
+//
+// 注意：修改 client.activeTransferID 不需要 map 的写锁，
+// 因为 activeTransferID 是 Client 结构体的字段，不是 map 的键或值。
+// Client 结构体的字段在当前架构中只被 Hub.Run() goroutine 修改
+// （通过 handleFileMeta/handleFileComplete/handleFileCancel/handleClientDisconnect），
+// 而 cleanupStaleTransfers 也在 Hub.Run() goroutine 中执行（通过 ticker），
+// 所以不存在并发写入 activeTransferID 的风险。
+func (h *Hub) cleanupStaleTransfers() {
+	now := time.Now()
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for client := range h.clients {
+		if client.activeTransferID != "" &&
+			now.Sub(client.transferStartAt) > serverTransferTimeout {
+			logger.Warn("Hub", "cleaning up stale transfer: client=%s, transferId=%s, age=%s",
+				client.ID, client.activeTransferID, now.Sub(client.transferStartAt).Round(time.Second))
+			client.activeTransferID = ""
+		}
+	}
+}
+
+// --- 文件传输生命周期处理函数 ---
+//
+// 📚 学习要点: 文件传输的三阶段生命周期
+// 文件传输遵循严格的三阶段生命周期：
+//   1. Meta（开始）：发送方声明传输意图，服务器记录活跃状态，广播元数据
+//   2. Chunk（传输中）：发送方逐片发送加密数据，服务器逐片转发（Task 2.4 实现）
+//   3. Complete/Cancel（结束）：传输正常完成或被取消，服务器清除活跃状态
+//
+// 服务器在整个过程中保持零知识：
+// - 不解密任何数据（iv、ciphertext、chunk data 都是不透明字节流）
+// - 不存储任何文件内容（收到即转发，内存占用仅在写操作期间）
+// - 仅追踪 transferId 和时间戳（用于限制并发和超时清理）
+
+// handleFileMeta 处理客户端发送的加密文件元数据（MSG_SEND_FILE_META）。
+// 这是文件传输的第一步：发送方声明传输意图，服务器验证后广播给房间成员。
+//
+// 📚 学习要点: 为什么需要服务器端验证？
+// 虽然服务器不检查文件内容（零知识），但仍需验证：
+// 1. 发送方确实在某个房间中（防止未加入房间的客户端发送文件）
+// 2. 发送方没有其他活跃传输（限制每客户端 1 个并发传输，防止资源滥用）
+// 这些验证不涉及文件内容，不违反零知识原则。
+//
+// 处理流程：
+//  1. 验证客户端已加入房间（RoomID != ""）
+//  2. 验证没有其他活跃传输（activeTransferID == ""）
+//  3. 从 data map 提取 transferId、iv、ciphertext
+//  4. 设置 activeTransferID 和 transferStartAt
+//  5. 构建 RelayFileMetaData 并广播给房间其他成员
+//
+// 验证失败时的错误码：
+//   - E003 (ErrCodeNotInRoom): 客户端未加入任何房间
+//   - E005 (ErrCodeInvalidMessage): 已有活跃传输或数据格式错误
+func (h *Hub) handleFileMeta(client *Client, data interface{}) {
+	// 1. 验证客户端已加入房间
+	// 📚 学习要点: 房间成员验证是所有消息处理的第一步
+	// 未加入房间的客户端不应该能发送任何业务消息（聊天、文件、反应等）。
+	// 这是一个安全边界：防止恶意客户端绕过加入流程直接发送数据。
+	if client.RoomID == "" {
+		h.sendError(client, ErrCodeNotInRoom, "not in a room")
+		return
+	}
+
+	// 2. 验证没有其他活跃传输
+	// 📚 学习要点: 单活跃传输限制（Per-Client Concurrency Control）
+	// 每个客户端同时只能有 1 个活跃文件传输。这个限制的目的：
+	// - 防止单个客户端占用过多服务器带宽（50 个成员 × 多个并发传输 = 带宽爆炸）
+	// - 简化客户端状态管理（发送队列 FIFO，一次只处理一个）
+	// - 降低接收方内存压力（同一发送方不会同时发送多个文件）
+	if client.activeTransferID != "" {
+		h.sendError(client, ErrCodeInvalidMessage, "already has active transfer")
+		return
+	}
+
+	// 3. 解析 data map
+	// 📚 学习要点: msgpack 解码后的类型断言
+	// vmihailenco/msgpack/v5 将 msgpack map 解码为 map[string]interface{}。
+	// 我们需要逐字段提取并进行类型断言。
+	// 对于 []byte 字段（ciphertext），msgpack 的 bin 格式会解码为 []byte。
+	// 对于 string 字段（transferId, iv），msgpack 的 str 格式会解码为 string。
+	dataMap, ok := data.(map[string]interface{})
+	if !ok {
+		h.sendError(client, ErrCodeInvalidMessage, "invalid file meta data")
+		return
+	}
+
+	transferId, _ := dataMap["transferId"].(string)
+	iv, _ := dataMap["iv"].(string)
+	ciphertext, _ := dataMap["ciphertext"].([]byte)
+
+	// 4. 验证必要字段非空
+	if transferId == "" || iv == "" || len(ciphertext) == 0 {
+		h.sendError(client, ErrCodeInvalidMessage, "transferId, iv, and ciphertext are required")
+		return
+	}
+
+	// 5. 查找房间
+	r := h.roomManager.GetRoom(client.RoomID)
+	if r == nil {
+		client.RoomID = ""
+		h.sendError(client, ErrCodeNotInRoom, "room no longer exists")
+		return
+	}
+
+	// 6. 设置活跃传输状态
+	// 📚 学习要点: 状态设置的时机
+	// 在广播之前设置 activeTransferID，确保：
+	// - 如果广播过程中客户端又发送了新的 Meta，会被步骤 2 拦截
+	// - transferStartAt 记录传输开始时间，用于服务器端超时清理（90s 兜底）
+	client.activeTransferID = transferId
+	client.transferStartAt = time.Now()
+
+	// 7. 构建 RelayFileMetaData 并广播
+	// 📚 学习要点: 服务器附加身份信息
+	// 服务器从已认证的 Client 对象中提取 senderId 和 senderName，
+	// 而非信任客户端自行声明。这防止了身份伪造攻击：
+	// 恶意客户端无法冒充其他用户发送文件。
+	relayMsg := Message{
+		Type: MsgRelayFileMeta,
+		Data: RelayFileMetaData{
+			SenderID:   client.ID,
+			SenderName: client.Name,
+			TransferID: transferId,
+			IV:         iv,
+			Ciphertext: ciphertext,
+			T:          time.Now().UnixMilli(),
+		},
+	}
+	broadcastData, err := msgpack.Marshal(relayMsg)
+	if err != nil {
+		logger.Error("Hub", "failed to marshal RelayFileMeta: %v", err)
+		// 回滚活跃传输状态（序列化失败意味着广播不会发生）
+		client.activeTransferID = ""
+		return
+	}
+
+	// 使用 BroadcastFileData（带超时阻塞发送）而非普通 Broadcast
+	// 📚 学习要点: 为什么 Meta 也用 BroadcastFileData？
+	// Meta 消息虽然不大（通常 < 1KB），但它是传输的起点。
+	// 如果 Meta 被普通 Broadcast 的非阻塞 Send 丢弃（缓冲区满），
+	// 接收方永远不会知道有文件传输开始，后续 chunk 全部无意义。
+	// 使用 BroadcastFileData 确保 Meta 有更高的送达保证。
+	r.BroadcastFileData(client.ID, broadcastData)
+
+	logger.Info("Hub", "file transfer started: client=%s, transferId=%s, room=%s",
+		client.ID, transferId, client.RoomID)
+}
+
+// handleFileComplete 处理客户端发送的传输完成信号（MSG_SEND_FILE_COMPLETE）。
+// 发送方在所有分片发送完毕后调用此函数，服务器清除活跃传输状态并广播完成信号。
+//
+// 📚 学习要点: Complete 信号的作用
+// 接收方需要 Complete 信号来确认「所有 chunk 已发送完毕」：
+// - 接收方可能因为网络延迟还没收到最后几个 chunk
+// - Complete 信号告诉接收方「不会再有新 chunk 了」
+// - 接收方收到 Complete 后检查是否所有 chunk 都已到齐
+// - 如果到齐则重组文件，否则等待剩余 chunk（依赖 TCP 保序）
+//
+// 处理流程：
+//  1. 验证客户端已加入房间
+//  2. 从 data map 提取 transferId
+//  3. 验证 transferId 匹配当前活跃传输
+//  4. 清除 activeTransferID（允许发起新传输）
+//  5. 构建 RelayFileCompleteData 并广播
+func (h *Hub) handleFileComplete(client *Client, data interface{}) {
+	// 1. 验证客户端已加入房间
+	if client.RoomID == "" {
+		h.sendError(client, ErrCodeNotInRoom, "not in a room")
+		return
+	}
+
+	// 2. 解析 data map
+	dataMap, ok := data.(map[string]interface{})
+	if !ok {
+		h.sendError(client, ErrCodeInvalidMessage, "invalid file complete data")
+		return
+	}
+
+	transferId, _ := dataMap["transferId"].(string)
+
+	// 3. 验证 transferId 非空
+	if transferId == "" {
+		h.sendError(client, ErrCodeInvalidMessage, "transferId is required")
+		return
+	}
+
+	// 4. 验证 transferId 匹配当前活跃传输
+	// 📚 学习要点: 为什么需要匹配验证？
+	// 防止以下攻击/错误场景：
+	// - 恶意客户端发送伪造的 Complete 信号，试图中断其他人的传输
+	// - 客户端 bug 导致发送了错误的 transferId
+	// - 网络延迟导致旧传输的 Complete 在新传输开始后才到达
+	// 只有 transferId 与 activeTransferID 完全匹配时才处理。
+	if client.activeTransferID != transferId {
+		h.sendError(client, ErrCodeInvalidMessage, "transferId does not match active transfer")
+		return
+	}
+
+	// 5. 查找房间
+	r := h.roomManager.GetRoom(client.RoomID)
+	if r == nil {
+		client.RoomID = ""
+		client.activeTransferID = ""
+		h.sendError(client, ErrCodeNotInRoom, "room no longer exists")
+		return
+	}
+
+	// 6. 清除活跃传输状态（允许客户端发起新的传输）
+	client.activeTransferID = ""
+
+	// 7. 构建 RelayFileCompleteData 并广播
+	relayMsg := Message{
+		Type: MsgRelayFileComplete,
+		Data: RelayFileCompleteData{
+			SenderID:   client.ID,
+			TransferID: transferId,
+		},
+	}
+	broadcastData, err := msgpack.Marshal(relayMsg)
+	if err != nil {
+		logger.Error("Hub", "failed to marshal RelayFileComplete: %v", err)
+		return
+	}
+
+	// Complete 是轻量控制消息，使用 BroadcastFileData 确保送达
+	// 📚 学习要点: 为什么 Complete 也用 BroadcastFileData？
+	// Complete 信号对接收方至关重要：没有它，接收方不知道传输已结束。
+	// 如果 Complete 被丢弃，接收方会一直等待新 chunk 直到 60s 超时。
+	// 使用 BroadcastFileData 提供更高的送达保证，避免不必要的超时等待。
+	r.BroadcastFileData(client.ID, broadcastData)
+
+	logger.Info("Hub", "file transfer completed: client=%s, transferId=%s, room=%s",
+		client.ID, transferId, client.RoomID)
+}
+
+// handleFileCancel 处理客户端发送的取消传输信号（MSG_SEND_FILE_CANCEL）。
+// 发送方主动取消正在进行的文件传输（如用户点击取消按钮）。
+// 服务器清除活跃传输状态并广播取消信号，接收方据此释放分片缓冲区。
+//
+// 📚 学习要点: Cancel 与 Complete 的对称性
+// Cancel 和 Complete 都是传输的终止信号，处理逻辑几乎相同：
+// 1. 验证 transferId 匹配
+// 2. 清除 activeTransferID
+// 3. 广播给房间成员
+// 区别仅在于接收方的处理：Complete → 重组文件，Cancel → 丢弃缓冲区。
+// 这种对称设计使得代码结构清晰，状态转换可预测。
+//
+// 处理流程：
+//  1. 验证客户端已加入房间
+//  2. 从 data map 提取 transferId
+//  3. 验证 transferId 匹配当前活跃传输
+//  4. 清除 activeTransferID
+//  5. 构建 RelayFileCancelData 并广播
+func (h *Hub) handleFileCancel(client *Client, data interface{}) {
+	// 1. 验证客户端已加入房间
+	if client.RoomID == "" {
+		h.sendError(client, ErrCodeNotInRoom, "not in a room")
+		return
+	}
+
+	// 2. 解析 data map
+	dataMap, ok := data.(map[string]interface{})
+	if !ok {
+		h.sendError(client, ErrCodeInvalidMessage, "invalid file cancel data")
+		return
+	}
+
+	transferId, _ := dataMap["transferId"].(string)
+
+	// 3. 验证 transferId 非空
+	if transferId == "" {
+		h.sendError(client, ErrCodeInvalidMessage, "transferId is required")
+		return
+	}
+
+	// 4. 验证 transferId 匹配当前活跃传输
+	// 📚 学习要点: 幂等性考虑
+	// 如果客户端发送了重复的 Cancel（网络重试），第二次到达时
+	// activeTransferID 已被清除（== ""），不会匹配任何 transferId。
+	// 此时返回错误是正确的行为：告诉客户端「没有需要取消的传输」。
+	if client.activeTransferID != transferId {
+		h.sendError(client, ErrCodeInvalidMessage, "transferId does not match active transfer")
+		return
+	}
+
+	// 5. 查找房间
+	r := h.roomManager.GetRoom(client.RoomID)
+	if r == nil {
+		client.RoomID = ""
+		client.activeTransferID = ""
+		h.sendError(client, ErrCodeNotInRoom, "room no longer exists")
+		return
+	}
+
+	// 6. 清除活跃传输状态
+	client.activeTransferID = ""
+
+	// 7. 构建 RelayFileCancelData 并广播
+	relayMsg := Message{
+		Type: MsgRelayFileCancel,
+		Data: RelayFileCancelData{
+			SenderID:   client.ID,
+			TransferID: transferId,
+		},
+	}
+	broadcastData, err := msgpack.Marshal(relayMsg)
+	if err != nil {
+		logger.Error("Hub", "failed to marshal RelayFileCancel: %v", err)
+		return
+	}
+
+	// Cancel 是轻量控制消息，使用 BroadcastFileData 确保送达
+	r.BroadcastFileData(client.ID, broadcastData)
+
+	logger.Info("Hub", "file transfer cancelled: client=%s, transferId=%s, room=%s",
+		client.ID, transferId, client.RoomID)
 }
 
 // --- 辅助方法 ---
