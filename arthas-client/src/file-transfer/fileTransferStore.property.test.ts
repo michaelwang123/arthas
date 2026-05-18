@@ -21,6 +21,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as fc from 'fast-check';
 import { useFileTransferStore } from './fileTransferStore';
+import { useChatStore } from '../stores/chatStore';
 
 /**
  * 辅助函数：创建指定大小的 mock File 对象。
@@ -44,6 +45,9 @@ function createMockFile(name: string = 'test.bin', size: number = 1024): File {
  * 每个测试用例之间必须重置 store 状态，
  * 否则前一个测试的副作用会影响后续测试结果。
  * Zustand 的 setState 允许直接覆盖整个状态。
+ *
+ * 同时需要设置 chatStore 的 roomKey，因为 processQueue 在没有 roomKey 时
+ * 会立即将传输标记为 failed 并递归处理队列（导致队列永远不会满）。
  */
 function resetStore(): void {
   useFileTransferStore.setState({
@@ -51,6 +55,11 @@ function resetStore(): void {
     sendQueue: [],
     activeSendId: null,
     activeReceiveCount: 0,
+  });
+  // 设置一个 mock roomKey，防止 processQueue 因缺少 roomKey 而立即失败
+  // 这使得 activeSendId 保持为第一个传输的 ID（模拟真实的发送中状态）
+  useChatStore.setState({
+    roomKey: {} as CryptoKey, // mock CryptoKey — processQueue 只检查是否为 null
   });
 }
 

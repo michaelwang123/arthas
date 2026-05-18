@@ -27,6 +27,7 @@
 
 import { useRef, useCallback } from 'react';
 import { useFileTransferStore, getLargeRoomWarning } from '../fileTransferStore';
+import { useTranslation } from '../../i18n';
 
 /**
  * 文件附件按钮 — 📎 图标，点击后打开系统文件选择对话框。
@@ -53,6 +54,7 @@ import { useFileTransferStore, getLargeRoomWarning } from '../fileTransferStore'
  * ```
  */
 export function FileAttachButton() {
+  const { t } = useTranslation();
   /**
    * 📚 学习要点: useRef 持有 DOM 引用
    * 使用 useRef 获取隐藏 input 元素的引用，
@@ -128,8 +130,8 @@ export function FileAttachButton() {
       <button
         type="button"
         onClick={handleClick}
-        aria-label="添加附件"
-        title="发送文件"
+        aria-label={t('file.attach')}
+        title={t('file.send')}
         className="min-h-[44px] min-w-[44px] flex items-center justify-center text-xl text-gray-400 hover:text-white focus:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 focus:ring-offset-gray-800 rounded-lg transition-colors"
       >
         📎

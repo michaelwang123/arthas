@@ -3,11 +3,13 @@ import { useChatStore } from '../stores/chatStore';
 import { EmojiPicker } from './EmojiPicker';
 import { FileAttachButton } from '../file-transfer/components/FileAttachButton';
 import { useFileTransferStore } from '../file-transfer/fileTransferStore';
+import { useTranslation } from '../i18n';
 
 const MAX_LENGTH = 500;
 const SHOW_COUNT_THRESHOLD = 400;
 
 export function MessageInput() {
+  const { t } = useTranslation();
   const [text, setText] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
   const sendMessage = useChatStore((s) => s.sendMessage);
@@ -153,7 +155,7 @@ export function MessageInput() {
           </div>
           <button
             onClick={clearReply}
-            aria-label="取消回复"
+            aria-label={t('message.cancelReply')}
             className="text-gray-500 hover:text-white transition-colors shrink-0 w-6 h-6 flex items-center justify-center"
           >
             ✕
@@ -167,7 +169,7 @@ export function MessageInput() {
         <button
           ref={emojiBtnRef}
           onClick={() => setEmojiOpen((v) => !v)}
-          aria-label="选择表情"
+          aria-label={t('emoji.select')}
           className="min-h-[44px] min-w-[44px] flex items-center justify-center text-xl text-gray-400 hover:text-white transition-colors"
         >
           😊
@@ -182,7 +184,7 @@ export function MessageInput() {
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={replyTo ? '输入回复...' : '输入消息...'}
+            placeholder={replyTo ? t('chat.input.replyPlaceholder') : t('chat.input.placeholder')}
             maxLength={MAX_LENGTH}
             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 transition-colors"
           />
@@ -203,7 +205,7 @@ export function MessageInput() {
           disabled={!canSend}
           className="min-h-[44px] min-w-[44px] px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 rounded-lg text-white font-medium transition-colors"
         >
-          发送
+          {t('chat.input.send')}
         </button>
       </div>
 

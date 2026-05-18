@@ -61,6 +61,8 @@ import {
   handleSenderLeft as receiverHandleSenderLeft,
 } from './receiver';
 import { useChatStore } from '../stores/chatStore';
+import { useI18nStore } from '../i18n/store';
+import { translate } from '../i18n/translate';
 
 // ============================================================================
 // 常量定义
@@ -759,7 +761,8 @@ export function getLargeRoomWarning(): string | null {
   // 2. 警告文案中的 N 也应该是用户看到的总人数（一致性）
   // 3. 实际接收方数量 = members.length - 1，但警告是给用户看的，用总数更直观
   if (members.length > LARGE_ROOM_THRESHOLD) {
-    return `当前房间有 ${members.length} 位成员，文件将发送给所有人，可能较慢`;
+    const locale = useI18nStore.getState().locale;
+    return translate(locale, 'file.largeRoomWarning', { count: members.length });
   }
 
   return null;

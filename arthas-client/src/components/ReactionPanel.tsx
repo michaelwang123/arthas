@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react'
+import { useTranslation } from '../i18n'
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉']
 
@@ -18,6 +19,7 @@ interface ReactionPanelProps {
  * - hover 放大效果（尊重 prefers-reduced-motion）
  */
 export function ReactionPanel({ onReact, onClose, triggerRef, position }: ReactionPanelProps) {
+  const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export function ReactionPanel({ onReact, onClose, triggerRef, position }: Reacti
     <div
       ref={panelRef}
       role="menu"
-      aria-label="添加反应"
+      aria-label={t('message.addReaction')}
       className={`absolute ${posClass} left-0 flex gap-1 p-1.5 bg-gray-700 rounded-full shadow-lg border border-gray-600 z-50`}
     >
       {QUICK_REACTIONS.map((emoji) => (

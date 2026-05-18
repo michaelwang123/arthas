@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useChatStore } from '../stores/chatStore'
+import { useTranslation } from '../i18n'
 
 const GRACE_MS = 1500
 const RECONNECTED_MS = 2000
@@ -15,6 +16,7 @@ type BannerState = 'grace' | 'hidden' | 'disconnected' | 'reconnected'
  * - 使用 connectedRef 同步追踪最新值，避免 setTimeout 闭包陈旧问题
  */
 export function ConnectionBanner() {
+  const { t } = useTranslation();
   const connected = useChatStore((s) => s.connected)
   const [state, setState] = useState<BannerState>('grace')
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -67,12 +69,12 @@ export function ConnectionBanner() {
     >
       {state === 'disconnected' && (
         <div className="h-10 flex items-center justify-center bg-amber-600 text-white text-sm font-medium animate-pulse-banner motion-reduce:animate-none">
-          连接中断，正在重连...
+          {t('connection.reconnecting')}
         </div>
       )}
       {state === 'reconnected' && (
         <div className="h-10 flex items-center justify-center bg-green-600 text-white text-sm font-medium">
-          ✓ 已重连
+          {t('connection.reconnected')}
         </div>
       )}
     </div>

@@ -9,8 +9,11 @@ import { TypingIndicator } from '../components/TypingIndicator';
 import { ConnectionBanner } from '../components/ConnectionBanner';
 import { DropZone } from '../file-transfer/components/DropZone';
 import { initAudio, requestNotificationPermission } from '../utils/notification';
+import { useTranslation } from '../i18n';
+import { LanguageSwitcher } from '../i18n/components/LanguageSwitcher';
 
 export function ChatRoom() {
+  const { t } = useTranslation();
   const roomId = useChatStore((s) => s.roomId);
   const shareCode = useChatStore((s) => s.shareCode);
   const members = useChatStore((s) => s.members);
@@ -49,17 +52,21 @@ export function ChatRoom() {
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 bg-gray-800 border-b border-gray-700 shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold">房间</span>
+          <span className="text-lg font-semibold">{t('chat.header.room')}</span>
           <span className="text-sm text-gray-400 truncate max-w-[120px] sm:max-w-none">{roomId}</span>
           <span className="text-green-400" title={hasPassword ? '密码保护' : '端到端加密'}>{hasPassword ? '🔐' : '🔒'}</span>
-          {ephemeral > 0 && <span className="text-amber-400" title={`消息 ${ephemeral}秒后消失`}>⏱️</span>}
+          {ephemeral > 0 && <span className="text-amber-400" title={`${t('chat.header.room')} - ${ephemeral}s`}>⏱️</span>}
         </div>
         <div className="flex items-center gap-2">
+          {/* Language switcher (desktop only) */}
+          <div className="hidden md:flex">
+            <LanguageSwitcher />
+          </div>
           {/* Mute button */}
           <button
             onClick={toggleMute}
-            aria-label={muted ? '取消静音' : '静音'}
-            title={muted ? '取消静音' : '静音'}
+            aria-label={muted ? t('chat.unmute') : t('chat.mute')}
+            title={muted ? t('chat.unmute') : t('chat.mute')}
             className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-white transition-colors"
           >
             {muted ? '🔕' : '🔔'}
@@ -68,7 +75,7 @@ export function ChatRoom() {
           <button
             ref={memberBtnRef}
             onClick={() => setDrawerOpen(true)}
-            aria-label="打开成员列表"
+            aria-label={t('member.open')}
             className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-white transition-colors md:hidden"
           >
             👥 {members.length}
@@ -78,7 +85,7 @@ export function ChatRoom() {
             onClick={leaveRoom}
             className="min-h-[44px] px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 rounded-lg transition-colors"
           >
-            离开房间
+            {t('chat.header.leave')}
           </button>
         </div>
       </header>

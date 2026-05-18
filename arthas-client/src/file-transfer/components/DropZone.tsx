@@ -30,6 +30,7 @@
 
 import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useFileTransferStore, getLargeRoomWarning } from '../fileTransferStore';
+import { useTranslation } from '../../i18n';
 
 // ============================================================================
 // 触摸设备检测
@@ -79,6 +80,7 @@ interface DropZoneProps {
  * @see requirements.md — Requirement 1.7, 12.7
  */
 export function DropZone({ children }: DropZoneProps) {
+  const { t } = useTranslation();
   /**
    * 📚 学习要点: dragCounter 解决子元素边界问题
    * 当拖拽物经过子元素边界时，会触发 dragleave + dragenter 事件对。
@@ -200,15 +202,15 @@ export function DropZone({ children }: DropZoneProps) {
       {isDragOver && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center bg-indigo-900/70 border-2 border-dashed border-indigo-400 rounded-lg backdrop-blur-sm"
-          aria-label="拖放文件到此处上传"
+          aria-label={t('file.drop.title')}
         >
           <div className="text-center">
             <span className="text-4xl block mb-2">📁</span>
             <p className="text-lg font-medium text-indigo-200">
-              拖放文件到此处
+              {t('file.drop.title')}
             </p>
             <p className="text-sm text-indigo-300/70 mt-1">
-              支持所有文件类型，单文件最大 5MB
+              {t('file.drop.subtitle')}
             </p>
           </div>
         </div>

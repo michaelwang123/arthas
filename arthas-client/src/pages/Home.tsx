@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import { decodeShareKey } from '../crypto/shareKey';
+import { useTranslation } from '../i18n';
+import { LanguageSwitcher } from '../i18n/components/LanguageSwitcher';
 
 /**
  * Home page — create or join an E2EE chat room.
  * Supports hash routing: /#/join/{shareCode} auto-fills the share code input.
  */
 export function Home() {
+  const { t } = useTranslation();
   const [nickname, setNickname] = useState('');
   const [shareCode, setShareCode] = useState('');
   const connected = useChatStore((s) => s.connected);
@@ -66,12 +69,17 @@ export function Home() {
 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-gray-800 rounded-2xl shadow-2xl p-8 space-y-6">
+      <div className="w-full max-w-md bg-gray-800 rounded-2xl shadow-2xl p-8 space-y-6 relative">
+        {/* Language Switcher — top right */}
+        <div className="absolute top-4 right-4">
+          <LanguageSwitcher />
+        </div>
+
         {/* Title / Logo */}
         <div className="text-center space-y-2">
           <div className="text-4xl">🔒</div>
           <h1 className="text-2xl font-bold text-white">Arthas Chat</h1>
-          <p className="text-sm text-gray-400">端到端加密 · 临时聊天室</p>
+          <p className="text-sm text-gray-400">{t('home.subtitle')}</p>
         </div>
 
         {/* Connection status */}
@@ -82,14 +90,14 @@ export function Home() {
             }`}
           />
           <span className={connected ? 'text-green-400' : 'text-red-400'}>
-            {connected ? '已连接' : '未连接'}
+            {connected ? t('home.status.connected') : t('home.status.disconnected')}
           </span>
         </div>
 
         {/* Nickname input */}
         <div className="space-y-2">
           <label htmlFor="nickname" className="block text-sm text-gray-300">
-            昵称
+            {t('home.nickname')}
           </label>
           <input
             id="nickname"
@@ -97,11 +105,11 @@ export function Home() {
             maxLength={20}
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
-            placeholder="输入昵称（1-20 字符）"
+            placeholder={t('home.nickname.placeholder')}
             className="w-full px-4 py-2.5 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none placeholder-gray-500 transition-colors"
           />
           {nickname.length > 0 && !nicknameValid && (
-            <p className="text-xs text-red-400">昵称需要 1-20 个字符</p>
+            <p className="text-xs text-red-400">{t('home.nickname.error')}</p>
           )}
         </div>
 
@@ -114,7 +122,7 @@ export function Home() {
               onClick={() => setShowPassword(true)}
               className="text-xs text-gray-400 hover:text-indigo-400 transition-colors"
             >
-              🔐 设置密码
+              {t('home.password.set')}
             </button>
           ) : (
             <div className="space-y-1">
@@ -123,11 +131,11 @@ export function Home() {
                 maxLength={20}
                 value={createPassword}
                 onChange={(e) => setCreatePassword(e.target.value)}
-                placeholder="房间密码（4-20字符）"
+                placeholder={t('home.password.placeholder')}
                 className="w-full px-4 py-2.5 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none placeholder-gray-500 transition-colors"
               />
               {createPassword.length > 0 && !passwordValid && (
-                <p className="text-xs text-red-400">密码需要 4-20 个字符</p>
+                <p className="text-xs text-red-400">{t('home.password.error')}</p>
               )}
             </div>
           )}
@@ -142,7 +150,7 @@ export function Home() {
               className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-indigo-500 focus:ring-indigo-500"
             />
             <label htmlFor="ephemeral" className="text-sm text-gray-300">
-              ⏱️ 阅后即焚
+              {t('home.ephemeral')}
             </label>
             {ephemeralEnabled && (
               <select
@@ -150,10 +158,10 @@ export function Home() {
                 onChange={(e) => setEphemeralTime(Number(e.target.value))}
                 className="ml-auto px-2 py-1 bg-gray-700 text-white text-sm rounded border border-gray-600 focus:border-indigo-500 outline-none"
               >
-                <option value={10}>10秒</option>
-                <option value={30}>30秒</option>
-                <option value={60}>60秒</option>
-                <option value={300}>5分钟</option>
+                <option value={10}>{t('home.ephemeral.10s')}</option>
+                <option value={30}>{t('home.ephemeral.30s')}</option>
+                <option value={60}>{t('home.ephemeral.60s')}</option>
+                <option value={300}>{t('home.ephemeral.5min')}</option>
               </select>
             )}
           </div>
@@ -164,35 +172,35 @@ export function Home() {
             disabled={!canCreate}
             className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
           >
-            创建房间
+            {t('home.create')}
           </button>
         </div>
 
         {/* Divider */}
         <div className="flex items-center gap-3">
           <div className="flex-1 h-px bg-gray-600" />
-          <span className="text-sm text-gray-500">或</span>
+          <span className="text-sm text-gray-500">{t('home.divider')}</span>
           <div className="flex-1 h-px bg-gray-600" />
         </div>
 
         {/* Join Room */}
         <div className="space-y-3">
           <label htmlFor="share-code" className="block text-sm text-gray-300">
-            加入房间
+            {t('home.join.label')}
           </label>
           <input
             id="share-code"
             type="text"
             value={shareCode}
             onChange={(e) => setShareCode(e.target.value)}
-            placeholder="输入分享码"
+            placeholder={t('home.join.placeholder')}
             className="w-full px-4 py-2.5 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none placeholder-gray-500 transition-colors"
           />
 
           {/* Ephemeral hint from share code */}
           {ephemeralHint > 0 && (
             <p className="text-xs text-amber-400">
-              ⏱️ 此房间为阅后即焚模式（{ephemeralHint}秒）
+              {t('home.ephemeral.hint', { seconds: ephemeralHint })}
             </p>
           )}
 
@@ -201,7 +209,7 @@ export function Home() {
             type="password"
             value={joinPassword}
             onChange={(e) => setJoinPassword(e.target.value)}
-            placeholder="房间密码（如有）"
+            placeholder={t('home.join.password')}
             className="w-full px-4 py-2.5 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none placeholder-gray-500 transition-colors"
           />
 
@@ -210,7 +218,7 @@ export function Home() {
             disabled={!canJoin}
             className="w-full py-3 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
           >
-            加入
+            {t('home.join.button')}
           </button>
         </div>
       </div>
