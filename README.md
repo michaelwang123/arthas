@@ -19,6 +19,7 @@
 | 序列化 | MessagePack | 二进制编码，比 JSON 省 30-50% 带宽 |
 | 后端 | Go 1.22 + gorilla/websocket | goroutine 高并发，纯消息中转 |
 | 部署 | Vercel + HF Spaces (Docker) | 前后端分离，零成本起步 |
+| 自托管 | Go embed + Caddy + Docker | 单二进制或 Docker Compose，一键部署 |
 | 保活 | Cron-job.org | 每 10 分钟 ping 后端，防 HF Spaces 休眠 |
 
 ### 网络策略
@@ -39,6 +40,7 @@
 - 💬 **消息回复 & 反应** — 引用回复 + emoji 反应，数据加密传输
 - 🔐 **房间密码** — 可选密码保护，防止分享码泄露后被陌生人加入
 - 🚫 **无需注册** — 无账号体系，打开即用
+- 🏠 **自托管部署** — 单二进制零依赖，或 Docker Compose 自动 HTTPS
 
 ---
 
@@ -95,10 +97,19 @@ arthas/
 │       ├── network/        # WebSocket + MessagePack
 │       └── stores/         # Zustand 状态
 ├── arthas-server/          # 后端 (纯中转)
-│   ├── cmd/server/         # 入口
+│   ├── cmd/server/         # 入口（CLI flags: --port, --version）
 │   └── internal/
 │       ├── room/           # 房间管理 + 转发
-│       └── network/        # Hub + Client + 协议
+│       ├── network/        # Hub + Client + 协议
+│       └── static/         # 内嵌前端静态文件服务（SPA fallback）
+├── deploy/                 # 自托管部署基础设施
+│   ├── Dockerfile          # 三阶段构建（前端→Go→Alpine）
+│   ├── docker-compose.yml  # Caddy + Backend 编排
+│   ├── deploy.sh           # 一键部署脚本
+│   ├── Caddyfile.*.example # Caddy 配置模板
+│   └── .env.example        # 环境变量模板
+├── official_doc/           # 用户文档
+│   └── self-hosting.md     # 自托管部署指南
 └── docs/
     ├── technical_architecture.md
     └── roadmap.md
@@ -159,4 +170,4 @@ arthas/
 
 ## 当前状态
 
-Phase 6 差异化功能全部完成 — 加密聊天 + 文件分享 + 回复反应 + 密码保护 + 阅后即焚
+Phase 6 差异化功能全部完成 + Phase 7.4 自托管部署完成 — 加密聊天 + 文件分享 + 回复反应 + 密码保护 + 阅后即焚 + 一键自托管
