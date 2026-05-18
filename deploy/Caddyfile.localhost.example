@@ -1,0 +1,73 @@
+# ============================================================================
+# Arthas Self-Hosted — Localhost Caddyfile (HTTP-only)
+# ============================================================================
+#
+# 📚 学习要点: 这是本地开发/测试环境 Caddyfile 的参考模板
+# 实际运行时使用的 Caddyfile 由 deploy.sh --local 自动生成（不提交到 Git）。
+# 此文件仅作为文档参考，帮助用户理解 localhost 模式的配置逻辑。
+#
+# 使用方式:
+#   1. 运行 ./deploy.sh --local，脚本会自动生成 HTTP-only 的 Caddyfile
+#   2. 如需自定义，可复制此文件为 Caddyfile 并修改
+#
+# ============================================================================
+
+# 📚 学习要点: 为什么用 ":80" 而不是 "localhost"？
+#
+# 这是一个关键的 Caddy 行为差异：
+#
+# ❌ "localhost" 作为站点地址时，Caddy 会：
+#    1. 自动生成本地 CA（Certificate Authority）
+#    2. 签发自签名 HTTPS 证书
+#    3. 监听 443 端口并启用 TLS
+#    4. 将 HTTP 重定向到 HTTPS
+#    这会导致浏览器显示"不安全"警告，增加不必要的复杂性。
+#
+# ✅ ":80" 作为站点地址时，Caddy 会：
+#    1. 仅监听 80 端口
+#    2. 使用纯 HTTP（不启用任何 TLS）
+#    3. 不生成证书、不重定向
+#    这正是本地开发所需的行为——简单、直接、无证书问题。
+#
+# 总结：Caddy 根据站点地址的格式决定是否启用 HTTPS：
+# - 域名（localhost, example.com）→ 自动 HTTPS
+# - 端口号（:80, :8080）→ 纯 HTTP
+# - IP 地址（127.0.0.1）→ 纯 HTTP
+#
+# 参考: https://caddyserver.com/docs/automatic-https
+#
+:80 {
+    # 📚 学习要点: reverse_proxy 与 WebSocket
+    # Caddy 的 reverse_proxy 自动处理 WebSocket 协议升级。
+    # 当客户端发送 Upgrade: websocket 请求时，Caddy 会：
+    # 1. 识别这是一个 WebSocket 升级请求
+    # 2. 建立到后端的 WebSocket 连接
+    # 3. 双向透传数据帧（不做任何修改）
+    # 不需要像 Nginx 那样手动添加：
+    #   proxy_set_header Upgrade $http_upgrade;
+    #   proxy_set_header Connection "upgrade";
+    # 这是 Caddy 相比 Nginx 的一个显著优势——更少的配置，更少的出错机会。
+    #
+    # "backend" 是 docker-compose.yml 中定义的服务名。
+    # Docker 内置 DNS 会将 "backend" 解析为对应容器的内部 IP。
+    # :8080 是 Go 后端在容器内监听的端口。
+    reverse_proxy backend:8080
+
+    # 📚 学习要点: 安全响应头（Security Headers）
+    # 即使是 localhost 开发环境，也建议启用安全头：
+    # 1. 保持开发环境与生产环境行为一致，避免"在我机器上能跑"的问题
+    # 2. 提前发现因安全头导致的兼容性问题（如 iframe 嵌入被阻止）
+    header {
+        # 阻止浏览器 MIME 类型嗅探，防止内容类型混淆攻击
+        X-Content-Type-Options nosniff
+
+        # 禁止页面被 iframe 嵌入，防止点击劫持
+        X-Frame-Options DENY
+
+        # 不向外部站点发送 Referer 信息，保护隐私
+        Referrer-Policy no-referrer
+
+        # 移除 Server 头，隐藏服务器软件信息
+        -Server
+    }
+}

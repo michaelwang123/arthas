@@ -1,0 +1,99 @@
+# ============================================================================
+# Arthas Self-Hosted — Docker Image Release Workflow
+# ============================================================================
+# 📚 学习要点: GitHub Actions CI/CD 自动化发布
+# 此工作流在推送语义化版本标签时自动构建并发布多架构 Docker 镜像。
+# 使用 GitHub Container Registry (ghcr.io) 作为镜像仓库，
+# 利用 GITHUB_TOKEN 自动认证，无需额外配置 secrets。
+# ============================================================================
+
+name: Release Docker Image
+
+# 📚 学习要点: 触发条件 — 仅版本标签
+# 使用 glob 模式 'v*.*.*' 匹配语义化版本标签（如 v1.0.0, v2.3.1）。
+# 这确保只有正式发布才触发构建，日常 push 和 PR 不会浪费 CI 资源。
+# 对应 NFR-8: "GitHub Actions workflow SHALL be triggered only on version tags"
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    # 📚 学习要点: 最小权限原则
+    # contents:read — 允许 checkout 代码
+    # packages:write — 允许推送镜像到 ghcr.io
+    # 不授予多余权限，降低 token 泄露时的风险面。
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 📚 学习要点: QEMU 用户态模拟
+      # QEMU 允许在 x86_64 主机上模拟 ARM64 指令集。
+      # 这使得单个 CI runner 可以构建多架构镜像，
+      # 无需昂贵的原生 ARM64 runner。
+      # 代价是 ARM64 构建较慢（~15-20 分钟），但对于发布频率较低的项目是合理的 tradeoff。
+      - name: Set up QEMU for multi-arch builds
+        uses: docker/setup-qemu-action@v3
+
+      # 📚 学习要点: Docker Buildx
+      # Buildx 是 Docker 的扩展构建工具，支持：
+      # - 多平台并行构建（linux/amd64 + linux/arm64）
+      # - 高级缓存策略（GitHub Actions cache）
+      # - 构建结果直接推送到远程仓库（无需本地 docker load）
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 📚 学习要点: ghcr.io 认证
+      # GitHub Container Registry 使用 GITHUB_TOKEN 自动认证。
+      # github.actor 是触发工作流的用户名，secrets.GITHUB_TOKEN 由 GitHub 自动注入。
+      # 无需手动创建 Personal Access Token 或配置 repository secrets。
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 📚 学习要点: Docker Metadata Action — 自动标签管理
+      # metadata-action 从 git 标签自动生成 Docker 镜像标签：
+      # - type=semver,pattern={{version}}: v1.2.3 → 1.2.3
+      # - type=raw,value=latest: 始终附加 latest 标签
+      # 这确保用户可以通过精确版本号或 latest 拉取镜像。
+      - name: Extract metadata (tags, labels)
+        uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/arthas
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+
+      # 📚 学习要点: 多架构构建与缓存策略
+      # platforms: linux/amd64,linux/arm64 — 覆盖 x86 服务器、Raspberry Pi、Apple Silicon
+      # cache-from/cache-to: type=gha — 使用 GitHub Actions 内置缓存存储层。
+      #   每次构建的中间层被缓存，后续构建只重建变更的层，大幅减少构建时间。
+      #   mode=max 缓存所有层（包括中间层），而非仅最终层。
+      #
+      # ⚠️ 性能说明: ARM64 通过 QEMU 模拟构建 Go 代码较慢（约 15-20 分钟）。
+      # 这是可接受的 tradeoff：简单的 CI 配置 vs 原生 ARM64 runner 的额外成本。
+      # 如果构建时间成为瓶颈，可考虑：
+      # 1. 使用 GitHub 的 ARM64 runner (larger runners, 需付费)
+      # 2. 将 ARM64 构建拆分为独立 job 并行执行
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,30 @@
+# 📚 学习要点: .dockerignore 减少构建上下文
+# Docker 构建时会将整个 context 目录发送给 Docker daemon。
+# 排除不需要的大目录可以将上下文从 ~300MB 减少到 ~5MB，
+# 大幅加速构建启动速度（尤其是远程 Docker daemon 场景）。
+
+# Dependencies (will be installed fresh in container)
+**/node_modules
+
+# Version control
+**/.git
+**/.gitignore
+
+# Build artifacts (will be built fresh in container)
+**/dist
+arthas-client/dist
+
+# Environment files (may contain secrets)
+**/.env
+**/.env.*
+!**/.env.example
+
+# IDE and OS files
+**/.vscode
+**/.idea
+**/.DS_Store
+
+# Documentation (not needed for build)
+docs/
+official_doc/
+.kiro/

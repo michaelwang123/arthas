@@ -1,0 +1,127 @@
+# ============================================================================
+# Arthas Self-Hosted — Docker Compose Stack
+# ============================================================================
+# 📚 学習要点: Docker Compose 服务编排
+# 此文件定义了 Arthas 自托管 Tier 2 部署的完整服务拓扑：
+# - backend: Go 服务器（嵌入前端静态文件 + WebSocket 中转）
+# - caddy: HTTPS 终止 + 反向代理（自动 Let's Encrypt 证书）
+#
+# 架构关键点：
+# 1. Go 服务器同时服务前端和 WebSocket（无需共享 volume）
+# 2. Caddy 只做 TLS 终止和代理转发，不直接服务静态文件
+# 3. 只有 Caddy 暴露端口到宿主机，backend 完全隔离在内部网络
+# 4. 所有配置通过 .env 文件注入（同目录下的 deploy/.env）
+# ============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # Backend Service — Go WebSocket 中转 + 嵌入式前端
+  # --------------------------------------------------------------------------
+  # 📚 学习要点: 容器安全最佳实践
+  # - read_only: true — 根文件系统只读，防止容器内写入（减少攻击面）
+  # - 不暴露端口到宿主机 — 只通过内部网络 arthas-net 与 Caddy 通信
+  # - restart: unless-stopped — 崩溃自动重启，但手动 stop 后不会自启
+  backend:
+    image: ghcr.io/${GITHUB_OWNER}/arthas:${ARTHAS_VERSION:-latest}
+    container_name: arthas-backend
+    environment:
+      - PORT=8080
+      # 📚 学习要点: CORS 来源控制
+      # ALLOWED_ORIGINS 限制哪些域名可以建立 WebSocket 连接。
+      # 默认值 https://${DOMAIN} 确保只有合法前端能连接后端。
+      # localhost 模式下 deploy.sh 会在 .env 中设置 ALLOWED_ORIGINS=*
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://${DOMAIN}}
+    networks:
+      - arthas-net
+    read_only: true
+    restart: unless-stopped
+    # 📚 学习要点: Docker 健康检查机制
+    # Docker 通过定期执行 test 命令判断容器是否健康。
+    # 连续 retries 次失败后标记为 unhealthy，配合 restart 策略自动恢复。
+    # interval=30s 平衡了检测速度和资源消耗（每分钟仅 2 次探针）。
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    # 📚 学习要点: 日志轮转防止磁盘耗尽
+    # 长期运行的容器如果不限制日志大小，可能填满磁盘。
+    # max-size: 10m + max-file: 3 = 最多占用 30MB 磁盘空间。
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --------------------------------------------------------------------------
+  # Caddy Proxy — HTTPS 终止 + 反向代理
+  # --------------------------------------------------------------------------
+  # 📚 学习要点: 为什么选择 Caddy 而非 Nginx/Traefik？
+  # 1. 自动 HTTPS — 零配置获取 Let's Encrypt 证书（Nginx 需要 certbot）
+  # 2. 配置极简 — 一行 reverse_proxy 即可完成反向代理
+  # 3. 自动续期 — 证书到期前自动更新，无需 cron job
+  # 4. WebSocket 透传 — 自动处理 Upgrade 头，无需额外配置
+  caddy:
+    image: caddy:2-alpine
+    container_name: arthas-caddy
+    # 📚 学习要点: 端口映射策略
+    # 只有 Caddy 暴露端口到宿主机：
+    # - 80: HTTP（用于 ACME HTTP-01 验证 + HTTPS 重定向）
+    # - 443: HTTPS（生产流量入口）
+    # backend 不暴露任何端口，完全隔离在 Docker 网络内。
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # 📚 学习要点: Caddy 环境变量注入
+      # Caddy 的 Caddyfile 使用 {$DOMAIN} 语法读取进程环境变量。
+      # Docker Compose 的 .env 文件变量不会自动传递给容器进程，
+      # 必须在 environment 中显式声明才能在 Caddyfile 中使用。
+      - DOMAIN=${DOMAIN}
+      - EMAIL=${EMAIL:-}
+    volumes:
+      # 📚 学习要点: Volume 挂载策略
+      # - Caddyfile 以只读模式挂载（:ro），防止容器意外修改配置
+      # - caddy_data: 存储 TLS 证书和 ACME 账户信息（必须持久化！）
+      # - caddy_config: 存储 Caddy 运行时配置（JSON 格式的自动配置）
+      # 使用 named volumes 而非 bind mounts，确保跨主机迁移时数据完整。
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - arthas-net
+    # 📚 学习要点: depends_on 与 service_healthy
+    # condition: service_healthy 确保 Caddy 只在 backend 健康后启动。
+    # 这避免了 Caddy 启动时 backend 尚未就绪导致的 502 错误。
+    # 注意：这只影响首次启动顺序，运行时 backend 崩溃不会停止 Caddy。
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# 📚 学习要点: 自定义 Bridge 网络
+# 默认的 bridge 网络不支持 DNS 服务发现（容器间只能用 IP 通信）。
+# 自定义网络启用 Docker 内置 DNS，允许用服务名（如 "backend"）作为主机名。
+# 这就是 Caddyfile 中 reverse_proxy backend:8080 能工作的原因。
+networks:
+  arthas-net:
+    driver: bridge
+
+# 📚 学习要点: Named Volumes 持久化
+# Docker named volumes 的生命周期独立于容器：
+# - docker compose down 不会删除 volumes（需要 --volumes 标志）
+# - 证书数据在容器重建后仍然保留，避免频繁向 Let's Encrypt 请求新证书
+# - Let's Encrypt 有速率限制（每周 5 张证书），丢失证书可能导致暂时无法续期
+volumes:
+  caddy_data:
+  caddy_config:

@@ -25,6 +25,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -33,6 +35,7 @@ import (
 
 	"github.com/arthas/arthas-server/internal/logger"
 	"github.com/arthas/arthas-server/internal/network"
+	"github.com/arthas/arthas-server/internal/static"
 )
 
 // Version 是服务器版本号，可在编译时通过 ldflags 注入。
@@ -51,7 +54,49 @@ import (
 // -s: 去除符号表（减小二进制体积）
 // -w: 去除 DWARF 调试信息（进一步减小体积）
 // -X: 设置包级变量的值
-var Version = "1.0.0"
+var Version = "dev"
+
+// resolvePort 根据三层优先级解析服务器监听端口。
+//
+// 📚 学习要点: 配置优先级模式的可测试性
+// 将配置解析逻辑提取为独立函数有两个好处：
+// 1. 可测试性 — 可以直接传入不同参数组合验证优先级逻辑
+// 2. 单一职责 — main() 负责编排，resolvePort 负责端口决策
+//
+// 优先级：CLI flag > 环境变量 > 默认值
+// flagVal: --port 命令行参数值（0 表示未设置，sentinel value）
+// envVal: PORT 环境变量的值（空字符串表示未设置）
+// defaultVal: 默认端口 "8080"
+func resolvePort(flagVal int, envVal string, defaultVal string) string {
+	if flagVal != 0 {
+		return fmt.Sprintf("%d", flagVal)
+	}
+	if envVal != "" {
+		return envVal
+	}
+	return defaultVal
+}
+
+// resolveOrigins 根据三层优先级解析允许的 WebSocket 来源。
+//
+// 📚 学习要点: Origins 配置的安全含义
+// ALLOWED_ORIGINS 控制哪些网页可以建立 WebSocket 连接：
+// - 空字符串 → 允许所有来源（适合本地开发和 Tier 1 单二进制模式）
+// - "https://chat.example.com" → 仅允许指定域名（生产环境安全配置）
+//
+// 优先级：CLI flag > 环境变量 > 默认值（空字符串）
+// flagVal: --allowed-origins 命令行参数值（空字符串表示未设置）
+// envVal: ALLOWED_ORIGINS 环境变量的值
+// defaultVal: 默认值（空字符串，表示允许所有来源）
+func resolveOrigins(flagVal string, envVal string, defaultVal string) string {
+	if flagVal != "" {
+		return flagVal
+	}
+	if envVal != "" {
+		return envVal
+	}
+	return defaultVal
+}
 
 // main 是服务器入口函数，负责初始化所有组件并启动 HTTP 服务器。
 //
@@ -65,6 +110,30 @@ var Version = "1.0.0"
 // 7. 输出启动日志
 // 8. 阻塞等待（Task 8.2 将替换为信号处理）
 func main() {
+	// ─── Step 0: 解析命令行参数 ─────────────────────────────────────────────
+	//
+	// 📚 学习要点: flag 包与配置优先级
+	// Go 标准库 flag 包提供简洁的命令行参数解析。
+	// 自托管部署支持三层配置优先级：CLI flag > 环境变量 > 默认值。
+	// 这遵循 12-Factor App 原则，同时为单二进制用户提供便捷的 CLI 体验：
+	//   - Docker 部署：通过环境变量配置（docker-compose.yml 中设置）
+	//   - 单二进制部署：通过 --port 和 --allowed-origins 快速启动
+	//   - 两者都不设置：使用安全的默认值（8080 端口，允许所有来源）
+	//
+	// 📚 学习要点: --version flag 用于运维确认部署版本
+	// 单二进制模式下，用户可能想快速确认当前运行的版本号。
+	// `./arthas-server --version` 输出版本后立即退出，不启动服务器。
+	// 版本号通过 ldflags 在编译时注入（见 Version 变量的注释）。
+	versionFlag := flag.Bool("version", false, "Print version and exit")
+	portFlag := flag.Int("port", 0, "HTTP listen port (default: $PORT or 8080)")
+	originsFlag := flag.String("allowed-origins", "", "Comma-separated allowed origins (default: $ALLOWED_ORIGINS or *)")
+	flag.Parse()
+
+	if *versionFlag {
+		fmt.Println(Version)
+		os.Exit(0)
+	}
+
 	// ─── Step 1: 初始化结构化日志 ───────────────────────────────────────────
 	//
 	// 📚 学习要点: 日志初始化必须在所有 goroutine 启动之前完成。
@@ -81,10 +150,14 @@ func main() {
 	// 在此期间任何 Origin 的连接都会被接受（安全漏洞）。
 	// 正确做法：先完成所有安全配置，再开始监听端口。
 	//
-	// ALLOWED_ORIGINS 环境变量格式：逗号分隔的域名列表
-	// 示例：ALLOWED_ORIGINS=https://arthas.vercel.app,https://arthas.dev
-	// 空值或未设置：允许所有来源（开发模式，向后兼容）
-	network.InitOriginControl(os.Getenv("ALLOWED_ORIGINS"))
+	// 📚 学习要点: Origins 配置优先级 — flag > env > default
+	// 与端口类似，origins 也支持三层优先级：
+	//   - --allowed-origins flag：CLI 用户直接指定
+	//   - ALLOWED_ORIGINS 环境变量：Docker 部署通过 compose 注入
+	//   - 默认值（空字符串传给 InitOriginControl）：允许所有来源
+	// 空字符串传给 InitOriginControl 时，它会允许所有 Origin（向后兼容）。
+	origins := resolveOrigins(*originsFlag, os.Getenv("ALLOWED_ORIGINS"), "")
+	network.InitOriginControl(origins)
 
 	// ─── Step 3: 创建 Hub 并启动事件循环 ────────────────────────────────────
 	//
@@ -129,22 +202,31 @@ func main() {
 		network.ServeWs(hub, w, r)
 	})
 
-	// ─── Step 5: 读取 PORT 环境变量 ─────────────────────────────────────────
+	// / — 前端静态文件服务（SPA fallback）
 	//
-	// 📚 学习要点: 环境变量 vs 命令行参数 vs 配置文件
-	// 三种配置方式各有适用场景：
-	// - 环境变量：适合容器化部署（Docker/K8s 原生支持），12-Factor App 推荐
-	// - 命令行参数：适合 CLI 工具，支持 --help 自文档化
-	// - 配置文件：适合复杂配置（多层嵌套），支持注释和版本控制
+	// 📚 学习要点: 路由优先级与 ServeMux 匹配规则
+	// Go 1.22+ 的 ServeMux 按最长前缀匹配路由。
+	// /ws 和 /ping 是精确路径，优先于 / 的通配匹配。
+	// 因此即使 static.Handler() 注册在 /，也不会拦截 /ws 和 /ping 请求。
 	//
-	// Arthas 选择环境变量，因为：
-	// 1. 部署目标是容器平台（HF Spaces、Railway），环境变量是标准配置方式
-	// 2. 配置项很少（PORT、ALLOWED_ORIGINS），不需要配置文件的复杂性
-	// 3. 避免在容器镜像中包含敏感配置文件
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	// 📚 学习要点: 为什么在 /ws 和 /ping 之后注册？
+	// 虽然 ServeMux 的匹配规则保证精确路径优先，
+	// 但代码顺序上「先注册精确路径，后注册通配」更符合阅读直觉，
+	// 让维护者一眼看出路由优先级。
+	mux.Handle("/", static.Handler())
+
+	// ─── Step 5: 端口解析（flag > env > default）────────────────────────────
+	//
+	// 📚 学习要点: 三层配置优先级的实现模式
+	// 配置优先级 flag > env > default 是 CLI 工具的常见模式：
+	//   1. 命令行参数最优先（用户显式指定，意图最明确）
+	//   2. 环境变量次之（容器/CI 环境的标准配置方式）
+	//   3. 默认值兜底（零配置即可运行）
+	//
+	// portFlag 默认值为 0（表示"未设置"），这是 sentinel value 模式：
+	// 用一个不可能是有效端口的值来区分"用户设置了 0"和"用户没设置"。
+	// 对于端口号，0 不是有效的监听端口，所以可以安全地用作 sentinel。
+	port := resolvePort(*portFlag, os.Getenv("PORT"), "8080")
 
 	// ─── Step 6: 创建 http.Server ───────────────────────────────────────────
 	//

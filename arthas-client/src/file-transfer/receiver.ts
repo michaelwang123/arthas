@@ -159,7 +159,7 @@ export async function handleFileMeta(
   let metadata: FileMetadata;
   try {
     const ivBuffer = fromBase64Url(data.iv);
-    const iv = new Uint8Array(ivBuffer);
+    // ivBuffer 已经是 ArrayBuffer，直接用于 AES-GCM 的 iv 参数
 
     // 📚 学习要点: msgpack 共享缓冲区问题
     // @msgpack/msgpack 解码时使用共享内部缓冲区，data.ciphertext 的 .buffer
@@ -170,7 +170,7 @@ export async function handleFileMeta(
     const ciphertextBuffer = ciphertextArr.buffer.slice(
       ciphertextArr.byteOffset,
       ciphertextArr.byteOffset + ciphertextArr.byteLength
-    );
+    ) as ArrayBuffer;
 
     // 解密 ciphertext → 明文 JSON bytes
     const plaintextBuffer = await crypto.subtle.decrypt(

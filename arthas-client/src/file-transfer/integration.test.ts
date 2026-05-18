@@ -26,8 +26,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useFileTransferStore } from './fileTransferStore';
 import { useChatStore } from '../stores/chatStore';
 import {
-  MSG_RELAY_FILE_META,
-  MSG_RELAY_FILE_CHUNK,
   MSG_RELAY_FILE_COMPLETE,
   MSG_RELAY_FILE_CANCEL,
   MSG_RELAY_FILE_ACK,

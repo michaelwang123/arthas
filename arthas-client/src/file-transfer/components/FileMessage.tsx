@@ -287,8 +287,6 @@ export function FileMessage({ transferId }: FileMessageProps) {
   const isSender = transfer.direction === 'send';
   const isActive = transfer.status === 'sending' || transfer.status === 'receiving';
   const isComplete = transfer.status === 'complete';
-  const isFailed = transfer.status === 'failed';
-  const isCancelled = transfer.status === 'cancelled';
 
   // 计算进度百分比
   const progress = transfer.totalChunks > 0
@@ -461,7 +459,7 @@ export function FileMessage({ transferId }: FileMessageProps) {
 function getStatusText(
   status: string,
   isSender: boolean,
-  ackCount: number,
+  _ackCount: number,
   totalReceivers: number
 ): string {
   switch (status) {
