@@ -117,6 +117,14 @@ type Client struct {
 	// activeTransferID 为空字符串表示当前没有活跃传输。
 	activeTransferID string    // 当前活跃传输的 ID（空字符串 = 无活跃传输）
 	transferStartAt  time.Time // 传输开始时间（用于服务器端超时清理）
+
+	// lastCompletedTransferID 保存最近完成的传输 ID。
+	// 📚 学习要点: 为什么需要这个字段？
+	// handleFileComplete 清除 activeTransferID 以允许新传输，
+	// 但接收方的 ACK 在 Complete 之后才到达。
+	// 如果只用 activeTransferID 查找发送方，ACK 到达时已找不到。
+	// lastCompletedTransferID 作为备选查找条件，确保 ACK 能正确路由。
+	lastCompletedTransferID string
 }
 
 // ServeWs 处理 WebSocket 升级请求，创建 Client 并启动读写 goroutine。

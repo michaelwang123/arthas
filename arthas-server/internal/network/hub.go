@@ -847,7 +847,7 @@ func (h *Hub) handleFileAck(client *Client, data interface{}) {
 	var sender *Client
 	h.mu.RLock()
 	for c := range h.clients {
-		if c.RoomID == client.RoomID && c.activeTransferID == transferId {
+		if c.RoomID == client.RoomID && (c.activeTransferID == transferId || c.lastCompletedTransferID == transferId) {
 			sender = c
 			break
 		}
@@ -1177,6 +1177,10 @@ func (h *Hub) handleFileComplete(client *Client, data interface{}) {
 	}
 
 	// 6. 清除活跃传输状态（允许客户端发起新的传输）
+	// 📚 学习要点: 保存 lastCompletedTransferID 用于 ACK 路由
+	// ACK 在 Complete 之后才到达，此时 activeTransferID 已清除。
+	// 保存到 lastCompletedTransferID 让 handleFileAck 仍能找到发送方。
+	client.lastCompletedTransferID = client.activeTransferID
 	client.activeTransferID = ""
 
 	// 7. 构建 RelayFileCompleteData 并广播
