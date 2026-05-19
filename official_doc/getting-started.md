@@ -91,12 +91,32 @@ npm run dev
 
 ## 第四步：开始使用
 
+### 方式一：Web 客户端
+
 1. 打开浏览器访问 `http://localhost:3000`
 2. 输入昵称，点击 **"创建房间"**
 3. 复制生成的分享码
 4. 打开另一个浏览器窗口（或隐身模式）
 5. 输入昵称和分享码，点击 **"加入"**
 6. 开始加密聊天！
+
+### 方式二：CLI 客户端
+
+```bash
+cd arthas-cli
+
+# 编译
+go build -o arthas-cli ./cmd/arthas-cli/
+
+# 创建房间
+./arthas-cli create --server ws://localhost:8080/ws --name Alice
+# 输出分享码，复制它
+
+# 在另一个终端加入
+./arthas-cli join <share_code> --server ws://localhost:8080/ws --name Bob
+```
+
+CLI 和 Web 客户端可以互操作——用 Web 创建的房间可以用 CLI 加入，反之亦然。
 
 ---
 
@@ -151,5 +171,6 @@ go env -w GOPROXY=https://goproxy.cn,direct
 ## 下一步
 
 - [系统架构](architecture.md) — 了解整体设计
+- [CLI 客户端指南](cli-guide.md) — 终端客户端详细用法
 - [开发指南](development.md) — 深入代码结构
 - [部署指南](deployment.md) — 部署到生产环境
