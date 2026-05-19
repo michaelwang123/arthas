@@ -34,11 +34,12 @@
 
 - 🔒 **端到端加密** — AES-256-GCM，服务器零知识
 - ⚡ **实时通信** — WebSocket 全双工，消息即时送达
-- � **加密文件分享** — 分片加密传输，图片缩略图预览，拖拽/粘贴上传
-- �🔑 **密钥即邀请** — 一个字符串同时包含房间地址和解密密钥
+- 📎 **加密文件分享** — 分片加密传输，图片缩略图预览，拖拽/粘贴上传
+- 🔑 **密钥即邀请** — 一个字符串同时包含房间地址和解密密钥
 - 🗑️ **阅后即焚** — 可选定时消失（10s/30s/60s/5min），纯客户端实现
 - 💬 **消息回复 & 反应** — 引用回复 + emoji 反应，数据加密传输
 - 🔐 **房间密码** — 可选密码保护，防止分享码泄露后被陌生人加入
+- 🖥️ **CLI 客户端** — 独立 Go 二进制，终端内创建/加入加密聊天室
 - 🚫 **无需注册** — 无账号体系，打开即用
 - 🏠 **自托管部署** — 单二进制零依赖，或 Docker Compose 自动 HTTPS
 
@@ -66,6 +67,21 @@ npm run dev
 
 前端启动在 `http://localhost:3000`
 
+### CLI 客户端
+
+```bash
+cd arthas-cli
+go build -o arthas-cli ./cmd/arthas-cli/
+
+# 创建房间
+./arthas-cli create --server ws://localhost:8080/ws --name Alice
+
+# 加入房间（使用创建时输出的分享码）
+./arthas-cli join <share_code> --server ws://localhost:8080/ws --name Bob
+```
+
+CLI 是独立的 Go 二进制，实现与 Web 客户端完全相同的 E2EE 协议，两端可互操作。
+
 ---
 
 ## 使用流程
@@ -84,7 +100,7 @@ npm run dev
 
 ```
 arthas/
-├── arthas-client/          # 前端
+├── arthas-client/          # Web 前端
 │   └── src/
 │       ├── crypto/         # E2EE 加密层 (Web Crypto API)
 │       ├── file-transfer/  # 加密文件分享模块
@@ -102,6 +118,14 @@ arthas/
 │       ├── room/           # 房间管理 + 转发
 │       ├── network/        # Hub + Client + 协议
 │       └── static/         # 内嵌前端静态文件服务（SPA fallback）
+├── arthas-cli/             # CLI 客户端 (独立 Go 二进制)
+│   ├── cmd/arthas-cli/     # 入口（子命令: create, join）
+│   └── internal/
+│       ├── protocol/       # MessagePack 协议编解码
+│       ├── crypto/         # AES-256-GCM 加密/解密 + 分享码
+│       ├── network/        # WebSocket 连接管理
+│       ├── ui/             # 终端输出格式化 + 颜色
+│       └── chat/           # 会话协调（状态机 + 事件循环）
 ├── deploy/                 # 自托管部署基础设施
 │   ├── Dockerfile          # 三阶段构建（前端→Go→Alpine）
 │   ├── docker-compose.yml  # Caddy + Backend 编排
@@ -125,7 +149,12 @@ arthas/
    │── 明文 → AES加密 → 密文 ──→│── 原样转发密文 ──→│         │
    │                            │                  │→ 密文 → AES解密 → 明文
    │                            │                            │
+                                │
+CLI 客户端 C                    │
+   │── 明文 → AES加密 → 密文 ──→│── 原样转发密文 ──→ 浏览器/CLI
+   │                            │
    服务器永远只看到密文，无法解密
+   Web 和 CLI 使用相同协议，完全互操作
 ```
 
 - **E2EE**：Web Crypto API + AES-256-GCM，密钥只在客户端
@@ -165,9 +194,10 @@ arthas/
 - [功能待办](docs/backlog.md)
 - [路线图](docs/roadmap.md)
 - [自托管部署](official_doc/self-hosting.md)
+- [CLI 客户端使用指南](official_doc/cli-guide.md)
 
 ---
 
 ## 当前状态
 
-Phase 6 差异化功能全部完成 + Phase 7.4 自托管部署完成 — 加密聊天 + 文件分享 + 回复反应 + 密码保护 + 阅后即焚 + 一键自托管
+Phase 6 差异化功能全部完成 + Phase 7.4 自托管部署完成 + Phase 8 CLI 客户端完成 — 加密聊天 + 文件分享 + 回复反应 + 密码保护 + 阅后即焚 + 一键自托管 + 终端客户端

@@ -82,6 +82,44 @@ export default defineConfig({
 
 ---
 
+## CLI 客户端配置
+
+### 命令行参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--server` | `wss://arthas-chat.onrender.com/ws` | WebSocket 服务器 URL |
+| `--name` | 交互式提示 | 显示昵称（1-20 字符） |
+| `--version` | — | 显示版本号并退出 |
+| `--help` | — | 显示帮助信息并退出 |
+
+### 环境变量
+
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| `ARTHAS_SERVER` | — | WebSocket 服务器 URL（优先级低于 `--server` flag） |
+
+### 内置常量
+
+| 参数 | 值 | 文件 | 说明 |
+|------|-----|------|------|
+| `joinTimeout` | 30s | `internal/chat/session.go` | 等待服务器响应的超时 |
+| `writeWait` | 10s | `internal/network/websocket.go` | WebSocket 写超时 |
+| `pongWait` | 40s | `internal/network/websocket.go` | 读超时（心跳 1.6 倍） |
+| `maxMessageSize` | 102400 | `internal/network/websocket.go` | 单条消息最大字节数 |
+| `sendChCapacity` | 16 | `internal/network/websocket.go` | 发送队列容量 |
+| 昵称长度限制 | 20 runes | `internal/ui/input.go` | 显示名称最大长度 |
+| 消息长度限制 | 500 runes | `internal/ui/input.go` | 单条消息最大长度 |
+
+### 配置优先级
+
+```
+--server flag  >  ARTHAS_SERVER 环境变量  >  默认值 (wss://arthas-chat.onrender.com/ws)
+--name flag    >  交互式提示输入
+```
+
+---
+
 ## Tailwind 配置
 
 文件：`arthas-client/tailwind.config.js`

@@ -10,7 +10,7 @@ Arthas 采用经典的前后端分离架构，核心设计原则是 **服务器�
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                    浏览器 (Client)                         │
+│                    浏览器 (Web Client)                     │
 │                                                          │
 │  ┌──────────┐  ┌──────────┐  ┌────────────────────────┐ │
 │  │  React   │  │ Zustand  │  │   Crypto Layer         │ │
@@ -33,9 +33,23 @@ Arthas 采用经典的前后端分离架构，核心设计原则是 **服务器�
 │            ┌─────────┴──────────┐                        │
 │            │   RoomManager      │                        │
 │            │   (房间路由+转发)   │                        │
-│            └────────────────────┘                        │
+│            └─────────┬──────────┘                        │
+└──────────────────────┼───────────────────────────────────┘
+                       │ WSS / TLS 1.3 (密文传输)
+┌──────────────────────┼───────────────────────────────────┐
+│                      │       CLI Client (arthas-cli)      │
+│            ┌─────────┴──────────┐                        │
+│            │  WebSocket + msgpack│                        │
+│            └─────────┬──────────┘                        │
+│                      │                                   │
+│  ┌──────────┐  ┌─────┴────┐  ┌────────────────────────┐ │
+│  │ Terminal │  │  Session  │  │   Crypto Layer         │ │
+│  │   UI    │  │  (CSP)   │  │   AES-256-GCM (stdlib) │ │
+│  └──────────┘  └──────────┘  └────────────────────────┘ │
 └──────────────────────────────────────────────────────────┘
 ```
+
+Web 客户端和 CLI 客户端使用完全相同的协议（MessagePack + AES-256-GCM），可以在同一房间内互操作。
 
 ---
 
@@ -97,6 +111,40 @@ arthas-server/
 | **Protocol**　　| 定义所有消息类型和数据结构　　　　　　　　　　　　　　　　 |
 | **RoomManager** | 管理房间生命周期（创建/查找/销毁）　　　　　　　　　　　　 |
 | **Room**　　　　| 管理单个房间的成员列表和消息广播　　　　　　　　　　　　　 |
+
+### CLI 客户端模块
+
+```
+arthas-cli/
+├── cmd/arthas-cli/main.go          # 入口：子命令路由 + 参数解析
+├── internal/
+│   ├── protocol/
+│   │   ├── protocol.go             # 消息类型常量 + 数据结构
+│   │   └── codec.go                # MessagePack 编解码 + ToInt 辅助
+│   ├── crypto/
+│   │   ├── keys.go                 # 密钥生成 (crypto/rand) + base64url
+│   │   ├── encrypt.go              # AES-256-GCM 加密
+│   │   ├── decrypt.go              # AES-256-GCM 解密
+│   │   └── sharecode.go            # 分享码解析/构建
+│   ├── network/
+│   │   └── websocket.go            # WebSocket 连接管理 (writePump 模式)
+│   ├── ui/
+│   │   ├── display.go              # 终端输出格式化 + ANSI 颜色
+│   │   ├── input.go                # stdin 读取 + 输入验证
+│   │   └── color.go                # Hex → ANSI 256-color 转换
+│   └── chat/
+│       └── session.go              # 会话状态机 + 4-goroutine 事件循环
+├── go.mod
+└── Makefile                        # 跨平台编译
+```
+
+| 模块 | 职责 |
+|------|------|
+| **protocol** | 定义消息类型常量和 MessagePack 编解码，与服务器协议完全对齐 |
+| **crypto** | AES-256-GCM 加密/解密 + 密钥管理 + 分享码，使用 Go 标准库 |
+| **network** | WebSocket 连接封装，writePump 模式确保线程安全 |
+| **ui** | 终端输出（ANSI 颜色、时间戳）和输入（行读取、验证） |
+| **chat** | 会话协调层，CSP 并发模型（4 goroutine + channel 通信） |
 
 ### 前端模块
 

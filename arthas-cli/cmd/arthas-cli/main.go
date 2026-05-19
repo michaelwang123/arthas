@@ -42,7 +42,7 @@ const defaultServerURL = "wss://arthas-chat.onrender.com/ws"
 // usage prints the top-level help message to stderr and exits.
 // 格式遵循 Unix CLI 惯例：简短描述 + 用法模式 + 子命令列表 + 全局选项。
 func usage() {
-	fmt.Fprintf(os.Stderr, `arthas-cli — Terminal client for Arthas encrypted chat
+	fmt.Fprintf(os.Stderr, `arthas-cli - Terminal client for Arthas encrypted chat
 
 Usage:
   arthas-cli create [--server URL] [--name NAME]
@@ -145,6 +145,39 @@ func validateServerURL(url string) error {
 	return nil
 }
 
+// separateFlagsAndArgs 将参数列表分为 flag 参数和位置参数。
+// flag 参数是以 "-" 开头的参数及其值（如 --name Alice → ["--name", "Alice"]）。
+// 位置参数是不以 "-" 开头且不是 flag 值的参数。
+//
+// 📚 学习要点: 为什么需要手动分离？
+// Go 标准库 flag 包在遇到第一个非 flag 参数后停止解析（设计如此）。
+// 这意味着 `join <code> --name X` 中 `--name X` 不会被解析为 flag。
+// 通过预处理将 flags 和位置参数分开，允许用户以任意顺序输入：
+//   - `join --name Alice <code>` ✅
+//   - `join <code> --name Alice` ✅（修复前会失败）
+func separateFlagsAndArgs(args []string) (flagArgs, positionalArgs []string) {
+	i := 0
+	for i < len(args) {
+		if strings.HasPrefix(args[i], "-") {
+			// 这是一个 flag（如 --name 或 -server）
+			flagArgs = append(flagArgs, args[i])
+			// 检查是否有值跟随（非 bool flag 的值）
+			// 如果下一个参数不以 "-" 开头，视为该 flag 的值
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				flagArgs = append(flagArgs, args[i+1])
+				i += 2
+			} else {
+				i++
+			}
+		} else {
+			// 位置参数
+			positionalArgs = append(positionalArgs, args[i])
+			i++
+		}
+	}
+	return
+}
+
 // resolveName determines the display name from flag value or interactive prompt.
 // Returns the validated name or an error if validation/input fails.
 //
@@ -232,48 +265,50 @@ Options:
 // Usage: arthas-cli join <share_code> [--server URL] [--name NAME]
 //
 // 📚 学习要点: 位置参数与标志参数的混合解析
-// "join" 子命令需要一个必需的位置参数（share_code）和可选的标志参数。
-// flag.NewFlagSet.Parse() 会消费所有 --key=value 形式的参数，
-// 剩余的非标志参数通过 fs.Args() 获取。
-// 这里 share_code 是 fs.Args() 中的第一个元素。
+// Go 标准库 flag 包在遇到第一个非 flag 参数后停止解析。
+// 这意味着 `join <code> --name X` 中的 `--name X` 会被视为位置参数。
+// 解决方案：在调用 fs.Parse 前，手动将 args 分为 flag 参数和位置参数，
+// 确保 flag 参数先被解析，位置参数后处理。
+// 这样用户可以自由地将 share_code 放在 flags 之前或之后。
 func runJoin(args []string) int {
+	// 📚 学习要点: 预处理参数顺序
+	// 将 args 分为 flagArgs（以 - 开头的参数及其值）和 positionalArgs。
+	// 这样无论用户输入 `join --name X <code>` 还是 `join <code> --name X`，
+	// 都能正确解析。
+	flagArgs, positionalArgs := separateFlagsAndArgs(args)
+
 	fs := flag.NewFlagSet("join", flag.ContinueOnError)
 	serverFlag := fs.String("server", "", "WebSocket server URL")
 	nameFlag := fs.String("name", "", "Display name (1-20 characters)")
 
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, `Usage: arthas-cli join <share_code> [--server URL] [--name NAME]
-
-Join an existing encrypted chat room using a share code.
-
-Arguments:
-  share_code  The room share code (format: roomId:key[:ephemeral])
-
-Options:
-`)
+		fmt.Fprintf(os.Stderr, "Usage: arthas-cli join <share_code> [--server URL] [--name NAME]\n\nJoin an existing encrypted chat room using a share code.\n\nArguments:\n  share_code  The room share code (format: roomId:key[:ephemeral])\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(flagArgs); err != nil {
 		if err == flag.ErrHelp {
 			return 0
 		}
 		return 1
 	}
 
+	// 合并 fs.Parse 后剩余的位置参数（理论上不应有，但防御性处理）
+	allPositional := append(positionalArgs, fs.Args()...)
+
 	// "join" 需要恰好一个位置参数（share_code）
-	if fs.NArg() < 1 {
+	if len(allPositional) < 1 {
 		fmt.Fprintf(os.Stderr, "Error: 'join' command requires a share code argument\n")
 		fs.Usage()
 		return 1
 	}
-	if fs.NArg() > 1 {
+	if len(allPositional) > 1 {
 		fmt.Fprintf(os.Stderr, "Error: 'join' command accepts only one positional argument (share code)\n")
 		fs.Usage()
 		return 1
 	}
 
-	shareCode := strings.TrimSpace(fs.Arg(0))
+	shareCode := strings.TrimSpace(allPositional[0])
 
 	// 解析服务器 URL
 	serverURL := resolveServerURL(*serverFlag)
