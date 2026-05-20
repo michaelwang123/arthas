@@ -173,6 +173,20 @@ CLI 客户端 C                    │
 | 保活 | Cron-job.org　　　　| 每 10 分钟 ping `/ping`，防实例休眠　|
 | 备选 | Railway / Fly.io　　| 如 HF Spaces WebSocket 不稳定　　　　|
 
+### 部署命令
+
+```powershell
+# 前端 → Vercel（push 到 GitHub 自动触发）
+git add .
+git commit -m "feat: 描述修改"
+git push
+
+# 后端 → Hugging Face Spaces（一键脚本）
+.\official_doc\scripts\deploy-hf-space.ps1
+```
+
+详细配置参考：[开发指南 - 生产部署](official_doc/development.md#生产部署)
+
 ---
 
 ## 自托管部署
