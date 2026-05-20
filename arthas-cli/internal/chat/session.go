@@ -13,10 +13,14 @@
 package chat
 
 import (
+	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/signal"
 	"strings"
@@ -74,8 +78,11 @@ const joinTimeout = 30 * time.Second
 //  2. 互操作性：Web 客户端使用 JSON.stringify/parse，CLI 使用 json.Marshal/Unmarshal，
 //     两端的载荷格式完全一致
 type MessagePayload struct {
-	Text  string     `json:"text"`
-	Reply *ReplyData `json:"reply,omitempty"`
+	Text   string     `json:"text"`
+	Reply  *ReplyData `json:"reply,omitempty"`
+	Sig    string     `json:"sig,omitempty"`    // base64url Ed25519 签名（64 字节签名的编码）
+	Type   string     `json:"type,omitempty"`   // "pubkey" 表示公钥广播消息
+	PubKey string     `json:"pubkey,omitempty"` // base64url 32 字节 Ed25519 公钥
 }
 
 // ReplyData 引用回复的上下文信息，由 Web 客户端发送。
@@ -84,6 +91,22 @@ type ReplyData struct {
 	StableID   string `json:"stableId"`
 	SenderName string `json:"senderName"`
 	Preview    string `json:"preview"`
+}
+
+// PublicKeyEntry 缓存房间成员的 Ed25519 公钥及元数据。
+//
+// 📚 学习要点: TOFU（Trust On First Use）信任模型
+// 与 SSH 的 known_hosts 类似，Arthas 在首次收到成员公钥时存储并信任它。
+// 如果同一成员后续发送不同的公钥（如断线重连后生成新密钥对），
+// 系统会接受新公钥但显示警告，提醒用户密钥已变更。
+// FirstSeen 记录首次收到公钥的时间，用于冲突检测和审计。
+//
+// 字段说明：
+//   - PublicKey: 32 字节 Ed25519 公钥，用于验证该成员发送的消息签名
+//   - FirstSeen: 首次收到此公钥的时间（TOFU 时间戳）
+type PublicKeyEntry struct {
+	PublicKey ed25519.PublicKey
+	FirstSeen time.Time
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +129,18 @@ type Session struct {
 	state       SessionState
 	hasPassword bool // 从 RoomJoined 响应中获取
 	ephemeral   int  // 从 RoomJoined 响应中获取（秒数，0 = 非临时）
+
+	// --- Ed25519 消息签名支持 ---
+	// 📚 学习要点: 签名密钥对的生命周期
+	// signingKeyPair 在 RunCreate/RunJoin 时生成，在 sendLeaveRoom 时清零。
+	// 密钥对仅存在于进程内存中，不持久化。每次加入房间生成新的密钥对，
+	// 确保密钥生命周期与会话严格绑定，简化安全推理。
+	signingKeyPair *crypto.SigningKeyPair // Ed25519 密钥对（nil = 尚未生成）
+
+	// publicKeyMap 存储房间内其他成员的公钥，用于验证收到消息的签名。
+	// key 为 memberId，value 为该成员的公钥条目（含 TOFU 元数据）。
+	// 在 RunCreate/RunJoin 时初始化为空 map，收到公钥广播时填充。
+	publicKeyMap map[string]*PublicKeyEntry // memberId → public key entry
 }
 
 // ---------------------------------------------------------------------------
@@ -160,12 +195,13 @@ func RunCreate(serverURL, name string) error {
 
 	// 5. 等待 RoomCreated + RoomJoined 响应（带超时保护）
 	s := &Session{
-		conn:    conn,
-		roomKey: roomKey,
-		display: display,
-		myName:  name,
-		members: make(map[string]protocol.MemberInfo),
-		state:   StateJoining,
+		conn:         conn,
+		roomKey:      roomKey,
+		display:      display,
+		myName:       name,
+		members:      make(map[string]protocol.MemberInfo),
+		publicKeyMap: make(map[string]*PublicKeyEntry),
+		state:        StateJoining,
 	}
 
 	var roomID string
@@ -211,8 +247,11 @@ func RunCreate(serverURL, name string) error {
 			shareCode := crypto.BuildShareCode(roomID, roomKey, s.ephemeral)
 			display.ShowShareCode(shareCode)
 
-			// 进入聊天循环
+			// 生成 Ed25519 签名密钥对并广播公钥
 			s.state = StateChatting
+			s.generateAndBroadcastKeyPair()
+
+			// 进入聊天循环
 			return s.chatLoop()
 
 		case protocol.MsgError:
@@ -287,12 +326,13 @@ func RunJoin(serverURL, name, shareCode string) error {
 
 	// 5. 等待 RoomJoined 响应（带超时保护）
 	s := &Session{
-		conn:    conn,
-		roomKey: sc.KeyBytes,
-		display: display,
-		myName:  name,
-		members: make(map[string]protocol.MemberInfo),
-		state:   StateJoining,
+		conn:         conn,
+		roomKey:      sc.KeyBytes,
+		display:      display,
+		myName:       name,
+		members:      make(map[string]protocol.MemberInfo),
+		publicKeyMap: make(map[string]*PublicKeyEntry),
+		state:        StateJoining,
 	}
 
 	timeout := time.After(joinTimeout)
@@ -325,8 +365,11 @@ func RunJoin(serverURL, name, shareCode string) error {
 			memberList := s.getMemberList()
 			display.ShowMembers(memberList)
 
-			// 进入聊天循环
+			// 生成 Ed25519 签名密钥对并广播公钥
 			s.state = StateChatting
+			s.generateAndBroadcastKeyPair()
+
+			// 进入聊天循环
 			return s.chatLoop()
 
 		case protocol.MsgError:
@@ -728,16 +771,57 @@ func (s *Session) handleUserInput(line string) {
 		return
 	}
 
-	// 4. 构造 JSON 载荷
+	// 4. 构造 JSON 载荷并签名
 	// 📚 学习要点: 为什么先 JSON 再加密？
 	// Arthas 协议要求加密载荷是 JSON 格式的 {"text": "..."} 对象，
 	// 而非裸文本。这样 Web 客户端和 CLI 都能正确解析载荷中的结构化字段
 	// （如 reply 引用回复信息），保证双端互操作性。
+	//
+	// 📚 学习要点: 消息签名流程（Ed25519）
+	// 签名需要对 payload 的 canonical JSON 表示进行操作（而非普通 JSON.Marshal 输出）。
+	// 流程：构建 payload map → ComputeSignableBytes（去除 sig，canonical JSON）→
+	// Sign → 插入 sig → 重新 Marshal（普通 JSON，含 sig）→ 加密 → 发送。
+	// 使用 map[string]interface{} 而非 struct 是因为 ComputeSignableBytes 要求 map 输入，
+	// 且签名后需要动态插入 sig 字段再序列化。
 	payload := MessagePayload{Text: trimmed}
 	jsonBytes, err := json.Marshal(payload)
 	if err != nil {
 		s.display.ShowError(fmt.Sprintf("failed to marshal message: %s", err.Error()))
 		return
+	}
+
+	// 4a. 如果有签名密钥对，执行签名流程
+	// 📚 学习要点: Graceful Degradation（优雅降级）
+	// 如果 signingKeyPair 为 nil（密钥生成失败或尚未生成），
+	// 消息仍然正常加密发送，只是不带 sig 字段。
+	// 接收方会将此消息标记为 "no-sig" 状态，不影响消息可读性。
+	if s.signingKeyPair != nil {
+		// 将 JSON 反序列化为 map 以便签名操作
+		var payloadMap map[string]interface{}
+		if err := json.Unmarshal(jsonBytes, &payloadMap); err != nil {
+			s.display.ShowError(fmt.Sprintf("failed to unmarshal payload for signing: %s", err.Error()))
+			return
+		}
+
+		// 计算 Signable_Bytes（canonical JSON 序列化，不含 sig 字段）
+		signableBytes, err := crypto.ComputeSignableBytes(payloadMap)
+		if err != nil {
+			s.display.ShowError(fmt.Sprintf("failed to compute signable bytes: %s", err.Error()))
+			return
+		}
+
+		// Ed25519 签名
+		sig := s.signingKeyPair.Sign(signableBytes)
+
+		// 将签名插入 payload map
+		payloadMap["sig"] = sig
+
+		// 重新序列化完整 payload（含 sig 字段）
+		jsonBytes, err = json.Marshal(payloadMap)
+		if err != nil {
+			s.display.ShowError(fmt.Sprintf("failed to marshal signed payload: %s", err.Error()))
+			return
+		}
 	}
 
 	// 5. AES-256-GCM 加密
@@ -935,12 +1019,51 @@ func (s *Session) handleRelayMessage(data map[string]interface{}) {
 	jsonErr := json.Unmarshal(plaintext, &payload)
 
 	// 4. 向后兼容：如果 JSON 解析失败或 text 为空，使用整个明文
-	if jsonErr != nil || payload.Text == "" {
+	if jsonErr != nil || (payload.Text == "" && payload.Type != "pubkey") {
 		payload.Text = string(plaintext)
 		payload.Reply = nil // 确保非 JSON 载荷不会有残留的 reply 数据
 	}
 
-	// 5. 颜色查找：从 members map 中获取发送者颜色
+	// 5. 处理公钥广播消息（type == "pubkey"）
+	// 📚 学习要点: 公钥广播的自验证（Self-Verification）
+	// 收到公钥广播时，发送方的公钥尚未存储（这正是广播的目的）。
+	// 因此验证逻辑为"自验证"：用广播中携带的 pubkey 验证广播本身的 sig。
+	// 这证明发送方确实持有对应的私钥（防止格式错误的公钥被存储）。
+	// 如果自验证失败，丢弃该广播，不存储公钥。
+	if payload.Type == "pubkey" {
+		s.handlePublicKeyAnnouncement(senderId, senderName, &payload)
+		return // 公钥广播不显示在聊天中
+	}
+
+	// 6. 签名验证（在显示消息之前）
+	// 📚 学习要点: TOFU（Trust On First Use）验证策略
+	// 签名验证遵循三种情况：
+	// a) 消息有签名且发送方公钥已知 → 验证签名，失败则标记 [⚠ unverified]
+	// b) 消息有签名但发送方公钥未知 → 正常显示（TOFU：下次收到公钥广播时建立信任）
+	// c) 消息无签名 → 正常显示（向后兼容旧客户端或不支持 Ed25519 的客户端）
+	//
+	// 安全注释: 验证失败不阻止消息显示（用户仍能看到内容），
+	// 但通过 [⚠ unverified] 前缀警告用户该消息可能被篡改。
+	if payload.Sig != "" {
+		if pubKeyEntry, ok := s.publicKeyMap[senderId]; ok {
+			// 发送方公钥已知：重建 payload map 用于验证
+			// 将解密后的 JSON 反序列化为 map，移除 sig 后计算 Signable_Bytes
+			var verifyMap map[string]interface{}
+			if err := json.Unmarshal(plaintext, &verifyMap); err == nil {
+				signableBytes, err := crypto.ComputeSignableBytes(verifyMap)
+				if err == nil {
+					if !crypto.VerifySignature(pubKeyEntry.PublicKey, signableBytes, payload.Sig) {
+						// 签名验证失败：在发送者名称前添加警告前缀
+						senderName = "[⚠ unverified] " + senderName
+					}
+				}
+			}
+		}
+		// 如果公钥未知（TOFU）：正常显示，不添加前缀
+	}
+	// 如果无 sig 字段：正常显示（向后兼容）
+
+	// 7. 颜色查找：从 members map 中获取发送者颜色
 	// 📚 学习要点: 为什么需要从 map 查找而非使用消息中的字段？
 	// RelayMessage 协议设计中不包含 color 字段（减少每条消息的传输开销）。
 	// 颜色信息只在 RoomJoined 和 MemberJoined 时传递一次，之后由客户端本地缓存。
@@ -949,13 +1072,179 @@ func (s *Session) handleRelayMessage(data map[string]interface{}) {
 		color = member.Color
 	}
 
-	// 6. 如果有引用回复，先显示回复上下文
+	// 8. 如果有引用回复，先显示回复上下文
 	if payload.Reply != nil {
 		s.display.ShowReplyContext(payload.Reply.SenderName, payload.Reply.Preview)
 	}
 
-	// 7. 显示消息
+	// 9. 显示消息
 	s.display.ShowMessage(senderName, color, payload.Text, timestamp)
+}
+
+// ---------------------------------------------------------------------------
+// handlePublicKeyAnnouncement — 处理公钥广播消息
+// ---------------------------------------------------------------------------
+
+// handlePublicKeyAnnouncement 处理 type="pubkey" 的消息：自验证、存储、冲突检测。
+//
+// 公钥广播的验证流程（自证明）：
+//  1. 从 payload.PubKey 解码 base64url 得到 32 字节 Ed25519 公钥
+//  2. 构建验证用 payload map（不含 sig）：{"type":"pubkey","text":"","pubkey":"..."}
+//  3. 调用 crypto.ComputeSignableBytes 得到 canonical JSON 字节
+//  4. 调用 crypto.VerifySignature 用嵌入的公钥验证 sig
+//  5. 验证通过：存储到 publicKeyMap；验证失败：丢弃并记录警告
+//
+// 公钥冲突处理（TOFU Key Change）：
+// 如果同一 memberId 已有不同的公钥存储，接受新公钥并显示警告。
+// 这是正常操作（用户刷新页面/断线重连会生成新密钥对），不阻止通信。
+//
+// 📚 学习要点: 为什么使用自验证而非发送方已知公钥验证？
+// 公钥广播的目的是"告知其他成员我的公钥"。在收到广播之前，
+// 接收方不知道发送方的公钥（这正是广播要解决的问题）。
+// 自验证证明发送方确实持有与广播公钥对应的私钥，
+// 防止格式错误或随机数据被当作有效公钥存储。
+// 注意：这不能防止 MITM（服务器可替换整个广播），但能防止无效公钥。
+//
+// 参数:
+//   - senderId: 发送者的成员 ID（用于 publicKeyMap 的 key）
+//   - senderName: 发送者的显示昵称（用于冲突警告消息）
+//   - payload: 解密后的消息载荷（包含 type、pubkey、sig 字段）
+func (s *Session) handlePublicKeyAnnouncement(senderId, senderName string, payload *MessagePayload) {
+	// 1. 解码 base64url 公钥为 32 字节原始公钥
+	pubKeyBytes, err := base64.RawURLEncoding.DecodeString(payload.PubKey)
+	if err != nil {
+		log.Printf("[WARN] invalid pubkey base64url from %s: %v", senderName, err)
+		return
+	}
+
+	// 验证公钥长度（Ed25519 公钥固定 32 字节）
+	if len(pubKeyBytes) != ed25519.PublicKeySize {
+		log.Printf("[WARN] invalid pubkey length from %s: got %d bytes, want %d",
+			senderName, len(pubKeyBytes), ed25519.PublicKeySize)
+		return
+	}
+
+	// 2. 构建验证用 payload map（不含 sig，与签名时的输入一致）
+	// 📚 学习要点: 验证 map 必须与签名时的 payload 结构完全一致
+	// 签名方在签名前构建 {"type":"pubkey","text":"","pubkey":"<base64url>"}，
+	// 验证方必须重建完全相同的 map 结构，才能得到相同的 Signable_Bytes。
+	verifyMap := map[string]interface{}{
+		"type":   "pubkey",
+		"text":   "",
+		"pubkey": payload.PubKey,
+	}
+
+	// 3. 计算 Signable_Bytes（canonical JSON 序列化）
+	signableBytes, err := crypto.ComputeSignableBytes(verifyMap)
+	if err != nil {
+		log.Printf("[WARN] failed to compute signable bytes for pubkey from %s: %v", senderName, err)
+		return
+	}
+
+	// 4. 使用嵌入的公钥自验证签名
+	if !crypto.VerifySignature(ed25519.PublicKey(pubKeyBytes), signableBytes, payload.Sig) {
+		log.Printf("[WARN] pubkey announcement self-verification failed for %s, discarding", senderName)
+		return
+	}
+
+	// 5. 公钥冲突检测（TOFU Key Change）
+	// 如果已存储该成员的公钥且与新公钥不同，显示密钥变更警告
+	if existing, ok := s.publicKeyMap[senderId]; ok {
+		if !bytes.Equal(existing.PublicKey, pubKeyBytes) {
+			// 密钥已变更：接受新公钥，显示警告
+			s.display.ShowSystemMessage("[⚠ key changed] " + senderName)
+		}
+		// 如果公钥相同（重复广播），静默更新 FirstSeen 即可
+	}
+
+	// 6. 存储公钥（新公钥或更新已有公钥）
+	s.publicKeyMap[senderId] = &PublicKeyEntry{
+		PublicKey: ed25519.PublicKey(pubKeyBytes),
+		FirstSeen: time.Now(),
+	}
+}
+
+// ---------------------------------------------------------------------------
+// generateAndBroadcastKeyPair — 生成 Ed25519 密钥对并广播公钥
+// ---------------------------------------------------------------------------
+
+// generateAndBroadcastKeyPair 生成 Ed25519 签名密钥对，构建 Public_Key_Announcement
+// 载荷，签名后加密并通过 MSG_SEND_MESSAGE 广播给房间内所有成员。
+//
+// 📚 学习要点: 公钥广播的自证明机制
+// 公钥广播消息本身也被签名（使用刚生成的私钥签名广播内容）。
+// 接收方收到广播后，用广播中携带的公钥验证广播本身的签名（自验证）。
+// 这证明发送方确实持有对应的私钥，防止格式错误或伪造的公钥被存储。
+// 注意：这不能防止 MITM（服务器可替换整个广播），但能防止无效公钥。
+//
+// 流程：
+//  1. 调用 crypto.GenerateSigningKeyPair() 生成 Ed25519 密钥对
+//  2. 构建 announcement payload: {"type":"pubkey","text":"","pubkey":"<base64url>"}
+//  3. 计算 Signable_Bytes（canonical JSON，不含 sig）
+//  4. 使用私钥签名 Signable_Bytes
+//  5. 将 sig 插入 payload map
+//  6. JSON 序列化完整 payload → AES-256-GCM 加密 → MSG_SEND_MESSAGE 发送
+//
+// 错误处理：采用 best-effort 策略。如果密钥生成或广播失败，
+// signingKeyPair 保持 nil，后续消息将不带签名发送（graceful degradation）。
+// 不中断聊天流程——签名是增强功能，不是必要功能。
+func (s *Session) generateAndBroadcastKeyPair() {
+	// 1. 生成 Ed25519 签名密钥对
+	kp, err := crypto.GenerateSigningKeyPair()
+	if err != nil {
+		// 密钥生成失败（极罕见：系统随机源不可用）
+		// signingKeyPair 保持 nil，后续消息不签名
+		return
+	}
+	s.signingKeyPair = kp
+
+	// 2. 构建 Public_Key_Announcement payload map
+	// 使用 base64.RawURLEncoding（无 padding）编码 32 字节公钥
+	pubKeyB64 := base64.RawURLEncoding.EncodeToString(kp.PublicKey)
+	payload := map[string]interface{}{
+		"type":   "pubkey",
+		"text":   "",
+		"pubkey": pubKeyB64,
+	}
+
+	// 3. 计算 Signable_Bytes（canonical JSON 序列化，不含 sig 字段）
+	signableBytes, err := crypto.ComputeSignableBytes(payload)
+	if err != nil {
+		// canonical JSON 序列化失败（理论上不应发生）
+		return
+	}
+
+	// 4. 使用私钥签名
+	sig := kp.Sign(signableBytes)
+
+	// 5. 将签名插入 payload map
+	payload["sig"] = sig
+
+	// 6. JSON 序列化完整 payload（普通序列化，非 canonical）
+	jsonBytes, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+
+	// 7. AES-256-GCM 加密（使用 Room_Key）
+	iv, ciphertext, err := crypto.Encrypt(s.roomKey, jsonBytes)
+	if err != nil {
+		return
+	}
+
+	// 8. 编码为 MSG_SEND_MESSAGE 协议消息并发送
+	msg := &protocol.Message{
+		Type: protocol.MsgSendMessage,
+		Data: protocol.SendMessageData{
+			IV:         iv,
+			Ciphertext: ciphertext,
+		},
+	}
+	encoded, err := protocol.Encode(msg)
+	if err != nil {
+		return
+	}
+	_ = s.conn.Send(encoded)
 }
 
 // ---------------------------------------------------------------------------
@@ -993,5 +1282,11 @@ func (s *Session) sendLeaveRoom() {
 	// 因此这只是 best-effort 安全措施，不能保证密钥完全从内存中消失。
 	for i := range s.roomKey {
 		s.roomKey[i] = 0
+	}
+
+	// 清零 Ed25519 签名密钥对（与 roomKey 清零遵循相同的 best-effort 策略）
+	if s.signingKeyPair != nil {
+		s.signingKeyPair.ZeroKeyPair()
+		s.signingKeyPair = nil
 	}
 }
