@@ -130,6 +130,18 @@ type Session struct {
 	hasPassword bool // 从 RoomJoined 响应中获取
 	ephemeral   int  // 从 RoomJoined 响应中获取（秒数，0 = 非临时）
 
+	// expiryCh 用于阅后即焚消息的过期通知。
+	// 📚 学习要点: 为什么 expiryCh 是 Session 字段而非 chatLoop 局部变量？
+	// handleUserInput 和 handleRelayMessage 需要访问 expiryCh 来调度过期定时器。
+	// 这些方法是 Session 的方法，将 expiryCh 作为 Session 字段使它们可以直接访问，
+	// 无需通过参数传递（保持方法签名简洁）。
+	expiryCh chan int // 传递需要过期的消息行号
+
+	// lastExpiryClear 记录上次清屏的时间，用于去重。
+	// 多条消息可能在同一秒内过期（如用户快速连发多条消息），
+	// 去重逻辑确保 1 秒内只清屏一次，避免闪烁。
+	lastExpiryClear time.Time
+
 	// --- Ed25519 消息签名支持 ---
 	// 📚 学习要点: 签名密钥对的生命周期
 	// signingKeyPair 在 RunCreate/RunJoin 时生成，在 sendLeaveRoom 时清零。
@@ -511,9 +523,14 @@ func (s *Session) chatLoop() error {
 	// msgCh 容量为 16：服务器可能突发多条消息（如多人同时发言），
 	//   16 条缓冲与 network 层的 sendCh 容量对齐，避免 readPump 阻塞。
 	// sigCh 容量为 1：信号是低频事件，容量 1 确保信号不丢失。
+	// expiryCh 容量为 16：阅后即焚过期事件，多条消息可能同时过期。
 	inputCh := make(chan string, 1)
 	msgCh := make(chan *protocol.Message, 16)
 	sigCh := make(chan os.Signal, 1)
+	expiryCh := make(chan int, 16) // 传递需要过期的消息行号
+
+	// 将 expiryCh 存储到 Session，供 handleUserInput/handleRelayMessage 使用
+	s.expiryCh = expiryCh
 
 	// 注册信号处理：仅监听 os.Interrupt（Ctrl+C）
 	// 📚 学习要点: 为什么不使用 syscall.SIGTERM？
@@ -542,14 +559,20 @@ func (s *Session) chatLoop() error {
 	// 启动 readPump goroutine：读取 WebSocket 消息
 	go s.readPump(ctx, msgCh)
 
+	// 如果是阅后即焚房间，显示提示
+	if s.ephemeral > 0 {
+		s.display.ShowSystemMessage(fmt.Sprintf("Ephemeral mode: messages expire after %d seconds", s.ephemeral))
+	}
+
 	// writePump 已由 network.Conn 在 Dial() 时启动，无需额外启动
 
 	// 📚 学习要点: main goroutine 的 select 事件循环
-	// select 同时等待四个事件源，哪个先就绪就处理哪个：
+	// select 同时等待五个事件源，哪个先就绪就处理哪个：
 	// 1. inputCh: 用户输入了一行文本
 	// 2. msgCh: 服务器发来了一条消息
 	// 3. sigCh: 用户按了 Ctrl+C
-	// 4. ctx.Done(): 连接已关闭（readPump 退出时 msgCh 被关闭）
+	// 4. expiryCh: 阅后即焚消息到期需要清除
+	// 5. ctx.Done(): 连接已关闭（readPump 退出时 msgCh 被关闭）
 	// 这种模式确保 main goroutine 永远不会阻塞在单一 I/O 操作上。
 	for {
 		select {
@@ -561,7 +584,7 @@ func (s *Session) chatLoop() error {
 				s.sendLeaveRoom()
 				return nil
 			}
-			// 处理用户输入（stub：后续 task 8.4 实现）
+			// 处理用户输入
 			s.handleUserInput(line)
 
 		case msg, ok := <-msgCh:
@@ -575,8 +598,21 @@ func (s *Session) chatLoop() error {
 				s.display.ShowError("Connection lost")
 				return fmt.Errorf("connection lost")
 			}
-			// 处理服务器消息（stub：后续 task 8.7 实现）
+			// 处理服务器消息
 			s.handleServerMessage(msg)
+
+		case messageLine := <-expiryCh:
+			// 📚 学习要点: 阅后即焚过期处理
+			// 当消息的定时器到期时，通过 expiryCh 通知 main goroutine。
+			// 使用去重逻辑：如果最近 1 秒内已经清过屏，跳过本次清屏，
+			// 避免多条消息同时过期时反复清屏闪烁。
+			now := time.Now()
+			if now.Sub(s.lastExpiryClear) > 1*time.Second {
+				s.lastExpiryClear = now
+				s.display.ExpireMessage(messageLine)
+				// 清屏后重新显示房间状态信息
+				s.redrawRoomHeader()
+			}
 
 		case <-sigCh:
 			// Ctrl+C：优雅退出
@@ -764,6 +800,9 @@ func (s *Session) handleMemberLeft(data map[string]interface{}) {
 // - chatLoop 的 select 检测到 msgCh 关闭，且 state == StateLeaving，正常返回
 // 这是一种通过"断开数据源"来间接退出事件循环的模式。
 func (s *Session) handleUserInput(line string) {
+	// 0. 追踪用户输入行（终端回显占据一行，需要纳入行计数）
+	s.display.TrackInputLine()
+
 	// 1. 跳过空行
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {
@@ -865,6 +904,9 @@ func (s *Session) handleUserInput(line string) {
 
 	// 8. 本地回显（服务器不会将消息回传给发送者）
 	s.display.ShowOwnMessage(trimmed)
+
+	// 9. 如果是阅后即焚房间，调度消息过期
+	s.scheduleMessageExpiry(s.display.GetLineCounter())
 }
 
 // ---------------------------------------------------------------------------
@@ -1091,6 +1133,9 @@ func (s *Session) handleRelayMessage(data map[string]interface{}) {
 
 	// 9. 显示消息
 	s.display.ShowMessage(senderName, color, payload.Text, timestamp)
+
+	// 10. 如果是阅后即焚房间，调度消息过期
+	s.scheduleMessageExpiry(s.display.GetLineCounter())
 }
 
 // ---------------------------------------------------------------------------
@@ -1257,6 +1302,63 @@ func (s *Session) generateAndBroadcastKeyPair() {
 		return
 	}
 	_ = s.conn.Send(encoded)
+}
+
+// ---------------------------------------------------------------------------
+// redrawRoomHeader — 清屏后重绘房间状态信息
+// ---------------------------------------------------------------------------
+
+// redrawRoomHeader 在阅后即焚清屏后重新显示房间上下文信息。
+// 让用户在消息消失后仍能看到自己所在的房间状态。
+//
+// 📚 学习要点: 清屏后的用户体验
+// 如果清屏后只显示一行 "messages expired"，用户会感到迷失：
+// - 我还在哪个房间？
+// - 房间里还有谁？
+// - 这是什么模式？
+// 重绘房间头部信息解决了这些问题，类似于 Web 端侧边栏始终显示房间信息。
+func (s *Session) redrawRoomHeader() {
+	// 显示当前在线成员
+	memberList := s.getMemberList()
+	s.display.ShowMembers(memberList)
+
+	// 显示 ephemeral 模式提示
+	if s.ephemeral > 0 {
+		s.display.ShowSystemMessage(fmt.Sprintf("⏱ Ephemeral mode: messages expire after %d seconds", s.ephemeral))
+	}
+
+	// 分隔线
+	s.display.ShowSystemMessage("─────────────────────────────────")
+}
+
+// ---------------------------------------------------------------------------
+// scheduleMessageExpiry — 调度阅后即焚消息过期
+// ---------------------------------------------------------------------------
+
+// scheduleMessageExpiry 在阅后即焚模式下，为刚显示的消息启动过期定时器。
+// 定时器到期后通过 expiryCh 通知 chatLoop 的 main goroutine 执行 UI 清除。
+//
+// 📚 学习要点: 为什么使用独立 goroutine + channel 而非 time.AfterFunc？
+// time.AfterFunc 的回调在独立 goroutine 中执行，如果直接在回调中操作终端输出，
+// 会与 chatLoop 的 main goroutine 产生数据竞争（终端输出不是线程安全的）。
+// 通过 channel 将过期事件传递给 main goroutine，确保所有 UI 操作在同一 goroutine 中执行。
+//
+// 参数:
+//   - messageLine: 消息所在的行号（由 Display.ShowMessage/ShowOwnMessage 返回的 lineCounter）
+func (s *Session) scheduleMessageExpiry(messageLine int) {
+	if s.ephemeral <= 0 || s.expiryCh == nil {
+		return
+	}
+
+	duration := time.Duration(s.ephemeral) * time.Second
+	go func() {
+		time.Sleep(duration)
+		// 尽力发送过期通知，如果 channel 已满或已关闭则放弃
+		select {
+		case s.expiryCh <- messageLine:
+		default:
+		}
+	}()
 }
 
 // ---------------------------------------------------------------------------

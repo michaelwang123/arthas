@@ -71,7 +71,7 @@ npm run dev
 
 ```bash
 cd arthas-cli
-go build -o arthas-cli ./cmd/arthas-cli/
+go build -o arthas-cli.exe ./cmd/arthas-cli/
 
 # 创建房间
 ./arthas-cli create --server ws://localhost:8080/ws --name Alice

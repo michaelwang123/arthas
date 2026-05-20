@@ -52,6 +52,16 @@ type Display struct {
 	colorSupport bool
 	// myName 当前用户的显示昵称，用于 ShowOwnMessage 中显示。
 	myName string
+
+	// --- 阅后即焚（Ephemeral）支持 ---
+	// 📚 学习要点: 终端中的"消息消失"实现策略
+	// Web 客户端使用 CSS 动画让消息淡出消失。终端无法实现淡出，
+	// 但可以使用 ANSI 转义序列将已显示的行覆盖为 "[message expired]"。
+	// 关键挑战：终端是顺序输出的，要修改之前的行需要知道它在当前光标位置的上方几行。
+	// 解决方案：维护一个行计数器（lineCounter），每次输出一行就递增。
+	// 每条消息记录它被显示时的行号，过期时计算 offset = 当前行号 - 消息行号，
+	// 然后用 ANSI 光标移动序列回到那一行进行覆盖。
+	lineCounter int // 已输出的总行数（每次 Println 递增）
 }
 
 // NewDisplay 创建 Display 实例，自动检测终端颜色支持。
@@ -70,13 +80,14 @@ func NewDisplay(myName string) *Display {
 
 // ShowMessage 显示收到的聊天消息，带颜色的发送者名和时间戳。
 // 格式: [HH:MM] <colored_name>: text
+// 返回消息所在的行号（用于阅后即焚定时清除）。
 //
 // 参数:
 //   - senderName: 发送者的显示昵称
 //   - hexColor: 服务器分配的 CSS hex 颜色（如 "#4a7fbf"）
 //   - text: 消息文本内容
 //   - timestamp: 服务器时间戳（Unix 毫秒）
-func (d *Display) ShowMessage(senderName, hexColor, text string, timestamp int64) {
+func (d *Display) ShowMessage(senderName, hexColor, text string, timestamp int64) int {
 	ts := FormatTimestamp(timestamp)
 
 	if d.colorSupport {
@@ -85,17 +96,20 @@ func (d *Display) ShowMessage(senderName, hexColor, text string, timestamp int64
 	} else {
 		fmt.Printf("[%s] %s: %s\n", ts, senderName, text)
 	}
+	d.lineCounter++
+	return d.lineCounter
 }
 
 // ShowOwnMessage 显示自己发送的消息（本地回显）。
 // 使用粗体样式区分自己的消息和他人的消息。
 // 格式: [HH:MM] <bold_name>: text
+// 返回消息所在的行号（用于阅后即焚定时清除）。
 //
 // 📚 学习要点: 为什么需要本地回显？
 // Arthas 服务器不会将消息回传给发送者（避免重复显示）。
 // CLI 必须在发送成功后立即本地显示消息，让用户确认消息已发出。
 // 使用当前时间作为时间戳（与服务器时间可能有微小差异，但用户无感知）。
-func (d *Display) ShowOwnMessage(text string) {
+func (d *Display) ShowOwnMessage(text string) int {
 	ts := FormatTimestamp(time.Now().UnixMilli())
 
 	if d.colorSupport {
@@ -103,6 +117,8 @@ func (d *Display) ShowOwnMessage(text string) {
 	} else {
 		fmt.Printf("[%s] %s: %s\n", ts, d.myName, text)
 	}
+	d.lineCounter++
+	return d.lineCounter
 }
 
 // ShowSystemMessage 显示系统消息（成员加入/离开、房间关闭等）。
@@ -114,6 +130,7 @@ func (d *Display) ShowSystemMessage(msg string) {
 	} else {
 		fmt.Printf("*** %s\n", msg)
 	}
+	d.lineCounter++
 }
 
 // ShowError 显示错误消息到 stderr。
@@ -133,6 +150,7 @@ func (d *Display) ShowError(msg string) {
 //	  • <colored_name>
 func (d *Display) ShowMembers(members []protocol.MemberInfo) {
 	fmt.Println("Members in room:")
+	d.lineCounter++
 	for _, m := range members {
 		if d.colorSupport {
 			colorSeq := HexToANSI256(m.Color)
@@ -140,6 +158,7 @@ func (d *Display) ShowMembers(members []protocol.MemberInfo) {
 		} else {
 			fmt.Printf("  • %s\n", m.Name)
 		}
+		d.lineCounter++
 	}
 }
 
@@ -151,6 +170,7 @@ func (d *Display) ShowShareCode(code string) {
 	} else {
 		fmt.Printf("\nShare this code to invite others:\n  %s\n\n", code)
 	}
+	d.lineCounter += 4 // 空行 + 提示行 + 分享码行 + 空行
 }
 
 // ShowReplyContext 显示引用回复的上下文信息（在消息正文之前输出）。
@@ -166,6 +186,60 @@ func (d *Display) ShowReplyContext(senderName, preview string) {
 	} else {
 		fmt.Printf("  ↩ Re: %s: %s\n", senderName, preview)
 	}
+	d.lineCounter++
+}
+
+// ---------------------------------------------------------------------------
+// 阅后即焚（Ephemeral）支持
+// ---------------------------------------------------------------------------
+
+// ExpireMessage 处理阅后即焚消息过期。
+// 使用 ANSI 清屏序列清除终端所有内容，模拟消息"消失"的效果。
+//
+// 📚 学习要点: 终端中的阅后即焚实现策略
+// Web 客户端可以精确地让单条消息淡出消失（DOM 操作）。
+// 终端无法精确控制单行的显示/隐藏，可选方案：
+//
+// 方案 A: ANSI 光标移动覆盖单行 — 不可靠（行偏移受用户输入影响）
+// 方案 B: 每条过期打印通知 — 刷屏（N 条消息 = N 条通知）
+// 方案 C: 清屏 — 简单粗暴但有效，所有过期消息一次性"消失"
+//
+// 采用方案 C：当消息过期时清除终端屏幕。
+// 效果：用户看到屏幕被清空，之后只显示新消息。
+// 这与 Web 端"消息逐条消失"的体验不同，但在终端中是最实用的方案。
+// 使用 \033[2J（清除整个屏幕）+ \033[H（光标移到左上角）。
+//
+// 参数:
+//   - messageLine: 未使用（保留以维持接口兼容）
+func (d *Display) ExpireMessage(messageLine int) {
+	_ = messageLine
+	// 清屏 + 光标归位
+	fmt.Print("\033[2J\033[H")
+	// 显示提示信息
+	if d.colorSupport {
+		fmt.Printf("%s*** ⏱ Previous messages expired (ephemeral mode)%s\n", ansiDim, ansiReset)
+	} else {
+		fmt.Println("*** Previous messages expired (ephemeral mode)")
+	}
+	// 重置行计数器（屏幕已清空）
+	d.lineCounter = 1
+}
+
+// GetLineCounter 返回当前行计数器值。
+// 用于 session 层在显示消息后记录行号，以便后续过期时计算偏移。
+func (d *Display) GetLineCounter() int {
+	return d.lineCounter
+}
+
+// TrackInputLine 在用户输入一行文本后调用，递增行计数器。
+//
+// 📚 学习要点: 为什么需要手动追踪用户输入行？
+// 当用户在终端输入文本并按回车时，终端会回显该行（stdin echo）。
+// 这行文本占据了终端的一行空间，但不是由 Display 的 Show* 方法输出的，
+// 因此 lineCounter 不会自动递增。如果不追踪这些行，
+// ExpireMessage 计算的光标偏移会少于实际行数，导致覆盖错误的行。
+func (d *Display) TrackInputLine() {
+	d.lineCounter++
 }
 
 // FormatTimestamp 将 Unix 毫秒时间戳转换为本地时区的 HH:MM 格式字符串。
