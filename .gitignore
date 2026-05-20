@@ -42,3 +42,4 @@ arthas-client/dist/
 deploy/.env
 deploy/Caddyfile
 deploy/docker-compose.override.yml
+arthas-cli/arthas-cli

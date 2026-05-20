@@ -524,6 +524,18 @@ func (s *Session) chatLoop() error {
 	signal.Notify(sigCh, os.Interrupt)
 	defer signal.Stop(sigCh)
 
+	// 📚 学习要点: 为什么在启动 stdinPump 前等待 100ms？
+	// 加入房间后，CLI 立即发送公钥广播（generateAndBroadcastKeyPair），
+	// 然后进入 chatLoop。如果用户在加入完成前就在终端输入了文本，
+	// 该文本会留在 stdin 缓冲区中。stdinPump 启动后会立即读取并发送这些文本。
+	// 问题：此时其他客户端可能还未处理完 MemberJoined 事件（异步广播），
+	// 导致第一条消息被丢弃或无法正确显示。
+	// 100ms 延迟确保：
+	// 1. 公钥广播已通过 writePump 发送到服务器
+	// 2. 服务器已将 MemberJoined 广播传递给其他客户端
+	// 3. 其他客户端有足够时间处理 MemberJoined 并更新成员列表
+	time.Sleep(100 * time.Millisecond)
+
 	// 启动 stdinPump goroutine：读取用户输入
 	go s.stdinPump(ctx, inputCh)
 
