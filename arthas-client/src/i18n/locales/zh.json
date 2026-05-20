@@ -108,6 +108,10 @@
 
   "notification.newMessage": "{{name}} 发来了新消息",
 
+  "verification.verified": "签名验证通过",
+  "verification.failed": "签名验证失败",
+  "verification.failedTooltip": "签名验证失败 — 此消息可能已被篡改",
+
   "language.switch": "切换语言",
   "language.zh": "中文",
   "language.en": "English",

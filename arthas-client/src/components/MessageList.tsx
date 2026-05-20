@@ -157,6 +157,7 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
                       reply={msg.reply}
                       reactions={msgReactions}
                       myId={myId}
+                      verificationStatus={(msg as ChatMessage).verificationStatus}
                       onReply={canCopy ? () => handleReply(msg) : undefined}
                       onReact={canCopy ? (emoji) => sendReaction(msg.stableId, emoji) : undefined}
                       onScrollToMessage={scrollToMessage}
@@ -204,6 +205,7 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
                     reply={msg.reply}
                     reactions={msgReactions}
                     myId={myId}
+                    verificationStatus={(msg as ChatMessage).verificationStatus}
                     onReply={canCopy ? () => handleReply(msg) : undefined}
                     onReact={canCopy ? (emoji) => sendReaction(msg.stableId, emoji) : undefined}
                     onScrollToMessage={scrollToMessage}

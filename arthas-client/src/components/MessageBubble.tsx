@@ -13,6 +13,8 @@ interface MessageBubbleProps {
   reply?: ReplyData
   reactions?: Reaction[]
   myId: string | null
+  /** Ed25519 签名验证状态 — 用于显示验证指示器 */
+  verificationStatus?: 'verified' | 'failed' | 'unknown' | 'no-sig'
   onReply?: () => void
   onReact?: (emoji: string) => void
   onScrollToMessage?: (stableId: string) => void
@@ -26,7 +28,7 @@ interface MessageBubbleProps {
  */
 export function MessageBubble({
   text, isOwn, canCopy, isDecryptFailed,
-  reply, reactions, myId, onReply, onReact, onScrollToMessage,
+  reply, reactions, myId, verificationStatus, onReply, onReact, onScrollToMessage,
 }: MessageBubbleProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false)
@@ -158,6 +160,9 @@ export function MessageBubble({
         ) : (
           <RichText text={text} />
         )}
+
+        {/* Verification status indicator */}
+        <VerificationIndicator status={verificationStatus} />
       </div>
 
       {/* Desktop hover action buttons */}
@@ -228,6 +233,63 @@ export function MessageBubble({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * 签名验证状态指示器 — 在消息气泡内显示验证结果。
+ *
+ * 📚 学习要点: TOFU 信任模型的 UI 表达
+ * - verified: 签名验证通过，显示微妙的绿色 ✓（不干扰阅读）
+ * - failed: 签名验证失败，显示 ⚠️ + tooltip 警告（可能被篡改）
+ * - unknown / no-sig: 不显示任何指示器（保持干净的 UI）
+ *
+ * 设计原则：验证指示器应该是"非侵入式"的 — 正常情况下用户几乎不会注意到，
+ * 只有在出现问题（failed）时才引起注意。
+ */
+function VerificationIndicator({ status }: { status?: 'verified' | 'failed' | 'unknown' | 'no-sig' }) {
+  const { t } = useTranslation()
+  const [showTooltip, setShowTooltip] = useState(false)
+
+  // unknown 和 no-sig 不显示任何指示器（干净的 UI）
+  if (!status || status === 'unknown' || status === 'no-sig') {
+    return null
+  }
+
+  if (status === 'verified') {
+    return (
+      <span
+        className="inline-block ml-1 text-green-500 opacity-60 text-xs align-middle select-none"
+        aria-label={t('verification.verified')}
+        role="img"
+      >
+        ✓
+      </span>
+    )
+  }
+
+  // status === 'failed'
+  return (
+    <span
+      className="relative inline-block ml-1 text-yellow-500 text-xs align-middle select-none cursor-help"
+      aria-label={t('verification.failed')}
+      role="img"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+      onFocus={() => setShowTooltip(true)}
+      onBlur={() => setShowTooltip(false)}
+      tabIndex={0}
+    >
+      ⚠️
+      {showTooltip && (
+        <span
+          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-gray-900 border border-gray-600 rounded shadow-lg whitespace-nowrap z-50 pointer-events-none"
+          role="tooltip"
+        >
+          {t('verification.failedTooltip')}
+        </span>
+      )}
+    </span>
   )
 }
 

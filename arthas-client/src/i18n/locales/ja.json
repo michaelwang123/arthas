@@ -108,6 +108,10 @@
 
   "notification.newMessage": "{{name}}から新しいメッセージ",
 
+  "verification.verified": "署名検証済み",
+  "verification.failed": "署名検証失敗",
+  "verification.failedTooltip": "署名検証に失敗しました — このメッセージは改ざんされている可能性があります。",
+
   "language.switch": "言語を切り替え",
   "language.zh": "中文",
   "language.en": "English",

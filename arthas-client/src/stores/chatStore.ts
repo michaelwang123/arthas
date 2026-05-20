@@ -46,12 +46,23 @@ import { importRoomKey } from '../crypto/keys';
 import { encryptMessage } from '../crypto/encrypt';
 import { decryptMessage } from '../crypto/decrypt';
 import { encodeShareKey, decodeShareKey } from '../crypto/shareKey';
+import { encryptTypingStatus, decryptTypingStatus } from '../crypto/typingEncrypt';
 import { useFileTransferStore } from '../file-transfer/fileTransferStore';
 import { playNotificationSound, showDesktopNotification, playJoinSound, playLeaveSound } from '../utils/notification';
-import { buildPayload, parsePayload, makeStableId } from '../utils/payload';
+import { buildPayload, parseSignedPayload, makeStableId, buildSignedPayload } from '../utils/payload';
 import { hashPassword } from '../utils/crypto';
 import { useI18nStore } from '../i18n/store';
 import { translate } from '../i18n/translate';
+import {
+  generateSigningKeyPair,
+  encodePublicKey,
+  importVerifyKey,
+  decodePublicKey,
+  verifySignature,
+  type SigningKeyPair,
+} from '../crypto/signing';
+import { computeSignableBytes } from '../crypto/canonicalJson';
+import { DeferredVerificationQueue, verifyMessageSignature } from '../crypto/verifyMessage';
 
 // ===== Types =====
 
@@ -66,6 +77,24 @@ export interface Reaction {
   userIds: string[];
 }
 
+/**
+ * 公钥缓存条目 — 存储成员的 Ed25519 公钥及导入后的 CryptoKey。
+ *
+ * 📚 学习要点: 为什么缓存 CryptoKey？
+ * `importVerifyKey` 是一个异步操作（调用 Web Crypto API）。
+ * 每次验证消息时重新导入公钥会产生不必要的性能开销。
+ * 因此在收到公钥广播时导入一次，将 CryptoKey 缓存在 publicKeyMap 中，
+ * 后续所有验证操作直接使用缓存的 CryptoKey。
+ */
+export interface PublicKeyEntry {
+  /** 32 字节原始公钥（用于比较和重新编码） */
+  raw: Uint8Array;
+  /** 已导入的 CryptoKey（用于 verifySignature，避免重复 import） */
+  cryptoKey: CryptoKey;
+  /** 首次收到该公钥的时间戳（用于 TOFU 冲突检测） */
+  firstSeen: number;
+}
+
 export interface ChatMessage {
   id: string;
   stableId: string;
@@ -76,6 +105,14 @@ export interface ChatMessage {
   isMine: boolean;
   isSystem: boolean;
   reply?: ReplyData;
+  /**
+   * 签名验证状态（一次性计算，结果缓存，不重复验证）。
+   * - 'verified': 签名验证通过
+   * - 'failed': 签名验证失败（可能被篡改）
+   * - 'unknown': 公钥未知，无法验证
+   * - 'no-sig': 消息无签名（旧客户端或不支持 Ed25519）
+   */
+  verificationStatus?: 'verified' | 'failed' | 'unknown' | 'no-sig';
 }
 
 export interface Member {
@@ -111,12 +148,18 @@ export interface ChatState {
   // Reactions
   reactions: Map<string, Reaction[]>;
 
+  // Ed25519 Signing (Phase 8)
+  /** 当前会话的 Ed25519 签名密钥对（null = 浏览器不支持 Ed25519） */
+  signingKeyPair: SigningKeyPair | null;
+  /** memberId → 缓存的公钥条目（含已导入的 CryptoKey） */
+  publicKeyMap: Map<string, PublicKeyEntry>;
+
   // Actions
   connect: () => void;
   createRoom: (name: string, password?: string, ephemeral?: number) => Promise<void>;
   joinRoom: (shareCode: string, name: string, password?: string) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
-  setTyping: (typing: boolean) => void;
+  setTyping: (typing: boolean) => Promise<void>;
   leaveRoom: () => void;
   toggleMute: () => void;
   setReplyTo: (reply: ReplyData) => void;
@@ -167,6 +210,38 @@ function scheduleEphemeralRemoval(msgId: string, ephemeral: number): void {
 let typingTimer: ReturnType<typeof setTimeout> | null = null;
 let isCurrentlyTyping = false;
 
+// 📚 学习要点: 异步加密的 last-write-wins 策略
+// setTyping 变为 async 后，加密操作可能在 in-flight 时被新的 typing 事件覆盖。
+// 使用版本计数器（typingVersion）实现 last-write-wins：
+// - 每次 setTyping 调用时递增版本号
+// - 加密完成后检查版本号是否仍为当前值
+// - 如果版本号已过期（有更新的调用），丢弃加密结果，不发送
+// 这确保了快速连续的 typing 事件只发送最终状态，避免乱序。
+let typingVersion = 0;
+
+// ===== Deferred Verification Queue (module-level) =====
+
+/**
+ * 📚 学习要点: 为什么延迟验证队列放在模块级别？
+ * DeferredVerificationQueue 管理定时器和回调，不适合放在 Zustand store 内部
+ * （store 状态应为可序列化的纯数据）。模块级实例在 leaveRoom 时调用 clear() 重置。
+ */
+let deferredQueue: DeferredVerificationQueue = new DeferredVerificationQueue(
+  (_senderId, messages) => {
+    // 超时回调：将所有待验证消息标记为 'unknown'
+    useChatStore.setState((state) => {
+      const updatedMessages = state.messages.map((msg) => {
+        const pending = messages.find((m) => m.messageId === msg.id);
+        if (pending) {
+          return { ...msg, verificationStatus: 'unknown' as const };
+        }
+        return msg;
+      });
+      return { messages: updatedMessages };
+    });
+  }
+);
+
 // ===== Unique ID generator =====
 
 let messageCounter = 0;
@@ -193,6 +268,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   muted: localStorage.getItem('arthas_muted') === 'true',
   replyTo: null,
   reactions: new Map(),
+  signingKeyPair: null,
+  publicKeyMap: new Map(),
 
   connect: () => {
     ws.onMessage((msg: Message) => {
@@ -214,7 +291,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   createRoom: async (name: string, password?: string, ephemeral?: number) => {
     const roomKey = await generateRoomKey();
     const hashedPwd = await hashPassword(password ?? '');
-    set({ myName: name, roomKey, ephemeral: ephemeral ?? 0 });
+
+    // 📚 学习要点: Ed25519 密钥对生命周期
+    // 密钥对在创建/加入房间时生成，仅存在于内存中。
+    // 如果浏览器不支持 Ed25519，generateSigningKeyPair 返回 null，
+    // 客户端以 no-sig 模式运行（消息正常加密发送，只是没有签名）。
+    const keyPair = await generateSigningKeyPair();
+
+    set({ myName: name, roomKey, ephemeral: ephemeral ?? 0, signingKeyPair: keyPair, publicKeyMap: new Map() });
     ws.send(MSG_CREATE_ROOM, { name, password: hashedPwd, ephemeral: ephemeral ?? 0 });
   },
 
@@ -240,12 +324,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { roomId, keyEncoded, ephemeral } = decoded;
     const roomKey = await importRoomKey(keyEncoded);
     const hashedPwd = await hashPassword(password ?? '');
-    set({ myName: name, roomKey, shareCode, ephemeral });
+
+    // Generate Ed25519 keypair for signing (null if unsupported)
+    const keyPair = await generateSigningKeyPair();
+
+    set({ myName: name, roomKey, shareCode, ephemeral, signingKeyPair: keyPair, publicKeyMap: new Map() });
     ws.send(MSG_JOIN_ROOM, { roomId, name, password: hashedPwd });
   },
 
   sendMessage: async (text: string) => {
-    const { roomKey, myId, myName, replyTo } = get();
+    const { roomKey, myId, myName, replyTo, signingKeyPair } = get();
     if (!roomKey || !myId) return;
 
     // Rate limiting check
@@ -265,8 +353,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    // Build payload with optional reply
-    const payload = buildPayload(text, replyTo);
+    // 📚 学习要点: 消息签名的 graceful degradation
+    // 使用 buildSignedPayload 尝试对消息进行 Ed25519 签名。
+    // 如果签名失败（异常情况），回退到无签名的 buildPayload，
+    // 确保消息仍能正常发送（可用性优先于签名完整性）。
+    // signingKeyPair?.privateKey 为 null 时，buildSignedPayload 内部跳过签名步骤。
+    let payload: string;
+    try {
+      payload = await buildSignedPayload(
+        text,
+        signingKeyPair?.privateKey ?? null,
+        replyTo
+      );
+    } catch (err) {
+      // Signing failed — fall back to unsigned payload
+      console.warn('[Security] Message signing failed, sending without signature:', err);
+      payload = buildPayload(text, replyTo);
+    }
 
     // Encrypt
     const { iv, ciphertext } = await encryptMessage(roomKey, payload);
@@ -276,6 +379,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     recordMessageSent();
 
     // Optimistic local render
+    // 📚 学习要点: 自己的消息为什么标记为 'verified'？
+    // 本地发送的消息无需签名验证 — 我们知道它来自自己（inherently trusted）。
+    // 设置 verificationStatus: 'verified' 让 UI 对自己的消息显示 ✓ 图标，
+    // 与通过签名验证的远程消息保持一致的视觉反馈。
     const timestamp = Date.now();
     const localMsg: ChatMessage = {
       id: generateMessageId(),
@@ -287,6 +394,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isMine: true,
       isSystem: false,
       reply: replyTo ?? undefined,
+      verificationStatus: 'verified',
     };
 
     set((state) => {
@@ -304,19 +412,46 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  setTyping: (typing: boolean) => {
+  setTyping: async (typing: boolean) => {
     if (typing === isCurrentlyTyping) return;
+
+    const { roomKey } = get();
 
     if (typing) {
       isCurrentlyTyping = true;
-      ws.send(MSG_TYPING, { typing: true });
+
+      // Encrypt and send typing:true (last-write-wins via version counter)
+      const myVersion = ++typingVersion;
+      if (roomKey) {
+        try {
+          const encrypted = await encryptTypingStatus(roomKey, true);
+          // Check if this call is still the latest (no newer setTyping call has occurred)
+          if (typingVersion === myVersion) {
+            ws.send(MSG_TYPING, encrypted);
+          }
+        } catch {
+          // Encryption failed — silently skip (don't break typing flow)
+        }
+      }
 
       // Auto-cancel after timeout
       if (typingTimer) clearTimeout(typingTimer);
-      typingTimer = setTimeout(() => {
+      typingTimer = setTimeout(async () => {
         isCurrentlyTyping = false;
-        ws.send(MSG_TYPING, { typing: false });
         typingTimer = null;
+
+        const currentRoomKey = get().roomKey;
+        const cancelVersion = ++typingVersion;
+        if (currentRoomKey) {
+          try {
+            const encrypted = await encryptTypingStatus(currentRoomKey, false);
+            if (typingVersion === cancelVersion) {
+              ws.send(MSG_TYPING, encrypted);
+            }
+          } catch {
+            // Encryption failed — silently skip
+          }
+        }
       }, TYPING_TIMEOUT_MS);
     } else {
       isCurrentlyTyping = false;
@@ -324,7 +459,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
         clearTimeout(typingTimer);
         typingTimer = null;
       }
-      ws.send(MSG_TYPING, { typing: false });
+
+      // Encrypt and send typing:false (last-write-wins via version counter)
+      const myVersion = ++typingVersion;
+      if (roomKey) {
+        try {
+          const encrypted = await encryptTypingStatus(roomKey, false);
+          if (typingVersion === myVersion) {
+            ws.send(MSG_TYPING, encrypted);
+          }
+        } catch {
+          // Encryption failed — silently skip
+        }
+      }
     }
   },
 
@@ -335,7 +482,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { typingMembers } = get();
     typingMembers.forEach((handle) => clearTimeout(handle));
 
-    // Reset room state
+    // Clear deferred verification queue (cancel all pending timers)
+    deferredQueue.clear();
+
+    // Reset room state (including signing keypair and public key map)
     set({
       roomId: null,
       roomKey: null,
@@ -347,6 +497,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       typingMembers: new Map(),
       replyTo: null,
       reactions: new Map(),
+      signingKeyPair: null,
+      publicKeyMap: new Map(),
     });
 
     // Reset module-level state
@@ -467,6 +619,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
           hasPassword: data.hasPassword ?? false,
           ephemeral: data.ephemeral ?? 0,
         });
+
+        // 📚 学习要点: 公钥广播时机
+        // 在收到 RoomJoined 确认后立即广播公钥，确保：
+        // 1. 我们已经有了 roomKey（加密广播消息需要）
+        // 2. 服务器已确认我们在房间中（消息能被中转）
+        // 如果 signingKeyPair 为 null（Ed25519 不支持），跳过广播。
+        const { signingKeyPair, roomKey } = get();
+        if (signingKeyPair && roomKey) {
+          const encodedPubkey = encodePublicKey(signingKeyPair.publicKeyBytes);
+          buildSignedPayload('', signingKeyPair.privateKey, null, 'pubkey', encodedPubkey)
+            .then((payload) => encryptMessage(roomKey, payload))
+            .then(({ iv, ciphertext }) => {
+              ws.send(MSG_SEND_MESSAGE, { iv, ciphertext });
+            })
+            .catch((err) => {
+              console.warn('[Security] Failed to broadcast public key:', err);
+            });
+        }
         break;
       }
 
@@ -558,9 +728,158 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         // Decrypt asynchronously
         decryptMessage(roomKey, data.iv, data.ciphertext)
-          .then((plaintext) => {
-            // Parse payload (supports both new JSON format and old plain text)
-            const { text, reply } = parsePayload(plaintext);
+          .then(async (plaintext) => {
+            // 📚 学习要点: parseSignedPayload vs parsePayload
+            // parseSignedPayload 扩展了 parsePayload，额外提取 sig、type、pubkey 字段。
+            // 保持向后兼容：如果明文不是有效 JSON 或缺少 text 字段，
+            // 整个明文作为 text 返回（兼容旧客户端），sig 为 undefined → 'no-sig' 状态。
+            const parsed = parseSignedPayload(plaintext);
+            const { text, reply, sig } = parsed;
+
+            // ─── 公钥广播处理（type="pubkey"）────────────────────────────────
+            // 📚 学习要点: 公钥广播的自验证（Self-Verification）
+            // 收到公钥广播时，发送方的公钥尚未存储（这正是广播的目的）。
+            // 因此使用广播中携带的 pubkey 验证广播本身的 sig（自证明）：
+            // 证明发送方确实持有对应的私钥，防止无效公钥被存储。
+            // 自验证失败 → 丢弃广播，不存储公钥。
+            if (parsed.type === 'pubkey' && parsed.pubkey && parsed.sig) {
+              try {
+                // Step 1: 解码嵌入的公钥（base64url → 32 字节 Uint8Array）
+                const pubkeyBytes = decodePublicKey(parsed.pubkey);
+
+                // Step 2: 导入为 CryptoKey（用于验证签名）
+                const importedKey = await importVerifyKey(pubkeyBytes);
+
+                // Step 3: 自验证 — 用嵌入的公钥验证广播本身的签名
+                // 构建验证 payload（与发送方签名时相同的结构，不含 sig）
+                const verificationPayload: Record<string, unknown> = {
+                  type: 'pubkey',
+                  text: '',
+                  pubkey: parsed.pubkey,
+                };
+                const signableBytes = computeSignableBytes(verificationPayload);
+                const valid = await verifySignature(importedKey, signableBytes, parsed.sig);
+
+                if (!valid) {
+                  // 自验证失败 — 丢弃广播，不存储公钥
+                  console.warn(
+                    `[Security] Public key announcement from ${data.senderName} (${data.senderId}) failed self-verification. Discarding.`
+                  );
+                  return; // 不添加到消息数组（抑制显示）
+                }
+
+                // Step 4: 检查公钥冲突（TOFU key change）
+                const { publicKeyMap, members } = get();
+                const existingEntry = publicKeyMap.get(data.senderId);
+
+                if (existingEntry) {
+                  // 比较原始字节是否相同
+                  const isSameKey =
+                    existingEntry.raw.length === pubkeyBytes.length &&
+                    existingEntry.raw.every((byte, i) => byte === pubkeyBytes[i]);
+
+                  if (!isSameKey) {
+                    // 公钥冲突 — 接受新公钥，显示系统警告
+                    // 📚 学习要点: TOFU（Trust On First Use）密钥变更处理
+                    // 在临时聊天场景中，密钥变更是正常操作（用户刷新页面、网络重连）。
+                    // 不像 SSH 那样阻止连接，仅显示警告供用户知晓。
+                    const senderMember = members.find((m) => m.id === data.senderId);
+                    const senderName = senderMember?.name ?? data.senderName;
+
+                    const warningMsg: ChatMessage = {
+                      id: generateMessageId(),
+                      stableId: '',
+                      senderId: 'system',
+                      senderName: 'System',
+                      text: `⚠️ ${senderName} 的签名密钥已变更`,
+                      timestamp: Date.now(),
+                      isMine: false,
+                      isSystem: true,
+                    };
+
+                    set((state) => {
+                      const messages = [...state.messages, warningMsg];
+                      return {
+                        messages: messages.length > MAX_MESSAGES ? messages.slice(-MAX_MESSAGES) : messages,
+                      };
+                    });
+                  }
+                }
+
+                // Step 5: 存储公钥（新增或更新）
+                const newEntry: PublicKeyEntry = {
+                  raw: pubkeyBytes,
+                  cryptoKey: importedKey,
+                  firstSeen: Date.now(),
+                };
+
+                set((state) => {
+                  const updatedMap = new Map(state.publicKeyMap);
+                  updatedMap.set(data.senderId, newEntry);
+                  return { publicKeyMap: updatedMap };
+                });
+
+                // Step 6: 批量验证延迟队列中的待验证消息
+                // 收到公钥后，之前因公钥未知而暂存的消息可以立即验证
+                const deferredResults = await deferredQueue.processDeferredQueue(
+                  data.senderId,
+                  importedKey
+                );
+
+                if (deferredResults.length > 0) {
+                  set((state) => {
+                    const updatedMessages = state.messages.map((msg) => {
+                      const result = deferredResults.find((r) => r.messageId === msg.id);
+                      if (result) {
+                        return { ...msg, verificationStatus: result.result };
+                      }
+                      return msg;
+                    });
+                    return { messages: updatedMessages };
+                  });
+                }
+              } catch (err) {
+                console.warn(
+                  `[Security] Failed to process public key announcement from ${data.senderName}:`,
+                  err
+                );
+              }
+
+              // 公钥广播不显示在聊天 UI 中 — 直接返回
+              return;
+            }
+
+            // ─── 签名验证逻辑 ───────────────────────────────────────────────
+            // 📚 学习要点: 签名验证的三种情况
+            // 1. sig 存在 + 公钥已知 → 立即验证（使用缓存的 CryptoKey，无重复 import 开销）
+            // 2. sig 存在 + 公钥未知 → 加入延迟验证队列（等待公钥广播到达后批量验证）
+            // 3. 无 sig → 标记为 'no-sig'（旧客户端或不支持 Ed25519 的浏览器）
+            let verificationStatus: ChatMessage['verificationStatus'];
+
+            if (sig) {
+              const { publicKeyMap } = get();
+              const senderEntry = publicKeyMap.get(data.senderId);
+
+              if (senderEntry) {
+                // 公钥已知 — 使用缓存的 CryptoKey 验证签名（无需重新 importVerifyKey）
+                // 将明文重新解析为 Record<string, unknown> 以传递给 verifyMessageSignature
+                // （verifyMessageSignature 内部会调用 computeSignableBytes 移除 sig 并计算 canonical JSON）
+                let rawPayload: Record<string, unknown>;
+                try {
+                  rawPayload = JSON.parse(plaintext) as Record<string, unknown>;
+                } catch {
+                  rawPayload = { text: plaintext };
+                }
+                const result = await verifyMessageSignature(senderEntry.cryptoKey, rawPayload);
+                verificationStatus = result;
+              } else {
+                // 公钥未知 — 延迟验证（消息先显示为 'unknown'，公钥到达后批量更新）
+                verificationStatus = 'unknown';
+              }
+            } else {
+              // 无签名 — 向后兼容（旧客户端或 Ed25519 不支持）
+              verificationStatus = 'no-sig';
+            }
 
             const chatMsg: ChatMessage = {
               id: generateMessageId(),
@@ -572,7 +891,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
               isMine: false,
               isSystem: false,
               reply,
+              verificationStatus,
             };
+
+            // 如果签名存在但公钥未知，加入延迟验证队列
+            if (sig && verificationStatus === 'unknown') {
+              let rawPayload: Record<string, unknown>;
+              try {
+                rawPayload = JSON.parse(plaintext) as Record<string, unknown>;
+              } catch {
+                rawPayload = { text: plaintext };
+              }
+
+              const evicted = deferredQueue.add(data.senderId, {
+                messageId: chatMsg.id,
+                payload: rawPayload,
+                sig,
+              });
+
+              // 如果队列溢出淘汰了旧消息，将其标记为 'unknown'（已是默认值，无需额外操作）
+              if (evicted) {
+                // 被淘汰的消息已经在 state 中标记为 'unknown'，此处仅作为文档说明
+              }
+            }
 
             set((state) => {
               const messages = [...state.messages, chatMsg];
@@ -671,33 +1012,81 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       case MSG_MEMBER_TYPING: {
         const data = msg.data as MemberTypingData;
+        const { roomKey } = get();
 
-        set((state) => {
-          const typingMembers = new Map(state.typingMembers);
+        // 📚 学习要点: 加密 Typing 向后兼容策略
+        // 接收到的 typing 消息可能有两种格式：
+        // 1. 新格式（加密）: {id, iv, ciphertext} — 需要用 Room_Key 解密
+        // 2. 旧格式（明文）: {id, typing} — 直接使用 typing 布尔值
+        // 通过检测 iv + ciphertext 字段的存在来区分格式。
+        // 解密失败时静默忽略（不更新 typing 指示器），避免影响聊天功能。
 
-          if (data.typing) {
-            // Clear existing timeout for this member
-            const existingHandle = typingMembers.get(data.id);
-            if (existingHandle) clearTimeout(existingHandle);
+        // Type assertion for encrypted format detection
+        const rawData = msg.data as Record<string, unknown>;
 
-            // Set auto-clear timeout (2s)
-            const handle = setTimeout(() => {
-              set((s) => {
-                const updated = new Map(s.typingMembers);
-                updated.delete(data.id);
-                return { typingMembers: updated };
+        if (typeof rawData.iv === 'string' && typeof rawData.ciphertext === 'string') {
+          // New encrypted format: {id, iv, ciphertext}
+          if (!roomKey) break;
+
+          const senderId = rawData.id as string;
+          decryptTypingStatus(roomKey, rawData.iv as string, rawData.ciphertext as string)
+            .then((typing) => {
+              set((state) => {
+                const typingMembers = new Map(state.typingMembers);
+
+                if (typing) {
+                  const existingHandle = typingMembers.get(senderId);
+                  if (existingHandle) clearTimeout(existingHandle);
+
+                  const handle = setTimeout(() => {
+                    set((s) => {
+                      const updated = new Map(s.typingMembers);
+                      updated.delete(senderId);
+                      return { typingMembers: updated };
+                    });
+                  }, TYPING_TIMEOUT_MS) as unknown as number;
+
+                  typingMembers.set(senderId, handle);
+                } else {
+                  const handle = typingMembers.get(senderId);
+                  if (handle) clearTimeout(handle);
+                  typingMembers.delete(senderId);
+                }
+
+                return { typingMembers };
               });
-            }, TYPING_TIMEOUT_MS) as unknown as number;
+            })
+            .catch(() => {
+              // Decryption failed — silently ignore (don't break typing indicator)
+            });
+        } else if (typeof data.typing === 'boolean') {
+          // Old plaintext format: {id, typing} — backward compatibility
+          set((state) => {
+            const typingMembers = new Map(state.typingMembers);
 
-            typingMembers.set(data.id, handle);
-          } else {
-            const handle = typingMembers.get(data.id);
-            if (handle) clearTimeout(handle);
-            typingMembers.delete(data.id);
-          }
+            if (data.typing) {
+              const existingHandle = typingMembers.get(data.id);
+              if (existingHandle) clearTimeout(existingHandle);
 
-          return { typingMembers };
-        });
+              const handle = setTimeout(() => {
+                set((s) => {
+                  const updated = new Map(s.typingMembers);
+                  updated.delete(data.id);
+                  return { typingMembers: updated };
+                });
+              }, TYPING_TIMEOUT_MS) as unknown as number;
+
+              typingMembers.set(data.id, handle);
+            } else {
+              const handle = typingMembers.get(data.id);
+              if (handle) clearTimeout(handle);
+              typingMembers.delete(data.id);
+            }
+
+            return { typingMembers };
+          });
+        }
+        // If neither format matches, silently ignore
         break;
       }
 
@@ -728,6 +1117,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           isSystem: true,
         };
 
+        // Clear deferred verification queue
+        deferredQueue.clear();
+
         set((state) => ({
           roomId: null,
           roomKey: null,
@@ -739,6 +1131,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           typingMembers: new Map(),
           replyTo: null,
           reactions: new Map(),
+          signingKeyPair: null,
+          publicKeyMap: new Map(),
         }));
         break;
       }

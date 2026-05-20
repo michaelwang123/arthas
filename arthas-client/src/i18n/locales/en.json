@@ -108,6 +108,10 @@
 
   "notification.newMessage": "New message from {{name}}",
 
+  "verification.verified": "Signature verified",
+  "verification.failed": "Signature verification failed",
+  "verification.failedTooltip": "Signature verification failed — this message may have been tampered with.",
+
   "language.switch": "Switch language",
   "language.zh": "中文",
   "language.en": "English",
