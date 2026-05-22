@@ -174,13 +174,13 @@ export function sendVoice(blob: Blob, duration: number, mimeType: string): void 
       console.warn('[VoiceSender] Voice file too large:', file.size);
       // 📚 学习要点: 错误通知策略
       // voiceSender 是无状态模块，不持有 UI 状态。
-      // 将错误信息设置到 voiceStore.recordingError 中，
-      // UI 组件（RecordingIndicator）订阅此字段并显示错误提示。
-      useVoiceStore.setState({ recordingError: t('voice.error.tooLarge') });
+      // 将错误信息设置到 voiceStore.voiceError 中，
+      // UI 组件（VoiceErrorToast）订阅此字段并显示错误提示。
+      useVoiceStore.setState({ voiceError: t('voice.error.tooLarge') });
     } else {
       // 队列满（有其他文件/语音正在排队发送）
       console.warn('[VoiceSender] Transfer queue full or busy');
-      useVoiceStore.setState({ recordingError: t('voice.error.transferBusy') });
+      useVoiceStore.setState({ voiceError: t('voice.error.transferBusy') });
     }
     return;
   }
