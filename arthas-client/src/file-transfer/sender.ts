@@ -41,7 +41,7 @@ import { toBase64Url } from '../crypto/utils';
 import { streamChunks } from './chunker';
 import { encryptChunk } from './encryptChunk';
 import { generateThumbnail } from './thumbnail';
-import { useFileTransferStore, triggerProcessQueue } from './fileTransferStore';
+import { useFileTransferStore, triggerProcessQueue, consumeExtraMetadata } from './fileTransferStore';
 import { useChatStore } from '../stores/chatStore';
 import {
   type FileMetadata,
@@ -514,13 +514,22 @@ export async function sendFile(transferId: string, roomKey: CryptoKey): Promise<
 
   try {
     // Step 3: 在聊天列表中插入文件消息占位符（乐观渲染）
-    const chatMessageId = insertChatFileMessage(transferId, file);
-
-    // 更新传输状态：关联 chatMessageId 和发送方信息
-    updateTransferMeta(transferId, chatMessageId);
+    // 📚 学习要点: 语音消息的占位符由 voiceSender 提前插入
+    // 如果 transfer.chatMessageId 已设置（语音消息在 voiceSender 中提前插入了占位符），
+    // 跳过此步骤，避免重复插入聊天消息。
+    // 普通文件传输的 chatMessageId 在 initiateTransfer 时为空字符串，需要在此处插入。
+    if (!transfer.chatMessageId) {
+      const chatMessageId = insertChatFileMessage(transferId, file);
+      updateTransferMeta(transferId, chatMessageId);
+    }
 
     // Step 4: 加密文件元数据并发送 MSG_SEND_FILE_META
-    await sendEncryptedMetadata(transferId, file, roomKey);
+    // 📚 学习要点: consumeExtraMetadata 获取语音消息的额外字段
+    // 语音消息通过 initiateTransfer 的 extraMetadata 参数存储了 { isVoice: true, duration }。
+    // 此处取出并传递给 sendEncryptedMetadata，合并到加密的 FileMetadata 对象中。
+    // 普通文件传输没有 extraMetadata，consumeExtraMetadata 返回 undefined（不影响）。
+    const extraFields = consumeExtraMetadata(transferId);
+    await sendEncryptedMetadata(transferId, file, roomKey, extraFields);
 
     // Step 5: 流式分片 → 加密 → 发送所有 chunk
     await sendAllChunks(transferId, file, roomKey);
@@ -666,14 +675,29 @@ function updateTransferMeta(transferId: string, chatMessageId: string): void {
  * - 这里：返回 { iv: string, ciphertext: Uint8Array }（iv 是 base64url，密文是原始二进制）
  * 原因：密文通过 msgpack bin 格式传输，避免 base64 的 33% 膨胀。
  *
+ * 📚 学习要点: extraFields 扩展点设计
+ * 语音消息需要在加密 metadata 中注入 `isVoice: true` 和 `duration` 字段，
+ * 但 sendEncryptedMetadata() 原本只从 File 对象构造固定的 FileMetadata。
+ * 通过增加可选的 `extraFields` 参数，调用方可以注入任意额外字段：
+ * - 语音消息: { isVoice: true, duration: 5 }
+ * - 未来扩展: 任何需要在加密 metadata 中携带的自定义字段
+ *
+ * 这些字段在加密的 ciphertext 内部，服务器无法看到（零知识保持不变）。
+ * 接收方解密 metadata 后可以检查这些字段来决定渲染方式。
+ * 旧客户端不认识额外字段会直接忽略（向后兼容）。
+ *
  * @param transferId - 传输 ID
  * @param file - 文件对象
  * @param roomKey - 房间加密密钥
+ * @param extraFields - 可选的额外字段，合并到 FileMetadata 中一起加密发送。
+ *                      用于语音消息注入 isVoice/duration 等标识字段。
+ *                      默认 undefined，不影响现有文件传输调用。
  */
 async function sendEncryptedMetadata(
   transferId: string,
   file: File,
-  roomKey: CryptoKey
+  roomKey: CryptoKey,
+  extraFields?: Record<string, unknown>
 ): Promise<void> {
   // 1. 构建文件元数据对象
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
@@ -684,6 +708,11 @@ async function sendEncryptedMetadata(
   // generateThumbnail() 对非图片文件返回 null，不影响非图片文件的传输流程。
   const thumbnail = await generateThumbnail(file);
 
+  // 📚 学习要点: 对象展开（Spread）合并策略
+  // 使用 `...extraFields` 将额外字段合并到 metadata 对象中。
+  // 展开操作放在基础字段之后，意味着 extraFields 中的同名字段会覆盖基础字段。
+  // 但实际使用中，extraFields 只包含新增字段（如 isVoice、duration），
+  // 不会与基础字段冲突。如果 extraFields 为 undefined，展开操作无效果（安全）。
   const metadata: FileMetadata = {
     transferId,
     fileName: file.name,
@@ -691,6 +720,7 @@ async function sendEncryptedMetadata(
     mimeType: file.type || 'application/octet-stream',
     totalChunks,
     thumbnail: thumbnail ?? undefined,
+    ...extraFields,
   };
 
   // 📚 学习要点: 发送方也存储缩略图 data URL

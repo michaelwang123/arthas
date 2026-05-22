@@ -48,6 +48,8 @@ import {
   type TransferState,
   type FileTransferState,
   type TransferStatus,
+  type FileMetadata,
+  type TransferInitiateOptions,
   MAX_FILE_SIZE,
   CHUNK_SIZE,
   generateTransferId,
@@ -63,6 +65,71 @@ import {
 import { useChatStore } from '../stores/chatStore';
 import { useI18nStore } from '../i18n/store';
 import { translate } from '../i18n/translate';
+
+// ============================================================================
+// 模块级状态：extraMetadata 存储
+// ============================================================================
+
+/**
+ * 额外元数据映射：transferId → extraMetadata 对象。
+ *
+ * 📚 学习要点: 为什么使用模块级 Map 存储 extraMetadata？
+ * 与 sender.ts 中的 fileRefs Map 采用相同的设计模式：
+ *
+ * 1. Zustand state 应保持可序列化（JSON-like），extraMetadata 中可能包含
+ *    不可序列化的值（虽然当前只有 { isVoice: true, duration: number }，
+ *    但接口设计为 Record<string, unknown> 以保持扩展性）
+ * 2. extraMetadata 是传输过程中的临时数据，不需要触发 React 重渲染
+ * 3. 生命周期与传输一致：processQueue 触发 sendFile 时读取，传输完成后清理
+ * 4. 与 storeFileRef 模式一致，降低认知负担（同一模块中的相似问题用相似方案解决）
+ *
+ * 数据流：
+ * initiateTransfer(file, { extraMetadata }) → extraMetadataRefs.set(transferId, extraMetadata)
+ * processQueue() → sendFile() → sendEncryptedMetadata(transferId, file, roomKey, extraMetadata)
+ * sendEncryptedMetadata 将 extraMetadata 合并到 FileMetadata 对象中一起加密
+ *
+ * @see sender.ts — fileRefs Map（相同的模块级存储模式）
+ * @see design.md — 语音消息通过 extraMetadata 注入 isVoice 和 duration
+ */
+const extraMetadataRefs = new Map<string, Record<string, unknown>>();
+
+/**
+ * 存储额外元数据，供后续 sendFile() 中的 sendEncryptedMetadata() 使用。
+ *
+ * @param transferId - 传输唯一标识符
+ * @param metadata - 要合并到 FileMetadata 中的额外字段
+ */
+export function storeExtraMetadata(transferId: string, metadata: Record<string, unknown>): void {
+  extraMetadataRefs.set(transferId, metadata);
+}
+
+/**
+ * 获取并移除额外元数据（一次性读取，读取后自动清理）。
+ *
+ * 📚 学习要点: 为什么使用"获取并移除"模式？
+ * extraMetadata 只在 sendEncryptedMetadata() 中使用一次（合并到加密 payload 中）。
+ * 使用后立即从 Map 中移除，防止内存泄漏。
+ * 如果传输失败或被取消，cleanupExtraMetadata() 会兜底清理。
+ *
+ * @param transferId - 传输唯一标识符
+ * @returns 额外元数据对象，如果不存在则返回 undefined
+ */
+export function consumeExtraMetadata(transferId: string): Record<string, unknown> | undefined {
+  const metadata = extraMetadataRefs.get(transferId);
+  if (metadata) {
+    extraMetadataRefs.delete(transferId);
+  }
+  return metadata;
+}
+
+/**
+ * 清理额外元数据（传输失败/取消时的兜底清理）。
+ *
+ * @param transferId - 传输唯一标识符
+ */
+export function cleanupExtraMetadata(transferId: string): void {
+  extraMetadataRefs.delete(transferId);
+}
 
 // ============================================================================
 // 常量定义
@@ -121,10 +188,17 @@ interface FileTransferActions {
    * 发起文件传输：验证文件 → 创建传输状态 → 加入发送队列。
    * 实际的发送逻辑（加密、WebSocket 发送）由 sender.ts 在 processQueue 触发时执行。
    *
+   * 📚 学习要点: 可选 options 参数的扩展点设计
+   * 第二个参数 options 是可选的，包含 extraMetadata 字段。
+   * 语音模块通过此参数注入 { isVoice: true, duration } 到加密 metadata 中，
+   * 而无需修改 initiateTransfer 的核心逻辑（队列管理、互斥检查、状态追踪）。
+   * 现有的 initiateTransfer(file) 调用完全不受影响（向后兼容）。
+   *
    * @param file - 用户选择的文件对象
+   * @param options - 可选配置，包含要合并到加密 metadata 中的额外字段
    * @returns 生成的 transferId（用于 UI 关联），如果验证失败返回 null
    */
-  initiateTransfer: (file: File) => string | null;
+  initiateTransfer: (file: File, options?: TransferInitiateOptions) => string | null;
 
   /**
    * 取消传输：更新状态为 cancelled，如果是活跃发送则停止，如果在队列中则移除。
@@ -157,6 +231,40 @@ interface FileTransferActions {
    * @see requirements.md — Requirement 6.5
    */
   handleSenderLeft: (senderId: string) => void;
+
+  /**
+   * 注册语音传输完成回调。
+   *
+   * 📚 学习要点: 回调注册模式（Callback Registration Pattern）
+   * voiceStore 在初始化时调用此方法注册回调函数。
+   * 当 receiver.ts 的 handleFileComplete 检测到 isVoice === true 时，
+   * 会调用已注册的回调，将 transferId、blobUrl 和 metadata 传递给 voiceStore。
+   *
+   * 这种模式的优势：
+   * 1. 避免 file-transfer → voice 的循环依赖
+   * 2. file-transfer 模块不需要知道 voice 模块的存在（松耦合）
+   * 3. 回调可以在运行时动态注册/注销（灵活性）
+   * 4. 如果 voice 模块未加载，回调为 undefined，不影响文件传输正常工作
+   *
+   * @param cb - 传输完成时的回调函数，接收 transferId、blobUrl 和解密后的 metadata
+   */
+  registerTransferCompleteCallback: (
+    cb: (transferId: string, blobUrl: string, metadata: FileMetadata) => void
+  ) => void;
+
+  /**
+   * 注销语音传输完成回调。
+   *
+   * 在 voiceStore cleanup（用户离开房间）时调用，防止回调引用过期的 store 实例。
+   *
+   * 📚 学习要点: 为什么需要注销？
+   * 如果用户离开房间后 voiceStore 被重置，但回调仍然指向旧的 store 方法，
+   * 后续的 handleFileComplete 调用会触发已失效的回调，可能导致：
+   * - 操作已清空的 Map（无害但浪费）
+   * - 引用已 revoke 的 Blob URL（导致播放失败）
+   * 注销回调确保生命周期一致性。
+   */
+  unregisterTransferCompleteCallback: () => void;
 }
 
 // ============================================================================
@@ -202,6 +310,16 @@ export const useFileTransferStore = create<FileTransferState & FileTransferActio
 
     /** 当前活跃接收传输数（限制最大 MAX_CONCURRENT_RECEIVES 个） */
     activeReceiveCount: 0,
+
+    /**
+     * 语音传输完成回调（初始为 undefined）。
+     *
+     * 📚 学习要点: 可选回调的初始值
+     * 初始为 undefined，表示没有模块注册回调。
+     * 当 voiceStore 初始化时会调用 registerTransferCompleteCallback 注册回调。
+     * receiver.ts 在调用前会检查 `if (callback)` 确保安全。
+     */
+    onTransferComplete: undefined,
 
     // ========================================================================
     // Actions
@@ -299,15 +417,24 @@ export const useFileTransferStore = create<FileTransferState & FileTransferActio
       }
     },
 
-    initiateTransfer: (file: File): string | null => {
+    initiateTransfer: (file: File, options?: TransferInitiateOptions): string | null => {
       /**
        * 📚 学习要点: 发起传输的完整流程
        * 1. 验证文件大小（≤ 5MB）
        * 2. 检查队列容量（≤ 3 个待发送）
        * 3. 生成唯一 transferId
        * 4. 创建 TransferState（status: 'pending'）
-       * 5. 加入发送队列
-       * 6. 触发队列处理（如果当前无活跃发送）
+       * 5. 存储 extraMetadata（如果提供）
+       * 6. 加入发送队列
+       * 7. 触发队列处理（如果当前无活跃发送）
+       *
+       * 📚 学习要点: extraMetadata 的传递路径
+       * initiateTransfer(file, { extraMetadata: { isVoice: true, duration: 5 } })
+       *   → extraMetadataRefs.set(transferId, extraMetadata)  // 模块级 Map 存储
+       *   → processQueue() 触发 sendFile(transferId, roomKey)
+       *   → sendFile 内部调用 sendEncryptedMetadata(transferId, file, roomKey)
+       *   → sendEncryptedMetadata 通过 consumeExtraMetadata(transferId) 获取并合并到 FileMetadata
+       *   → 合并后的 metadata 被 JSON 序列化 → AES-GCM 加密 → 发送
        *
        * 注意：此方法只负责状态管理，不执行实际的文件发送。
        * 实际发送由 processQueue() 触发，sender.ts 执行。
@@ -340,7 +467,16 @@ export const useFileTransferStore = create<FileTransferState & FileTransferActio
       // 当 processQueue() 触发 sendFile() 时，通过 transferId 取回 File 对象。
       storeFileRef(transferId, file);
 
-      // Step 4: 创建传输状态
+      // Step 4: 存储 extraMetadata（如果提供）
+      // 📚 学习要点: extraMetadata 的存储时机
+      // 在 initiateTransfer 中存储，在 sendEncryptedMetadata 中消费。
+      // 两者之间可能有时间差（传输在队列中排队等待），
+      // 但 extraMetadataRefs Map 会持有引用直到被消费或清理。
+      if (options?.extraMetadata) {
+        storeExtraMetadata(transferId, options.extraMetadata);
+      }
+
+      // Step 5: 创建传输状态
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       const now = Date.now();
 
@@ -451,6 +587,13 @@ export const useFileTransferStore = create<FileTransferState & FileTransferActio
         send(MSG_SEND_FILE_CANCEL, cancelData);
       }
 
+      // 清理 extraMetadata（如果传输在队列中被取消，extraMetadata 尚未被消费）
+      // 📚 学习要点: 兜底清理防止内存泄漏
+      // 如果传输在 pending 状态被取消，extraMetadata 还存储在 Map 中。
+      // 此时 sendEncryptedMetadata 永远不会被调用（不会消费 metadata），
+      // 需要手动清理，否则 Map 中的条目会永久存在。
+      cleanupExtraMetadata(transferId);
+
       // 如果取消的是活跃发送，触发队列处理下一个
       if (wasActiveSend) {
         processQueue();
@@ -557,6 +700,34 @@ export const useFileTransferStore = create<FileTransferState & FileTransferActio
        * @see requirements.md — Requirement 6.5
        */
       receiverHandleSenderLeft(senderId);
+    },
+
+    registerTransferCompleteCallback: (
+      cb: (transferId: string, blobUrl: string, metadata: FileMetadata) => void
+    ) => {
+      /**
+       * 📚 学习要点: 回调注册的时机
+       * voiceStore 在模块加载时（或首次使用时）调用此方法注册回调。
+       * 注册后，所有后续的 handleFileComplete 调用都会检查 isVoice 并触发回调。
+       *
+       * 为什么使用 set() 而非模块级变量？
+       * - 存储在 Zustand state 中，与 store 生命周期一致
+       * - 可以通过 getState().onTransferComplete 在 receiver.ts 中访问
+       * - 如果使用模块级变量，需要额外的导出/导入，增加耦合
+       */
+      set({ onTransferComplete: cb });
+    },
+
+    unregisterTransferCompleteCallback: () => {
+      /**
+       * 📚 学习要点: 注销回调防止内存泄漏
+       * 当用户离开房间时，voiceStore 调用 cleanup() 并注销回调。
+       * 这确保：
+       * 1. 回调函数不再持有对已清理的 voiceStore 方法的引用
+       * 2. 后续的 handleFileComplete 不会触发已失效的回调
+       * 3. GC 可以正常回收 voiceStore 相关的闭包和对象
+       */
+      set({ onTransferComplete: undefined });
     },
   })
 );

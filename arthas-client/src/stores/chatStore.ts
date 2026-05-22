@@ -48,6 +48,7 @@ import { decryptMessage } from '../crypto/decrypt';
 import { encodeShareKey, decodeShareKey } from '../crypto/shareKey';
 import { encryptTypingStatus, decryptTypingStatus } from '../crypto/typingEncrypt';
 import { useFileTransferStore } from '../file-transfer/fileTransferStore';
+import { useVoiceStore } from '../voice/voiceStore';
 import { playNotificationSound, showDesktopNotification, playJoinSound, playLeaveSound } from '../utils/notification';
 import { buildPayload, parseSignedPayload, makeStableId, buildSignedPayload } from '../utils/payload';
 import { hashPassword } from '../utils/crypto';
@@ -484,6 +485,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Clear deferred verification queue (cancel all pending timers)
     deferredQueue.clear();
+
+    // 📚 学习要点: 语音模块资源清理（离开房间时）
+    // 离开房间时必须释放所有语音相关资源：
+    // 1. cancelRecording(): 如果用户正在录音，立即停止并释放麦克风
+    //    - 停止 MediaRecorder，释放 MediaStream tracks（麦克风指示灯熄灭）
+    //    - 重置录音状态为 idle
+    // 2. cleanup(): 释放所有已缓存的语音 Blob URL 和播放状态
+    //    - 停止当前播放（如果有语音正在播放）
+    //    - 对所有缓存的 Blob URL 调用 URL.revokeObjectURL()（防止内存泄漏）
+    //    - 重置 blobCache、lruOrder、playbackStates 等状态
+    //
+    // 为什么两个调用都需要？
+    // - cancelRecording 处理录音引擎（MediaRecorder + MediaStream）
+    // - cleanup 处理播放引擎和 Blob 缓存
+    // 它们管理不同的资源，互不重叠。
+    useVoiceStore.getState().cancelRecording();
+    useVoiceStore.getState().cleanup();
 
     // Reset room state (including signing keypair and public key map)
     set({

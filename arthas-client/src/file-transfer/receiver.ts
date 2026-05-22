@@ -39,6 +39,7 @@ import {
   type RelayFileCompleteData,
   type RelayFileCancelData,
   type ChatFileMessage,
+  type ChatVoiceMessage,
   type SendFileAckData,
 } from '../network/protocol';
 import { fromBase64Url } from '../crypto/utils';
@@ -245,6 +246,8 @@ export async function handleFileMeta(
     fileName: sanitizeFileName(metadata.fileName),
     fileSize: metadata.fileSize,
     mimeType: metadata.mimeType,
+    isVoice: metadata.isVoice === true ? true : undefined,
+    duration: metadata.isVoice === true ? metadata.duration : undefined,
     totalChunks: metadata.totalChunks,
     receivedChunks: 0,
     lastReceivedIndex: -1,
@@ -259,8 +262,19 @@ export async function handleFileMeta(
     chatMessageId: '', // 将在插入聊天消息后更新
   };
 
-  // Step 5: 在聊天列表中插入文件消息占位符
-  const chatMessageId = insertReceiverChatFileMessage(data, metadata);
+  // Step 5: 在聊天列表中插入消息占位符
+  // 📚 学习要点: 语音消息 vs 文件消息的分支判断
+  // 解密 metadata 后检查 isVoice 字段，决定插入哪种类型的聊天消息占位符：
+  // - isVoice === true → 插入 ChatVoiceMessage（subType:'voice'，显示语音气泡）
+  // - 否则 → 插入 ChatFileMessage（显示文件卡片，向后兼容）
+  // 这是接收端区分语音消息和普通文件的唯一判断点。
+  // 后续的 chunk 接收、解密、重组流程完全相同，无需再次判断。
+  let chatMessageId: string;
+  if (metadata.isVoice === true) {
+    chatMessageId = insertReceiverChatVoiceMessage(data, metadata);
+  } else {
+    chatMessageId = insertReceiverChatFileMessage(data, metadata);
+  }
   transferState.chatMessageId = chatMessageId;
 
   // Step 6: 更新 store 状态（添加传输 + 增加活跃接收计数）
@@ -474,6 +488,44 @@ export function handleFileComplete(data: RelayFileCompleteData): void {
     };
   });
 
+  // 📚 学习要点: 语音传输完成回调触发
+  // 如果此传输是语音消息（isVoice === true），通知已注册的回调。
+  // 回调由 voiceStore 注册，用于将 blobUrl 存入语音 Blob 缓存（LRU）。
+  // 为什么在 setState 之后调用？
+  // - 确保 TransferState 已更新为 'complete'（状态一致性）
+  // - 回调中可能读取 store 状态，此时状态已是最新的
+  // - 即使回调抛出异常，传输状态已正确更新（不影响核心流程）
+  if (transfer.isVoice === true) {
+    const { onTransferComplete } = useFileTransferStore.getState();
+    if (onTransferComplete) {
+      // 📚 学习要点: 从 TransferState 重构 FileMetadata 传递给回调
+      // handleFileMeta 解密 metadata 时已将关键字段缓存到 TransferState，
+      // 此处重构 FileMetadata 对象供 voiceStore 使用（包含 isVoice 和 duration）。
+      const reconstructedMetadata: FileMetadata = {
+        transferId: transfer.transferId,
+        fileName: transfer.fileName,
+        fileSize: transfer.fileSize,
+        mimeType: transfer.mimeType,
+        totalChunks: transfer.totalChunks,
+        isVoice: true,
+        duration: transfer.duration,
+      };
+      try {
+        onTransferComplete(data.transferId, blobUrl, reconstructedMetadata);
+      } catch (error) {
+        // 📚 学习要点: 回调异常隔离
+        // 回调中的异常不应影响文件传输核心流程。
+        // 使用 try/catch 隔离，仅打印警告日志。
+        // 即使 voiceStore 出错，文件传输的状态更新和 ACK 发送已完成。
+        console.warn(
+          '[FileTransfer/Receiver] onTransferComplete 回调异常:',
+          data.transferId,
+          error
+        );
+      }
+    }
+  }
+
   // 清除超时定时器
   clearTimeoutTimer(data.transferId);
 }
@@ -643,6 +695,70 @@ function insertReceiverChatFileMessage(
     const messages = [
       ...state.messages,
       fileMessage as unknown as typeof state.messages[0],
+    ];
+    return {
+      messages: messages.length > 200 ? messages.slice(-200) : messages,
+    };
+  });
+
+  return chatMessageId;
+}
+
+/**
+ * 在聊天列表中插入接收方的语音消息占位符。
+ *
+ * 📚 学习要点: 语音消息占位符 vs 文件消息占位符
+ * 语音消息使用 ChatVoiceMessage 类型（继承 ChatFileMessage），额外包含：
+ * - subType: 'voice' — 让 MessageList.tsx 渲染语音气泡而非文件卡片
+ * - duration — 语音时长（秒），用于 UI 显示 "0:05" 格式
+ *
+ * 📚 学习要点: receiver.ts 不直接 import voiceStore — 通过回调模式解耦
+ * 此函数仅负责在 chatStore 中插入消息占位符（纯数据操作）。
+ * 语音 Blob 的缓存管理由 voiceStore 通过 onTransferComplete 回调处理。
+ * 这避免了 file-transfer ↔ voice 的循环依赖：
+ * - file-transfer/receiver.ts → chatStore（单向，已有依赖）
+ * - voiceStore → fileTransferStore（通过 registerTransferCompleteCallback 注册回调）
+ * - fileTransferStore → voiceStore（通过回调调用，无 import 依赖）
+ *
+ * @param data - 中转的元数据消息（包含 senderId、senderName、时间戳）
+ * @param metadata - 解密后的文件元数据（包含 isVoice、duration）
+ * @returns 生成的聊天消息 ID
+ */
+function insertReceiverChatVoiceMessage(
+  data: RelayFileMetaData,
+  metadata: FileMetadata
+): string {
+  const timestamp = data.t || Date.now();
+  const chatMessageId = `${timestamp}-voice-${data.transferId.slice(0, 8)}`;
+
+  // 📚 学习要点: ChatVoiceMessage 的构造
+  // 继承 ChatFileMessage 的所有字段（type:'file', transferId, fileName 等），
+  // 额外添加 subType:'voice' 和 duration。
+  // MessageList.tsx 通过 isVoiceMessage() 类型守卫检查 subType 字段，
+  // 决定渲染 <VoiceMessage /> 还是 <FileMessage />。
+  const voiceMessage: ChatVoiceMessage = {
+    id: chatMessageId,
+    stableId: `${data.senderId}-${timestamp}`,
+    senderId: data.senderId,
+    senderName: data.senderName,
+    text: '',  // 语音消息不使用 text 字段
+    timestamp,
+    isMine: false,  // 接收方：消息来自他人
+    isSystem: false,
+    type: 'file',  // 保持 type:'file' 以兼容现有消息列表逻辑
+    transferId: data.transferId,
+    fileName: sanitizeFileName(metadata.fileName),
+    fileSize: metadata.fileSize,
+    mimeType: metadata.mimeType,
+    subType: 'voice',
+    duration: metadata.duration ?? 0,
+  };
+
+  // 插入到 chatStore 的 messages 数组中
+  useChatStore.setState((state) => {
+    const messages = [
+      ...state.messages,
+      voiceMessage as unknown as typeof state.messages[0],
     ];
     return {
       messages: messages.length > 200 ? messages.slice(-200) : messages,

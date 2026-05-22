@@ -3,9 +3,12 @@ import { useChatStore } from '../stores/chatStore';
 import type { ChatMessage, Member } from '../stores/chatStore';
 import { MessageBubble } from './MessageBubble';
 import { FileMessage } from '../file-transfer/components/FileMessage';
+import { VoiceMessage } from '../voice/components/VoiceMessage';
 import { useFileTransferStore } from '../file-transfer/fileTransferStore';
+import { useVoiceStore } from '../voice/voiceStore';
 import { truncatePreview } from '../utils/payload';
 import type { ChatFileMessage } from '../network/protocol';
+import { isVoiceMessage } from '../network/protocol';
 
 interface MessageListProps {
   messages: (ChatMessage | ChatFileMessage)[];
@@ -127,11 +130,14 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
         const canCopy = !isDecryptFailed;
         const msgReactions = reactions.get(msg.stableId) || undefined;
 
-        // 📚 学习要点: 文件消息条件渲染
-        // 检测消息是否为文件类型（type === 'file'），如果是则渲染 FileMessage 组件。
-        // FileMessage 通过 transferId 从 fileTransferStore 订阅实时传输状态，
-        // 无需在此处传递进度、速度等动态数据（单一数据源原则）。
+        // 📚 学习要点: 文件消息与语音消息的条件渲染
+        // 检测消息是否为文件类型（type === 'file'），如果是则进一步区分语音和普通文件。
+        // 检查顺序很重要：先检查 isVoiceMessage（更具体的子类型），再检查 isFileMessage（更宽泛的类型）。
+        // 因为 ChatVoiceMessage 继承自 ChatFileMessage（type 也是 'file'），
+        // isFileMessage 对语音消息也会返回 true。这是 discriminated union 的标准模式：
+        // 先匹配具体类型，再匹配通用类型。
         const isFile = isFileMessage(msg);
+        const isVoice = isFile && isVoiceMessage(msg);
 
         // Determine if this is the newest own message (for animation)
         const isNewestOwn = isNewBatch && index === messages.length - 1 && isOwn;
@@ -140,12 +146,25 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
         // Own messages — right-aligned
         if (isOwn) {
           return (
-            <EphemeralWrapper key={msg.id} msgId={msg.id} stableId={msg.stableId} ephemeral={ephemeral} transferId={isFile ? msg.transferId : undefined}>
+            <EphemeralWrapper key={msg.id} msgId={msg.id} stableId={msg.stableId} ephemeral={ephemeral} transferId={isFile ? msg.transferId : undefined} isVoice={isVoice}>
               {showSeparator && <TimeSeparator timestamp={msg.timestamp} />}
               <div className={`flex justify-end ${animClass}`}>
                 <div className="max-w-[70%] flex flex-col items-end">
-                  {/* 文件消息：渲染 FileMessage 组件；普通消息：渲染 MessageBubble */}
-                  {isFile ? (
+                  {/* 📚 学习要点: 语音/文件/文本消息的三级条件渲染
+                   * 渲染优先级：语音消息 > 普通文件消息 > 文本消息
+                   * - isVoice → 渲染 <VoiceMessage />（语音气泡，带播放按钮和时长）
+                   * - isFile && !isVoice → 渲染 <FileMessage />（文件卡片，带下载按钮）
+                   * - 默认 → 渲染 <MessageBubble />（普通文本消息）
+                   * 这保持了向后兼容：不认识 subType 字段的旧代码仍走 FileMessage 路径。
+                   */}
+                  {isVoice ? (
+                    <VoiceMessage
+                      transferId={msg.transferId}
+                      duration={msg.duration}
+                      senderName={msg.senderName}
+                      isMine={true}
+                    />
+                  ) : isFile ? (
                     <FileMessage transferId={msg.transferId} />
                   ) : (
                     <MessageBubble
@@ -182,7 +201,7 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
 
         // Others' messages — left-aligned
         return (
-          <EphemeralWrapper key={msg.id} msgId={msg.id} stableId={msg.stableId} ephemeral={ephemeral} transferId={isFile ? msg.transferId : undefined}>
+          <EphemeralWrapper key={msg.id} msgId={msg.id} stableId={msg.stableId} ephemeral={ephemeral} transferId={isFile ? msg.transferId : undefined} isVoice={isVoice}>
             {showSeparator && <TimeSeparator timestamp={msg.timestamp} />}
             <div className="flex justify-start">
               <div className="max-w-[70%] flex flex-col items-start">
@@ -192,8 +211,18 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
                 >
                   {msg.senderName}
                 </span>
-                {/* 文件消息：渲染 FileMessage 组件；普通消息：渲染 MessageBubble */}
-                {isFile ? (
+                {/* 📚 学习要点: 语音/文件/文本消息的三级条件渲染（接收方视角）
+                 * 与发送方相同的渲染优先级，但 isMine=false 使气泡左对齐。
+                 * VoiceMessage 组件内部根据 isMine 决定背景色和对齐方向。
+                 */}
+                {isVoice ? (
+                  <VoiceMessage
+                    transferId={msg.transferId}
+                    duration={msg.duration}
+                    senderName={msg.senderName}
+                    isMine={false}
+                  />
+                ) : isFile ? (
                   <FileMessage transferId={msg.transferId} />
                 ) : (
                   <MessageBubble
@@ -248,6 +277,20 @@ interface EphemeralWrapperProps {
   children: React.ReactNode;
   /** 可选：文件传输 ID，用于延迟 ephemeral 倒计时直到传输完成 */
   transferId?: string;
+  /**
+   * 可选：标识此消息是否为语音消息。
+   * 当 ephemeral 超时触发时，语音消息需要额外的清理步骤：
+   * 1. 停止当前播放（如果该语音正在播放）
+   * 2. 调用 voiceStore.evictBlob(transferId) 释放 Blob URL 内存
+   *
+   * 📚 学习要点: 为什么需要单独的 isVoice 标志？
+   * EphemeralWrapper 已经有 transferId 来处理文件传输的延迟倒计时，
+   * 但它不知道该传输是普通文件还是语音消息。
+   * 语音消息的 Blob URL 由 voiceStore 独立管理（LRU 缓存），
+   * 需要在 ephemeral 超时时显式调用 evictBlob 释放。
+   * 普通文件的 Blob URL 由 FileMessage 组件的 useEffect cleanup 自动释放。
+   */
+  isVoice?: boolean;
 }
 
 /**
@@ -270,7 +313,7 @@ interface EphemeralWrapperProps {
  * @see requirements.md — Requirements 10.1, 10.2, 10.3, 10.4
  * @see NFR-7 — Blob URL 内存泄漏防护
  */
-function EphemeralWrapper({ msgId: _msgId, stableId, ephemeral, children, transferId }: EphemeralWrapperProps) {
+function EphemeralWrapper({ msgId: _msgId, stableId, ephemeral, children, transferId, isVoice }: EphemeralWrapperProps) {
   const [fading, setFading] = useState(false);
 
   // 📚 学习要点: 订阅文件传输状态（仅文件消息需要）
@@ -317,11 +360,35 @@ function EphemeralWrapper({ msgId: _msgId, stableId, ephemeral, children, transf
           useFileTransferStore.getState().cancelTransfer(transferId);
         }
       }
+
+      // 📚 学习要点: 语音消息的 Blob URL 清理
+      // 语音消息的 Blob URL 由 voiceStore 的 LRU 缓存独立管理。
+      // 当 ephemeral 超时触发时，需要显式调用 evictBlob 释放内存：
+      // 1. 如果该语音正在播放 → 先停止播放（避免播放已释放的 URL 导致错误）
+      // 2. 调用 evictBlob(transferId) → 释放 Blob URL + 从缓存中移除
+      //
+      // 为什么不能依赖组件卸载来清理？
+      // VoiceMessage 组件本身不持有 Blob URL（由 voiceStore 管理），
+      // 组件卸载时不会自动释放 voiceStore 中的缓存。
+      // 必须在 ephemeral 超时时主动通知 voiceStore 释放资源。
+      //
+      // 即使语音正在播放也必须清理（ephemeral 超时优先级高于播放体验）：
+      // 用户选择了阅后即焚模式，意味着接受消息会在超时后完全消失。
+      if (isVoice && transferId) {
+        const voiceState = useVoiceStore.getState();
+        // 如果该语音正在播放，先停止播放
+        if (voiceState.activePlaybackId === transferId) {
+          voiceState.pauseVoice();
+        }
+        // 释放 Blob URL 并从缓存中移除
+        voiceState.evictBlob(transferId);
+      }
+
       setFading(true);
     }, fadeDelay);
 
     return () => clearTimeout(timer);
-  }, [ephemeral, isTransferTerminal, transferId]);
+  }, [ephemeral, isTransferTerminal, transferId, isVoice]);
 
   // 📚 学习要点: 消息气泡移除时的资源清理
   // 当 fading 变为 true 后，组件会通过 CSS transition 淡出并折叠。
