@@ -86,7 +86,7 @@ describe('Property 5: Recording mutual exclusion', () => {
       recordingState: 'idle',
       recordingStartTime: null,
       recordingElapsed: 0,
-      recordingError: null,
+      voiceError: null,
     });
   });
 
@@ -115,7 +115,7 @@ describe('Property 5: Recording mutual exclusion', () => {
             recordingState: 'idle',
             recordingStartTime: null,
             recordingElapsed: 0,
-            recordingError: null,
+            voiceError: null,
           });
 
           // Act: 尝试开始录音
@@ -155,7 +155,7 @@ describe('Property 5: Recording mutual exclusion', () => {
             recordingState: 'idle',
             recordingStartTime: null,
             recordingElapsed: 0,
-            recordingError: null,
+            voiceError: null,
           });
 
           // Act: 尝试开始录音
@@ -163,7 +163,7 @@ describe('Property 5: Recording mutual exclusion', () => {
 
           // Assert: recordingError 应包含 transferBusy 错误信息
           const state = useVoiceStore.getState();
-          expect(state.recordingError).toContain('voice.error.transferBusy');
+          expect(state.voiceError).toContain('voice.error.transferBusy');
         }
       ),
       { numRuns: 100 }
@@ -195,7 +195,7 @@ describe('Property 5: Recording mutual exclusion', () => {
             recordingState: 'idle',
             recordingStartTime: null,
             recordingElapsed: 0,
-            recordingError: null,
+            voiceError: null,
           });
 
           // Act: 尝试开始录音

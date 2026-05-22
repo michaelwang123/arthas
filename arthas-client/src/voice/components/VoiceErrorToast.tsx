@@ -62,16 +62,16 @@ const TOAST_DURATION_MS = 3000;
  * @returns JSX 元素（有错误时）或 null（无错误时）
  */
 export function VoiceErrorToast() {
-  const recordingError = useVoiceStore((s) => s.recordingError);
+  const voiceError = useVoiceStore((s) => s.voiceError);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 📚 学习要点: useEffect 管理自动消失定时器
-  // 当 recordingError 变化时（从 null → 有值），启动 3 秒定时器。
-  // 定时器到期后清除 recordingError，触发 Toast 消失。
-  // 如果在 3 秒内 recordingError 再次变化（新错误），
+  // 当 voiceError 变化时（从 null → 有值），启动 3 秒定时器。
+  // 定时器到期后清除 voiceError，触发 Toast 消失。
+  // 如果在 3 秒内 voiceError 再次变化（新错误），
   // useEffect cleanup 会取消旧定时器，重新开始 3 秒倒计时。
   useEffect(() => {
-    if (!recordingError) return;
+    if (!voiceError) return;
 
     // 清除之前的定时器（如果有）
     if (timerRef.current) {
@@ -80,21 +80,21 @@ export function VoiceErrorToast() {
 
     // 3 秒后自动清除错误
     timerRef.current = setTimeout(() => {
-      useVoiceStore.setState({ recordingError: null });
+      useVoiceStore.setState({ voiceError: null });
       timerRef.current = null;
     }, TOAST_DURATION_MS);
 
-    // Cleanup：组件卸载或 recordingError 变化时取消定时器
+    // Cleanup：组件卸载或 voiceError 变化时取消定时器
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
     };
-  }, [recordingError]);
+  }, [voiceError]);
 
   // 无错误时不渲染
-  if (!recordingError) {
+  if (!voiceError) {
     return null;
   }
 
@@ -117,12 +117,12 @@ export function VoiceErrorToast() {
         <span className="text-red-400 text-sm" aria-hidden="true">⚠️</span>
 
         {/* 📚 学习要点: 错误文本已经是本地化的
-          * recordingError 的值来自 translate(locale, 'voice.error.xxx')，
+          * voiceError 的值来自 translate(locale, 'voice.error.xxx')，
           * 已经是用户当前语言的文本，直接显示即可。
           * 不需要在这里再次调用 t() 翻译。
           */}
         <span className="text-sm text-red-200">
-          {recordingError}
+          {voiceError}
         </span>
       </div>
     </div>
