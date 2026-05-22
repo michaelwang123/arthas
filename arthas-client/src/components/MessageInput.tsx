@@ -4,6 +4,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { FileAttachButton } from '../file-transfer/components/FileAttachButton';
 import { useFileTransferStore } from '../file-transfer/fileTransferStore';
 import { useTranslation } from '../i18n';
+import { PttButton, RecordingIndicator, VoiceErrorToast } from '../voice';
 
 const MAX_LENGTH = 500;
 const SHOW_COUNT_THRESHOLD = 400;
@@ -146,6 +147,36 @@ export function MessageInput() {
 
   return (
     <div className="relative">
+      {/* 📚 学习要点: 录音状态指示器（绝对定位覆盖层）
+        * RecordingIndicator 使用 absolute + bottom-full 定位，
+        * 浮动显示在 MessageInput 容器的正上方。
+        * 它依赖最近的 position: relative 祖先（即这个外层 div）。
+        *
+        * RecordingIndicator 内部已处理条件渲染：
+        * - recordingState !== 'recording' 时返回 null（不渲染任何 DOM）
+        * - 只在用户按住 PTT 按钮录音时才显示
+        * - 显示脉冲红点 + 已录制时长 + "录音中" 文本
+        *
+        * @see requirements.md — Requirement 1.6, 5.7
+        * @see RecordingIndicator.tsx — 组件实现细节
+        */}
+      <RecordingIndicator />
+
+      {/* 📚 学习要点: 语音错误 Toast（非阻塞错误通知）
+        * VoiceErrorToast 显示 voiceStore.recordingError 中的错误信息。
+        * 与 RecordingIndicator 互补：
+        * - RecordingIndicator 只在 recordingState === 'recording' 时显示
+        * - VoiceErrorToast 在 recordingError 非 null 时显示（通常 recordingState === 'idle'）
+        * 两者不会同时出现（录音中不会有错误，有错误时不在录音）。
+        *
+        * 关键设计：错误不阻塞文本消息功能
+        * Toast 是纯展示组件，不影响文本输入框或发送按钮的状态。
+        * 用户可以在看到语音错误提示的同时继续输入和发送文本消息。
+        *
+        * @see requirements.md — Requirements 7.1-7.6
+        */}
+      <VoiceErrorToast />
+
       {/* Reply preview bar */}
       {replyTo && (
         <div className="flex items-center gap-2 px-3 py-2 mb-1 bg-gray-700/50 border-l-2 border-indigo-500 rounded-t-lg">
@@ -198,6 +229,24 @@ export function MessageInput() {
         {/* 文件附件按钮 — 位于发送按钮左侧，提供文件选择入口 */}
         {/* @see requirements.md — Requirement 12.1 */}
         <FileAttachButton />
+
+        {/* 📚 学习要点: PTT 按钮集成
+          * PttButton 放置在 FileAttachButton 和 Send 按钮之间。
+          * 布局顺序: [Emoji] [Input] [FileAttach] [🎤 PTT] [Send]
+          *
+          * PttButton 内部已处理优雅降级：
+          * - 如果浏览器不支持 MediaRecorder API，组件返回 null（不渲染）
+          * - 不需要在此处额外做条件判断
+          *
+          * 录音操作完全独立于文本输入：
+          * - 按住 PTT 录音不会清空或修改 text state
+          * - 用户可以先输入文字，再录音发送语音，文字保持不变
+          * - 这满足 Requirement 1.10（录音不干扰文本编辑）
+          *
+          * @see requirements.md — Requirement 5.1, 1.10
+          * @see design.md — PTT 按钮布局集成
+          */}
+        <PttButton />
 
         {/* Send button */}
         <button

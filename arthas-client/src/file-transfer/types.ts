@@ -82,6 +82,14 @@ const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789
  *
  * 此结构在发送方生成，使用 Room_Key 加密后通过 MSG_SEND_FILE_META 发送。
  * 接收方解密后用于准备接收缓冲区和显示文件信息。
+ *
+ * 📚 学习要点: 向后兼容的接口扩展策略
+ * 语音消息复用文件传输协议，需要在 metadata 中携带额外字段（isVoice, duration）。
+ * 这些字段设计为可选（optional），确保：
+ * - 旧客户端解密 metadata 后不认识新字段，直接忽略（JSON.parse 不会报错）
+ * - 旧客户端根据 mimeType (audio/webm) 将语音消息显示为普通音频文件
+ * - 新客户端检查 isVoice === true 后显示为语音气泡
+ * 这是一种「渐进增强」策略，不破坏现有功能。
  */
 export interface FileMetadata {
   /** 唯一传输标识符，NanoID 21 chars，用于关联所有分片消息 */
@@ -98,6 +106,30 @@ export interface FileMetadata {
   thumbnail?: Uint8Array;
   /** 可选：每个 chunk 明文的 SHA-256 hash (hex)，用于未来 resume 校验 */
   chunkHashes?: string[];
+
+  // === 语音消息扩展字段（Phase 9A） ===
+
+  /**
+   * 可选：标识此传输为语音消息。
+   *
+   * 📚 学习要点: 为什么用 boolean 而非 enum？
+   * 当前只有两种传输类型（文件 / 语音），boolean 最简洁。
+   * 如果未来新增更多类型（如视频消息），可以改为 `messageType?: 'file' | 'voice' | 'video'`。
+   * 但 MVP 阶段 YAGNI（You Aren't Gonna Need It），boolean 足够。
+   * 旧客户端不认识此字段会忽略它，将消息渲染为普通文件（优雅降级）。
+   */
+  isVoice?: boolean;
+
+  /**
+   * 可选：语音消息时长（秒）。
+   *
+   * 📚 学习要点: 为什么在 metadata 中携带 duration？
+   * 接收方需要在语音气泡中显示时长（如 "0:05"），但 Audio 元素的 duration
+   * 属性需要加载完整 Blob 后才可用。将 duration 放在 metadata 中，
+   * 接收方在收到第一个 META 消息时就能显示时长，无需等待所有 chunk 到达。
+   * 发送方通过 Date.now() 差值计算: Math.round((stopTime - startTime) / 1000)。
+   */
+  duration?: number;
 }
 
 /**
@@ -155,6 +187,33 @@ export interface TransferState {
   fileSize: number;
   /** MIME 类型 */
   mimeType: string;
+
+  /**
+   * 可选：标识此传输为语音消息。
+   *
+   * 📚 学习要点: TransferState.isVoice 的作用
+   * 此字段在 receiver.ts 的 handleFileMeta() 中设置：
+   * 当解密后的 FileMetadata 包含 isVoice === true 时，将此标志复制到 TransferState。
+   * 后续在 handleFileComplete() 中检查此标志，决定是否触发语音回调
+   * （通知 voiceStore 注册 Blob URL 供播放）。
+   *
+   * 为什么不在 handleFileComplete 中重新解密 metadata？
+   * - metadata 只在 handleFileMeta 时解密一次（解密需要 Room_Key + 计算开销）
+   * - 将 isVoice 标志缓存在 TransferState 中，后续流程直接读取，避免重复解密
+   * - 这是一种"解析一次，使用多次"的优化模式
+   */
+  isVoice?: boolean;
+
+  /**
+   * 可选：语音消息时长（秒）。
+   *
+   * 📚 学习要点: 为什么在 TransferState 中缓存 duration？
+   * 与 isVoice 类似，duration 从解密后的 FileMetadata 中提取并缓存到 TransferState。
+   * handleFileComplete 中需要将 duration 传递给 onTransferComplete 回调，
+   * 供 voiceStore 在语音气泡中显示时长（如 "0:05"）。
+   * 缓存避免了在 handleFileComplete 中重新解密 metadata 的开销。
+   */
+  duration?: number;
   /** 分片总数 */
   totalChunks: number;
   /** 已接收/已发送的分片数（用于计算进度百分比） */
@@ -205,6 +264,62 @@ export interface FileTransferState {
   activeSendId: string | null;
   /** 当前活跃接收传输数（限制最大并发接收数，防止内存耗尽） */
   activeReceiveCount: number;
+
+  /**
+   * 可选：语音传输完成回调。
+   *
+   * 📚 学习要点: 回调注册模式避免循环依赖
+   * receiver.ts 在 handleFileComplete 中需要通知 voiceStore 语音传输已完成，
+   * 但如果 receiver.ts 直接 import voiceStore，会形成循环依赖：
+   *   file-transfer/receiver.ts → voice/voiceStore.ts → file-transfer/fileTransferStore.ts → receiver.ts
+   *
+   * 解决方案：使用回调注册模式（Callback Registration Pattern）：
+   * 1. fileTransferStore 提供 registerTransferCompleteCallback / unregisterTransferCompleteCallback
+   * 2. voiceStore 在初始化时注册回调
+   * 3. receiver.ts 在 handleFileComplete 中检查 isVoice 并调用已注册的回调
+   * 4. 依赖方向变为单向：voice → file-transfer（无反向依赖）
+   *
+   * 这是一种经典的「依赖反转」（Dependency Inversion）技巧：
+   * 高层模块（voice）注册回调到低层模块（file-transfer），
+   * 低层模块通过回调通知高层模块，而无需知道高层模块的存在。
+   */
+  onTransferComplete?: (transferId: string, blobUrl: string, metadata: FileMetadata) => void;
+}
+
+// ============================================================================
+// 传输发起选项
+// ============================================================================
+
+/**
+ * 文件传输发起时的可选配置。
+ *
+ * 📚 学习要点: 扩展点设计（Extension Point Pattern）
+ * initiateTransfer() 原本只接受 File 参数，功能固定。
+ * 为了让语音模块注入 { isVoice: true, duration } 到加密 metadata 中，
+ * 增加了 TransferInitiateOptions 作为可选第二参数。
+ *
+ * 为什么用 Record<string, unknown> 而非具体类型？
+ * - file-transfer 模块不应该知道 voice 模块的具体字段（关注点分离）
+ * - 使用泛型 Record 允许任何模块注入自定义 metadata 字段
+ * - 这些字段最终会被合并到 FileMetadata 对象中，一起加密发送
+ * - 接收方解密后根据字段内容决定渲染方式
+ *
+ * 向后兼容：此参数完全可选，现有的 initiateTransfer(file) 调用无需修改。
+ */
+export interface TransferInitiateOptions {
+  /**
+   * 额外的 metadata 字段，会被合并到 FileMetadata 对象中一起加密。
+   *
+   * 示例（语音消息）：
+   * ```typescript
+   * initiateTransfer(audioFile, {
+   *   extraMetadata: { isVoice: true, duration: 5 }
+   * });
+   * ```
+   *
+   * 这些字段在加密的 ciphertext 内部，服务器无法看到（零知识保持不变）。
+   */
+  extraMetadata?: Record<string, unknown>;
 }
 
 // ============================================================================

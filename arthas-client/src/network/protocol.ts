@@ -400,3 +400,71 @@ export interface ChatFileMessage {
   /** MIME 类型（冗余存储，用于显示对应的文件类型图标） */
   mimeType: string;
 }
+
+// ===== 语音消息类型 =====
+
+/**
+ * 聊天列表中的语音消息占位符。
+ * 继承 ChatFileMessage 结构，添加语音特有字段。
+ *
+ * 📚 学习要点: 为什么 ChatVoiceMessage 继承 ChatFileMessage 而非新建独立类型？
+ * 语音消息在传输层面就是文件消息（复用 MSG_SEND_FILE_META/CHUNK/COMPLETE 协议），
+ * 继承 ChatFileMessage 意味着：
+ * 1. 现有的消息列表渲染逻辑（排序、ephemeral 清理）自动适用
+ * 2. fileTransferStore 的进度追踪自动适用
+ * 3. isFileMessage() 类型守卫对语音消息也返回 true（因为 type 仍然是 'file'）
+ * 4. 只需在 MessageList.tsx 中增加一个 subType 检查分支即可区分渲染
+ *
+ * 📚 学习要点: subType 字段的条件渲染策略
+ * MessageList.tsx 当前对 type === 'file' 的消息渲染 <FileMessage />。
+ * 增加 subType 检查后：
+ * - subType === 'voice' → 渲染 <VoiceMessage transferId={msg.transferId} />
+ * - 无 subType 或其他值 → 渲染 <FileMessage />（向后兼容）
+ *
+ * 这种「子类型判别」模式让旧客户端（不认识 subType 字段）
+ * 仍然将语音消息当作普通文件消息处理（优雅降级）。
+ */
+export interface ChatVoiceMessage extends ChatFileMessage {
+  /** 消息子类型，固定为 'voice'（用于 UI 条件渲染，区分语音气泡和文件卡片） */
+  subType: 'voice';
+  /** 语音时长（秒），用于 UI 显示 "0:05" 格式的时长标签 */
+  duration: number;
+}
+
+/**
+ * 类型守卫：判断消息是否为语音消息。
+ *
+ * 📚 学习要点: 多层类型守卫的组合使用
+ * 在 MessageList.tsx 中，消息的渲染分支逻辑为：
+ *   1. isVoiceMessage(msg) → 渲染 <VoiceMessage />
+ *   2. isFileMessage(msg) → 渲染 <FileMessage />
+ *   3. 默认 → 渲染 <MessageBubble />（文本消息）
+ *
+ * 注意检查顺序很重要：isVoiceMessage 必须在 isFileMessage 之前检查，
+ * 因为 ChatVoiceMessage 是 ChatFileMessage 的子类型（type 也是 'file'），
+ * isFileMessage 对语音消息也会返回 true。先检查更具体的类型（voice），
+ * 再检查更宽泛的类型（file），这是 discriminated union 的标准模式。
+ *
+ * 📚 学习要点: 为什么参数类型使用 { [key: string]: unknown } 而非导入 ChatMessage？
+ * protocol.ts 是底层协议定义文件，不应依赖上层的 chatStore（避免循环依赖）。
+ * ChatMessage 定义在 chatStore.ts 中，而 chatStore.ts 已经 import 了 protocol.ts。
+ * 使用索引签名接口让调用方可以传入任何消息对象（ChatMessage、ChatFileMessage 等），
+ * TypeScript 的类型缩窄机制会在调用处正确推断类型。
+ *
+ * 实际使用时，调用方需要对联合类型做类型断言或使用 `as` 传入：
+ * ```typescript
+ * if (isVoiceMessage(msg as ChatFileMessage)) { ... }
+ * ```
+ * 或者在已经通过 isFileMessage 缩窄后直接调用：
+ * ```typescript
+ * if (isFileMessage(msg)) {
+ *   if (isVoiceMessage(msg)) { ... } // msg 已经是 ChatFileMessage，兼容参数类型
+ * }
+ * ```
+ *
+ * @param msg - 待检查的消息对象（ChatFileMessage 或其子类型）
+ * @returns 如果消息是语音消息则返回 true，同时 TypeScript 将类型缩窄为 ChatVoiceMessage
+ */
+export function isVoiceMessage(msg: ChatFileMessage): msg is ChatVoiceMessage {
+  return 'subType' in msg && (msg as ChatVoiceMessage).subType === 'voice';
+}
