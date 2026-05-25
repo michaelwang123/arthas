@@ -497,7 +497,7 @@ export const useFileTransferStore = create<FileTransferState & FileTransferActio
         senderName: '',       // 将在实际发送时由 sender.ts 填充
         ackCount: 0,
         totalReceivers: 0,    // 将在实际发送时由 sender.ts 填充
-        chatMessageId: '',    // 将在实际发送时由 sender.ts 填充
+        chatMessageId: options?.chatMessageId ?? '',  // 语音消息预设，普通文件由 sender.ts 填充
       };
 
       // Step 5: 更新 store 状态（添加传输 + 加入队列）

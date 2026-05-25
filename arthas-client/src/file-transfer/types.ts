@@ -320,6 +320,19 @@ export interface TransferInitiateOptions {
    * 这些字段在加密的 ciphertext 内部，服务器无法看到（零知识保持不变）。
    */
   extraMetadata?: Record<string, unknown>;
+
+  /**
+   * 预设的聊天消息 ID，用于关联传输状态与已插入的聊天消息占位符。
+   *
+   * 📚 学习要点: 解决语音消息的竞态条件
+   * voiceSender 在 initiateTransfer 之前就插入了 ChatVoiceMessage 占位符，
+   * 需要将 chatMessageId 传入 initiateTransfer，使其在创建 TransferState 时就设置好。
+   * 这样 sender.ts 的 sendFile() 在检查 transfer.chatMessageId 时能正确跳过重复插入。
+   *
+   * 如果不预设，processQueue → sendFile 会在 chatMessageId 为空时插入 ChatFileMessage，
+   * 导致用户同时看到文件传输卡片和语音气泡（重复渲染）。
+   */
+  chatMessageId?: string;
 }
 
 // ============================================================================

@@ -25,7 +25,8 @@
 // 状态管理
 // ============================================================================
 
-export { useVoiceStore, MAX_VOICE_CACHE, initVoiceModule } from './voiceStore';
+export { useVoiceStore, MAX_VOICE_CACHE } from './voiceStore';
+export { initVoiceModule } from './init';
 
 // ============================================================================
 // 核心功能
