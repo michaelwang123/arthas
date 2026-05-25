@@ -83,7 +83,7 @@ const arbExpiresAt = fc.integer({ min: 0, max: 2000000000 });
 async function createCryptoKey(rawBytes: Uint8Array): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     'raw',
-    rawBytes,
+    rawBytes as BufferSource,
     { name: 'AES-GCM', length: 256 },
     true, // extractable — 必须为 true 才能导出
     ['encrypt', 'decrypt']
