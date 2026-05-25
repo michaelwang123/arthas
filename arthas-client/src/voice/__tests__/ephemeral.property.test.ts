@@ -96,8 +96,8 @@ describe('Property 6: Ephemeral voice cleanup', () => {
     // 不能用 vi.stubGlobal 替换整个 URL 对象，否则 new URL() 会失败。
     // 只需要 spy on URL.revokeObjectURL 和 URL.createObjectURL 静态方法。
     revokeObjectURLSpy = vi.fn();
-    globalThis.URL.revokeObjectURL = revokeObjectURLSpy;
-    globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock');
+    globalThis.URL.revokeObjectURL = revokeObjectURLSpy as unknown as typeof URL.revokeObjectURL;
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock') as unknown as typeof URL.createObjectURL;
 
     // 重置 voiceStore 的 LRU 缓存状态
     const { useVoiceStore } = await import('../voiceStore');

@@ -126,7 +126,7 @@ describe('createVoicePlayer', () => {
     onTimeUpdate = vi.fn();
 
     // 创建播放器实例
-    player = createVoicePlayer({ onStateChange, onTimeUpdate });
+    player = createVoicePlayer({ onStateChange: onStateChange as any, onTimeUpdate: onTimeUpdate as any });
   });
 
   afterEach(() => {

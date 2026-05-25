@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createVoiceRecorder, type VoiceRecorder } from '../recorder';
+import { createVoiceRecorder } from '../recorder';
 
 // ============================================================================
 // Mock i18n 模块
@@ -129,7 +129,7 @@ beforeEach(() => {
     return instance;
   });
 
-  mockMediaRecorderConstructor.isTypeSupported = mockIsTypeSupported;
+  (mockMediaRecorderConstructor as any).isTypeSupported = mockIsTypeSupported;
   vi.stubGlobal('MediaRecorder', mockMediaRecorderConstructor);
 
   // Mock navigator.mediaDevices.getUserMedia
