@@ -47,6 +47,7 @@ import { decryptChunk } from './decryptChunk';
 import { reassembleChunks } from './chunker';
 import { sanitizeFileName } from './sanitize';
 import { useFileTransferStore, MAX_CONCURRENT_RECEIVES } from './fileTransferStore';
+import { generateChatMessageId } from './chatMessageId';
 import { useChatStore } from '../stores/chatStore';
 import {
   type FileMetadata,
@@ -672,7 +673,7 @@ function insertReceiverChatFileMessage(
   metadata: FileMetadata
 ): string {
   const timestamp = data.t || Date.now();
-  const chatMessageId = `${timestamp}-file-${data.transferId.slice(0, 8)}`;
+  const chatMessageId = generateChatMessageId('file');
 
   const fileMessage: ChatFileMessage = {
     id: chatMessageId,
@@ -729,7 +730,7 @@ function insertReceiverChatVoiceMessage(
   metadata: FileMetadata
 ): string {
   const timestamp = data.t || Date.now();
-  const chatMessageId = `${timestamp}-voice-${data.transferId.slice(0, 8)}`;
+  const chatMessageId = generateChatMessageId('voice');
 
   // 📚 学习要点: ChatVoiceMessage 的构造
   // 继承 ChatFileMessage 的所有字段（type:'file', transferId, fileName 等），

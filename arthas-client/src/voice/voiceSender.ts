@@ -50,6 +50,7 @@
 
 import { useFileTransferStore } from '../file-transfer/fileTransferStore';
 import { MAX_FILE_SIZE } from '../file-transfer/types';
+import { generateChatMessageId } from '../file-transfer/chatMessageId';
 import { useChatStore } from '../stores/chatStore';
 import { useI18nStore } from '../i18n/store';
 import { translate } from '../i18n/translate';
@@ -157,8 +158,21 @@ export function sendVoice(blob: Blob, duration: number, mimeType: string): void 
   // 最终被 AES-GCM 加密后发送。接收方解密后检查 isVoice 字段决定渲染方式。
   const { initiateTransfer } = useFileTransferStore.getState();
 
+  // ─── Step 2b: 预生成 chatMessageId 解决竞态条件 ────────────────────
+  // 📚 学习要点: 为什么需要预生成 chatMessageId？
+  // initiateTransfer 内部会调用 processQueue()，processQueue 同步调用 sendFile()。
+  // sendFile 在第一个 await 之前会检查 transfer.chatMessageId：
+  //   - 如果为空 → 插入 ChatFileMessage（文件传输卡片）
+  //   - 如果非空 → 跳过（语音消息已有占位符）
+  // 如果不预设 chatMessageId，sendFile 会在 insertVoiceChatMessage 之前执行，
+  // 导致用户同时看到文件传输卡片和语音气泡（重复渲染）。
+  // 解决方案：预生成 chatMessageId，通过 options.chatMessageId 传入 initiateTransfer，
+  // 使 TransferState 创建时就带有正确的 chatMessageId。
+  const preGeneratedChatMessageId = generateChatMessageId('voice');
+
   const transferId = initiateTransfer(file, {
     extraMetadata: { isVoice: true, duration },
+    chatMessageId: preGeneratedChatMessageId,
   });
 
   // ─── Step 3: 处理 initiateTransfer 返回 null 的错误情况 ────────────
@@ -186,12 +200,11 @@ export function sendVoice(blob: Blob, duration: number, mimeType: string): void 
   }
 
   // ─── Step 4: 在聊天列表中插入语音消息占位符 ────────────────────────
-  // 📚 学习要点: 乐观渲染（Optimistic Rendering）
-  // 在 initiateTransfer 成功后立即插入聊天占位符，让用户看到"正在发送"的状态。
-  // 实际的加密和网络传输在后台异步进行（processQueue → sendFile）。
-  // 如果传输最终失败，fileTransferStore 会更新 TransferState.status 为 'failed'，
-  // UI 组件根据状态显示失败提示。
-  insertVoiceChatMessage(transferId, file, duration);
+  // 📚 学习要点: 使用预生成的 chatMessageId
+  // chatMessageId 已通过 options 传入 initiateTransfer，TransferState 创建时就设置好了。
+  // 这里插入聊天消息时使用相同的 ID，确保传输状态与聊天消息正确关联。
+  // sendFile 检查 transfer.chatMessageId 时会发现非空，跳过重复插入。
+  insertVoiceChatMessage(transferId, file, duration, preGeneratedChatMessageId);
 
   // ─── Step 5: 注册本地 Blob URL 供发送方回放 ────────────────────────
   // 📚 学习要点: 发送方自己的语音消息也需要可回放
@@ -222,12 +235,9 @@ export function sendVoice(blob: Blob, duration: number, mimeType: string): void 
  * @param file - 包装后的 File 对象（用于提取文件名、大小、类型）
  * @param duration - 语音时长（秒）
  */
-function insertVoiceChatMessage(transferId: string, file: File, duration: number): void {
+function insertVoiceChatMessage(transferId: string, file: File, duration: number, chatMessageId: string): void {
   const { myId, myName } = useChatStore.getState();
   const timestamp = Date.now();
-
-  // 生成唯一消息 ID（与 sender.ts 的 insertChatFileMessage 模式一致）
-  const chatMessageId = `${timestamp}-file-${transferId.slice(0, 8)}`;
 
   // 📚 学习要点: ChatVoiceMessage 结构
   // 继承 ChatFileMessage 的所有字段（id, senderId, type:'file', transferId 等），
@@ -263,20 +273,16 @@ function insertVoiceChatMessage(transferId: string, file: File, duration: number
     };
   });
 
-  // 更新 TransferState 的 chatMessageId（关联传输状态与聊天消息）
-  // 📚 学习要点: 为什么需要设置 chatMessageId？
-  // fileTransferStore 的 TransferState 通过 chatMessageId 与聊天消息关联。
-  // sender.ts 的 sendFile() 内部也会调用 insertChatFileMessage 并设置 chatMessageId。
-  // 由于我们在这里提前插入了占位符，需要同步设置 chatMessageId，
-  // 这样 sender.ts 在 processQueue 触发时可以检测到 chatMessageId 已设置，
-  // 避免重复插入聊天消息。
+  // 更新 TransferState 的发送方信息
+  // 📚 学习要点: chatMessageId 已通过 initiateTransfer options 预设
+  // 此处不再需要设置 chatMessageId（已在 TransferState 创建时设置），
+  // 但仍需设置 senderId 和 senderName（initiateTransfer 不知道这些信息）。
   useFileTransferStore.setState((state) => {
     const transfers = new Map(state.transfers);
     const transfer = transfers.get(transferId);
     if (transfer) {
       transfers.set(transferId, {
         ...transfer,
-        chatMessageId,
         senderId: myId ?? '',
         senderName: myName ?? '',
       });

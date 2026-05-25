@@ -42,6 +42,7 @@ import { streamChunks } from './chunker';
 import { encryptChunk } from './encryptChunk';
 import { generateThumbnail } from './thumbnail';
 import { useFileTransferStore, triggerProcessQueue, consumeExtraMetadata } from './fileTransferStore';
+import { generateChatMessageId } from './chatMessageId';
 import { useChatStore } from '../stores/chatStore';
 import {
   type FileMetadata,
@@ -599,8 +600,8 @@ function insertChatFileMessage(transferId: string, file: File): string {
   const { myId, myName } = useChatStore.getState();
   const timestamp = Date.now();
 
-  // 生成唯一消息 ID（与 chatStore 中的 generateMessageId 模式一致）
-  const chatMessageId = `${timestamp}-file-${transferId.slice(0, 8)}`;
+  // 生成唯一消息 ID（使用统一的 chatMessageId 生成工具）
+  const chatMessageId = generateChatMessageId('file');
 
   const fileMessage: ChatFileMessage = {
     id: chatMessageId,
