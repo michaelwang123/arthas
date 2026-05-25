@@ -413,8 +413,22 @@ describe('chatStore — Encrypted Typing Integration', () => {
 
       vi.clearAllMocks();
 
-      // Advance past the TYPING_TIMEOUT_MS (2000ms) — auto-cancel fires
+      // 📚 学习要点: 测试异步 setTimeout 回调的正确方式
+      // auto-cancel 回调内部有 await encryptTypingStatus()（Web Crypto API 异步操作）。
+      // vi.advanceTimersByTimeAsync 触发 setTimeout 回调，但内部的 crypto.subtle
+      // 操作产生的 Promise 需要事件循环的多次迭代才能完成。
+      // 使用 vi.runAllTimersAsync() 递归执行所有 pending timers 并等待 async 回调，
+      // 然后多次 await Promise.resolve() 确保微任务队列完全清空。
       await vi.advanceTimersByTimeAsync(2100);
+      // 等待 encryptTypingStatus 内部的 crypto.subtle 操作完成
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
+      // 再推进一次确保所有内部 setTimeout(0) 也被执行
+      await vi.advanceTimersByTimeAsync(0);
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
 
       // Should have sent typing:false automatically
       expect(ws.send).toHaveBeenCalledWith(
