@@ -186,8 +186,8 @@ describe('QRCodeModal 组件行为 (Requirements 2.1, 2.2, 2.3)', () => {
       <QRCodeModal open={true} onClose={onClose} shareCode="abcdefghijklmnopqrstu:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqr" />
     );
 
-    // 关闭按钮的 aria-label 是 t('share.qr.title') → 'share.qr.title'
-    const closeBtn = screen.getByRole('button', { name: 'share.qr.title' });
+    // 关闭按钮的 aria-label 已改为 "Close"（无障碍最佳实践）
+    const closeBtn = screen.getByRole('button', { name: 'Close' });
     fireEvent.click(closeBtn);
 
     expect(onClose).toHaveBeenCalledTimes(1);
