@@ -43,3 +43,9 @@ deploy/.env
 deploy/Caddyfile
 deploy/docker-compose.override.yml
 arthas-cli/arthas-cli
+
+# Internal scripts (contain sensitive info like mailmap with company email)
+scripts/
+
+# Demo recording raw video (too large for git)
+docs/show/demo-full.mp4
