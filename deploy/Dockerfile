@@ -58,11 +58,11 @@ RUN npm run build
 # ─── Stage 2: Go Build with Embedded Frontend ────────────────────────────────
 # 将 Stage 1 产出的 dist/ 复制到 Go embed 目标位置，编译为静态链接二进制
 #
-# 📚 学习要点: 为什么选择 golang:1.22-alpine？
-# - Go 1.22 与项目 go.mod 中声明的版本一致
+# 📚 学习要点: 为什么选择 golang:1.23-alpine？
+# - Go 1.23 与项目 go.mod 中声明的版本一致
 # - Alpine 变体减小基础镜像体积（此阶段也不进入最终镜像）
 # - CGO_ENABLED=0 确保纯静态编译，不依赖 Alpine 的 musl libc
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app/server
 

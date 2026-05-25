@@ -27,7 +27,7 @@
 
 # ─── Stage 1: Builder ────────────────────────────────────────────────────────
 # 编译 Go 源码为静态链接的 Linux 二进制文件
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
