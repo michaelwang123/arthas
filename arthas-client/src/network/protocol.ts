@@ -98,6 +98,8 @@ export const ERR_NOT_IN_ROOM = 'E003';
 export const ERR_RATE_LIMITED = 'E004';
 export const ERR_INVALID_MESSAGE = 'E005';
 export const ERR_WRONG_PASSWORD = 'E006';
+/** 房间已过期 — 服务器在 JoinRoom 时检测到房间 expiresAt 已过 */
+export const ERR_ROOM_EXPIRED = 'E007';
 
 // ===== 消息信封 =====
 
@@ -112,6 +114,8 @@ export interface CreateRoomData {
   name: string;
   password?: string;
   ephemeral?: number;
+  /** 房间有效期（秒）。0=永不过期，负数服务器视为0，>604800服务器截断为604800 */
+  expiry?: number;
 }
 
 export interface JoinRoomData {
@@ -139,6 +143,8 @@ export interface PongData {
 
 export interface RoomCreatedData {
   roomId: string;
+  /** 房间过期时间戳（Unix 秒），0 表示无过期。由服务器计算并返回。 */
+  expiresAt: number;
 }
 
 export interface RoomJoinedData {
@@ -146,6 +152,8 @@ export interface RoomJoinedData {
   members: MemberInfo[];
   hasPassword: boolean;
   ephemeral: number;
+  /** 房间过期时间戳（Unix 秒），0 表示无过期。由服务器返回。 */
+  expiresAt: number;
 }
 
 export interface MemberJoinedData {
@@ -179,7 +187,10 @@ export interface MemberTypingData {
   typing: boolean;
 }
 
-export interface RoomClosedData {}
+export interface RoomClosedData {
+  /** 关闭原因："expired" 表示房间过期自动关闭，空/缺失表示常规关闭（所有人离开） */
+  reason?: string;
+}
 
 export interface ErrorData {
   code: string;

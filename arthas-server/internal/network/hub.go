@@ -25,9 +25,17 @@ import (
 // - 太频繁（如 5s）：每次遍历所有客户端的开销不必要
 // - 太稀疏（如 5min）：过期传输可能阻塞客户端过久
 // - 30s 意味着最坏情况下，过期传输在 90s + 30s = 120s 后被清理
+//
+// expiryCheckInterval 设置为 60 秒，是过期检查的扫描间隔。
+// 这意味着房间过期后最多 60 秒内会被检测并销毁。
+// 对于用户体验来说 ±60s 的精度完全可接受（房间有效期最短 1 小时）。
+// 此间隔与 staleTransferCheckInterval 独立，因为两者的关注点不同：
+// - staleTransfer: 关注单个客户端的传输状态（需要更频繁检查，30s）
+// - expiry: 关注房间级别的生命周期（60s 精度足够）
 const (
 	serverTransferTimeout      = 90 * time.Second // 服务器端传输超时（兜底清理阈值）
 	staleTransferCheckInterval = 30 * time.Second // 过期传输检查间隔
+	expiryCheckInterval        = 60 * time.Second // 房间过期检查间隔
 )
 
 // Hub 管理所有 WebSocket 连接，并将消息路由到对应的房间处理逻辑。
@@ -56,6 +64,13 @@ type Hub struct {
 	unregister  chan *Client
 	mu          sync.RWMutex
 
+	// warnedExpiry 记录已发送过期预警的房间 ID，防止重复发送。
+	// 📚 学习要点: 过期预警的幂等性
+	// 每 60s 扫描一次，可能多次发现同一房间 remaining <= 300s。
+	// 使用 set 记录已警告的房间，确保每个房间只收到一次预警消息。
+	// 房间被销毁时从 set 中移除（cleanupExpiredRooms 中处理）。
+	warnedExpiry map[string]bool
+
 	// 📚 学习要点: done channel 的「close 广播」模式
 	// 关闭一个 channel 会让所有阻塞在该 channel 上的 <-ch 操作立即返回零值。
 	// 这是 Go 中实现「一对多取消通知」的惯用模式。
@@ -74,11 +89,12 @@ type Hub struct {
 // NewHub 创建一个新的 Hub 实例，内部初始化 RoomManager。
 func NewHub() *Hub {
 	return &Hub{
-		roomManager: room.NewRoomManager(),
-		clients:     make(map[*Client]bool),
-		register:    make(chan *Client),
-		unregister:  make(chan *Client),
-		done:        make(chan struct{}),
+		roomManager:  room.NewRoomManager(),
+		clients:      make(map[*Client]bool),
+		register:     make(chan *Client),
+		unregister:   make(chan *Client),
+		done:         make(chan struct{}),
+		warnedExpiry: make(map[string]bool),
 	}
 }
 
@@ -101,6 +117,15 @@ func (h *Hub) Run() {
 	// defer 确保无论 Run() 如何退出（正常 return 或 panic），Ticker 都会被停止。
 	staleTransferTicker := time.NewTicker(staleTransferCheckInterval)
 	defer staleTransferTicker.Stop()
+
+	// expiryTicker 用于周期性扫描并销毁过期房间（与 staleTransferTicker 模式一致）。
+	// 每 60 秒触发一次，调用 cleanupExpiredRooms() 检查并销毁所有已过期的房间。
+	// 📚 学习要点: 多个 Ticker 在同一 select 中的协作
+	// Hub.Run() 的 select 同时监听多个 ticker channel，Go runtime 保证
+	// 当多个 case 同时就绪时随机选择一个执行（公平调度）。
+	// 这意味着 expiryTicker 和 staleTransferTicker 不会互相饿死。
+	expiryTicker := time.NewTicker(expiryCheckInterval)
+	defer expiryTicker.Stop()
 
 	for {
 		select {
@@ -141,6 +166,23 @@ func (h *Hub) Run() {
 			// - 无需额外的同步机制：cleanupStaleTransfers 在 Run() goroutine 中执行
 			// - 生命周期清晰：ticker 的生命周期与 Hub 完全一致
 			h.cleanupStaleTransfers()
+
+		case <-expiryTicker.C:
+			// 📚 学习要点: 房间过期清理（Room Expiry Cleanup）
+			// 每 60 秒触发一次，扫描所有房间，销毁已过期的房间。
+			// 与 staleTransferTicker 采用相同的 select-case 模式：
+			// - 在 Hub.Run() goroutine 中执行，无需额外同步
+			// - 与 done channel 自然集成，Run() 退出时自动停止
+			// - 可以安全访问 h.clients map（同一 goroutine，无竞态）
+			//
+			// 📚 学习要点: 为什么不与 staleTransferTicker 合并？
+			// 两者关注点不同且最优间隔不同：
+			// - staleTransfer (30s): 客户端级别，需要更快响应以解除传输阻塞
+			// - expiry (60s): 房间级别，±60s 精度对小时/天级有效期完全足够
+			// 分离 ticker 使得未来可以独立调整各自的间隔而不互相影响。
+			h.cleanupExpiredRooms()
+			// 检查即将过期的房间并发送预警（在清理之后执行，避免对已销毁房间发送预警）
+			h.warnApproachingExpiry(h.roomManager.NowFunc())
 		}
 	}
 }
@@ -290,6 +332,29 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 	// Parse ephemeral — msgpack deserializes small integers as int8/uint8/int16/uint16 etc.
 	ephemeral := toInt(dataMap["ephemeral"])
 
+	// 📚 学习要点: 防御性输入清洗（Defensive Input Sanitization）
+	// 客户端可能发送任意 expiry 值（bug、恶意行为、或旧客户端不发送此字段）。
+	// 服务器必须做边界检查，确保系统安全和稳定：
+	// - 负数: 视为 0（无过期），不返回错误（宽容处理，避免因客户端 bug 导致创建失败）
+	// - 超大值: 截断为 MaxExpiryDuration（7天=604800秒），防止内存耗尽攻击
+	//   （恶意客户端设置 expiry=999999999 会创建几乎永不过期的房间）
+	// - 0: 保持原样，表示永不过期（向后兼容旧客户端）
+	// 这种「静默修正」策略（而非返回错误）是 Postel 法则的体现：
+	// "Be conservative in what you send, be liberal in what you accept."
+	expiry := toInt(dataMap["expiry"])
+	if expiry < 0 {
+		expiry = 0
+	}
+	if int64(expiry) > room.MaxExpiryDuration {
+		expiry = int(room.MaxExpiryDuration)
+	}
+
+	// 计算 expiresAt：expiry > 0 时为当前时间 + 有效期秒数，否则为 0（永不过期）
+	var expiresAt int64
+	if expiry > 0 {
+		expiresAt = time.Now().Unix() + int64(expiry)
+	}
+
 	// Generate NanoID (21 chars) for roomId
 	roomId, err := gonanoid.New()
 	if err != nil {
@@ -298,8 +363,8 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 		return
 	}
 
-	// Create the room via RoomManager with password and ephemeral
-	r := h.roomManager.CreateRoom(roomId, password, ephemeral)
+	// Create the room via RoomManager with password, ephemeral, and computed expiresAt
+	r := h.roomManager.CreateRoom(roomId, password, ephemeral, expiresAt)
 
 	// Set client fields
 	client.Name = name
@@ -324,12 +389,17 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 		return
 	}
 
-	// Send RoomCreated back to the client
+	// Send RoomCreated back to the client (包含计算后的 expiresAt 供客户端启动倒计时)
 	h.sendToClient(client, MsgRoomCreated, RoomCreatedData{
-		RoomID: roomId,
+		RoomID:    roomId,
+		ExpiresAt: expiresAt,
 	})
 
 	// Send RoomJoined with the creator as the only member
+	// 📚 学习要点: RoomJoined 必须包含 ExpiresAt 字段
+	// 前端 chatStore 的 MSG_ROOM_JOINED handler 会用 data.expiresAt 覆盖 store 中的值。
+	// 如果此处不包含 expiresAt，前端会将其视为 0（无过期），
+	// 覆盖掉之前 MSG_ROOM_CREATED 中设置的正确值，导致倒计时不显示。
 	h.sendToClient(client, MsgRoomJoined, RoomJoinedData{
 		RoomID: roomId,
 		Members: []MemberInfo{
@@ -341,6 +411,7 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 		},
 		HasPassword: password != "",
 		Ephemeral:   ephemeral,
+		ExpiresAt:   expiresAt,
 	})
 
 	logger.Info("Hub", "room %s created by client %s (%s), total rooms: %d", roomId, client.ID, name, h.roomManager.RoomCount())
@@ -374,6 +445,19 @@ func (h *Hub) handleJoinRoom(client *Client, data interface{}) {
 	r := h.roomManager.GetRoom(roomId)
 	if r == nil {
 		h.sendError(client, ErrCodeRoomNotFound, "room not found")
+		return
+	}
+
+	// 📚 学习要点: JoinRoom 过期检查 — 双重防线（Dual Defense）
+	// 即使 Expiry_Checker（60s 周期扫描）还没来得及清理过期房间，
+	// handleJoinRoom 也会立即拒绝过期房间的加入请求。这提供了两层保护：
+	// 1. Expiry_Checker: 主动清理（异步，±60s 精度）— 负责销毁房间和通知在线成员
+	// 2. handleJoinRoom: 被动拒绝（同步，实时精度）— 负责阻止新成员加入已过期房间
+	// 两者互补：Expiry_Checker 处理「已在房间内的成员」，JoinRoom 处理「试图加入的新成员」。
+	// 最坏情况下，过期房间在 Expiry_Checker 下一次扫描前仍存在于内存中，
+	// 但任何新的 JoinRoom 请求都会被实时拒绝，确保用户体验一致。
+	if r.IsExpired(time.Now().Unix()) {
+		h.sendError(client, ErrCodeRoomExpired, "room has expired")
 		return
 	}
 
@@ -447,12 +531,13 @@ func (h *Hub) handleJoinRoom(client *Client, data interface{}) {
 		Color: client.Color,
 	})
 
-	// Send RoomJoined to the joining client
+	// Send RoomJoined to the joining client (包含 expiresAt 供客户端启动倒计时)
 	h.sendToClient(client, MsgRoomJoined, RoomJoinedData{
 		RoomID:      roomId,
 		Members:     members,
 		HasPassword: r.PasswordHash != "",
 		Ephemeral:   r.Ephemeral,
+		ExpiresAt:   r.GetExpiresAt(),
 	})
 
 	logger.Info("Hub", "client %s (%s) joined room %s", client.ID, name, roomId)
@@ -988,6 +1073,225 @@ func (h *Hub) cleanupStaleTransfers() {
 			client.activeTransferID = ""
 		}
 	}
+}
+
+// cleanupExpiredRooms 扫描并销毁所有已过期的房间。
+// 由 Hub.Run() 中的 60 秒定时器周期性调用。
+//
+// 📚 学习要点: 防止 TOCTOU 竞态的双重检查模式（Double-Check Pattern）
+// TOCTOU（Time-of-Check to Time-of-Use）是并发编程中的经典竞态条件：
+// 在「检查条件」和「执行操作」之间，条件可能已经改变。
+//
+// 本方法的双重检查步骤：
+//  1. GetExpiredRooms(now) 获取过期房间 ID 快照（RLock，快速返回）
+//     → 这是第一次检查（Time-of-Check）
+//  2. 对每个过期房间 ID:
+//     a. GetRoom(id) — 如果返回 nil，说明已被并发删除（handleLeaveRoom 中所有人离开），跳过
+//     b. 重新检查 room.IsExpired(now) — 这是第二次检查（Time-of-Use 前的再验证）
+//     虽然 ExpiresAt 是只读字段不会变化，但双重检查是防御性编程的最佳实践，
+//     防止未来代码变更引入 ExpiresAt 可修改的场景时出现 bug
+//     c. 执行销毁操作（广播通知 → 清除状态 → 移除房间）
+//
+// 为什么 GetExpiredRooms 返回快照而非直接在锁内销毁？
+// - 销毁操作涉及广播消息（可能阻塞）、遍历 clients map（需要另一把锁）
+// - 如果在 RoomManager 的锁内执行这些操作，会导致锁持有时间过长
+// - 快照模式：短暂持锁读取 → 释放锁 → 逐个处理（每个处理独立获取所需的锁）
+func (h *Hub) cleanupExpiredRooms() {
+	// 📚 学习要点: 使用 NowFunc 而非直接调用 time.Now()
+	// 通过 RoomManager.NowFunc 获取当前时间，使集成测试可以注入可控时间源，
+	// 测试"房间在运行中过期"的场景而无需等待真实的 60 秒。
+	now := h.roomManager.NowFunc()
+
+	// 步骤 1: 获取过期房间 ID 快照（RLock，不阻塞其他读操作）
+	expiredRoomIDs := h.roomManager.GetExpiredRooms(now)
+	if len(expiredRoomIDs) == 0 {
+		return
+	}
+
+	// 步骤 2: 逐个处理过期房间
+	for _, roomId := range expiredRoomIDs {
+		// 2a. GetRoom 检查房间是否仍然存在
+		// 房间可能在快照获取后被 handleLeaveRoom 销毁（所有成员离开）
+		r := h.roomManager.GetRoom(roomId)
+		if r == nil {
+			continue
+		}
+
+		// 2b. 重新验证 room.IsExpired(now) — 防御性双重检查
+		// 📚 学习要点: 为什么在 cleanupExpiredRooms 中重新检查 IsExpired？
+		// GetExpiredRooms 返回的是某一时刻的快照。在遍历快照期间：
+		// - 房间可能已被 handleLeaveRoom 销毁（所有人离开）→ GetRoom 返回 nil（上面已处理）
+		// - ExpiresAt 当前是只读字段，理论上不会变化
+		// - 但双重检查的成本极低（一次整数比较），而收益是防御性保护：
+		//   如果未来引入「延长房间有效期」功能，此检查将防止误删
+		if !r.IsExpired(now) {
+			continue
+		}
+
+		// 2c. 处理房间内有活跃文件传输的客户端
+		// 遍历 Hub 的 clients map，找到该房间内有 activeTransferID 的客户端
+		h.mu.RLock()
+		for client := range h.clients {
+			if client.RoomID == roomId && client.activeTransferID != "" {
+				h.broadcastFileCancelForExpiry(client, r)
+				client.activeTransferID = ""
+			}
+		}
+		h.mu.RUnlock()
+
+		// 2d. 广播 MsgRoomClosed(reason="expired") 给房间所有成员
+		roomClosedMsg := Message{
+			Type: MsgRoomClosed,
+			Data: RoomClosedData{Reason: "expired"},
+		}
+		closedData, err := msgpack.Marshal(roomClosedMsg)
+		if err != nil {
+			logger.Error("Hub", "failed to marshal RoomClosed for expired room %s: %v", roomId, err)
+		} else {
+			// 使用 GetMembers 获取所有成员并逐一发送（通知所有人，无排除）
+			members := r.GetMembers()
+			for _, m := range members {
+				if m.SendFunc != nil {
+					m.SendFunc(closedData)
+				}
+			}
+		}
+
+		// 2e. 清除所有成员的 client.RoomID（防止后续消息路由到已销毁房间）
+		h.mu.RLock()
+		for client := range h.clients {
+			if client.RoomID == roomId {
+				client.RoomID = ""
+			}
+		}
+		h.mu.RUnlock()
+
+		// 2f. 从 RoomManager 中移除房间
+		h.roomManager.RemoveRoom(roomId)
+
+		// 清理过期预警记录
+		delete(h.warnedExpiry, roomId)
+
+		logger.Info("Hub", "expired room %s destroyed, total rooms: %d", roomId, h.roomManager.RoomCount())
+	}
+}
+
+// warnApproachingExpiry 检查即将过期的房间（剩余 ≤ 5 分钟），向成员发送预警消息。
+// 由 Hub.Run() 中的 expiryTicker 在 cleanupExpiredRooms 之后调用。
+//
+// 📚 学习要点: 过期预警的设计考量
+// 房间过期时所有成员被立即踢出，正在输入的消息会丢失。
+// 提前 5 分钟发送系统警告消息，让用户有心理准备保存重要信息。
+// 使用 warnedExpiry map 确保每个房间只发送一次预警（幂等性）。
+//
+// 为什么不在客户端实现？
+// 客户端已有 ExpiryCountdown 组件显示倒计时和警告色，但：
+// 1. 客户端时钟可能不准确（偏差导致预警时机不一致）
+// 2. 服务器端预警确保所有成员同时收到（一致的用户体验）
+// 3. 预警消息出现在聊天流中，比 header 的倒计时更醒目
+const expiryWarningThreshold int64 = 300 // 5 分钟
+
+func (h *Hub) warnApproachingExpiry(now int64) {
+	// 获取所有有过期时间的房间快照
+	h.roomManager.ForEachExpiring(func(roomId string, expiresAt int64) {
+		// 跳过已警告的房间
+		if h.warnedExpiry[roomId] {
+			return
+		}
+
+		remaining := expiresAt - now
+		if remaining > 0 && remaining <= expiryWarningThreshold {
+			// 发送预警消息给房间所有成员
+			r := h.roomManager.GetRoom(roomId)
+			if r == nil {
+				return
+			}
+
+			warningMsg := Message{
+				Type: MsgRelayMessage,
+				Data: RelayMessageData{
+					SenderID:   "system",
+					SenderName: "System",
+					IV:         "",
+					Ciphertext: "__SYSTEM_EXPIRY_WARNING__",
+					T:          now * 1000, // 转为毫秒与其他消息一致
+				},
+			}
+			data, err := msgpack.Marshal(warningMsg)
+			if err != nil {
+				logger.Error("Hub", "failed to marshal expiry warning for room %s: %v", roomId, err)
+				return
+			}
+
+			members := r.GetMembers()
+			for _, m := range members {
+				if m.SendFunc != nil {
+					m.SendFunc(data)
+				}
+			}
+
+			h.warnedExpiry[roomId] = true
+			logger.Info("Hub", "sent expiry warning to room %s (remaining: %ds)", roomId, remaining)
+		}
+	})
+}
+
+// broadcastFileCancelForExpiry 在房间过期销毁时广播文件传输取消信号给所有成员。
+// 通知房间内所有成员（包括发送方）：房间即将被销毁，应丢弃该传输的分片缓冲区。
+//
+// 📚 学习要点: broadcastFileCancelForExpiry vs broadcastFileCancelForDisconnect — 两种 FILE_CANCEL 广播的区别
+//
+// broadcastFileCancelForDisconnect（断线场景）：
+//   - 触发条件：发送方断线（网络中断、浏览器崩溃）
+//   - 广播范围：房间内其他成员（排除已断线的发送方，因为其连接已失效）
+//   - 使用方式：r.Broadcast(client.ID, data) — 排除 senderId
+//   - 目的：通知接收方释放分片缓冲区，发送方已无法继续传输
+//
+// broadcastFileCancelForExpiry（过期场景）：
+//   - 触发条件：房间过期被 Expiry_Checker 销毁
+//   - 广播范围：房间内所有成员（包括发送方），因为所有人都将被踢出
+//   - 使用方式：遍历 room.GetMembers() 逐一发送（无排除）
+//   - 目的：通知所有人（含发送方）传输已终止，发送方也需要清理本地传输状态
+//
+// 为什么过期场景需要通知发送方？
+// 断线场景中发送方已经不在线，发送消息给它没有意义。
+// 但过期场景中发送方仍然在线且可能正在发送 chunk，
+// 它需要收到 CANCEL 信号来停止发送并清理本地状态（如关闭文件读取流）。
+//
+// Parameters:
+//   - client: 拥有活跃传输的客户端（发送方）
+//   - r: 即将被销毁的房间
+func (h *Hub) broadcastFileCancelForExpiry(client *Client, r *room.Room) {
+	// 构建 RelayFileCancel 消息
+	relayMsg := Message{
+		Type: MsgRelayFileCancel,
+		Data: RelayFileCancelData{
+			SenderID:   client.ID,
+			TransferID: client.activeTransferID,
+		},
+	}
+	data, err := msgpack.Marshal(relayMsg)
+	if err != nil {
+		logger.Error("Hub", "failed to marshal RelayFileCancel for expiry: %v", err)
+		return
+	}
+
+	// 遍历房间所有成员逐一发送（包括发送方自己）
+	// 📚 学习要点: 为什么不使用 r.Broadcast(excludeID, data)？
+	// Broadcast 方法会排除 senderId，但过期场景需要通知所有人（含发送方）。
+	// 因此使用 GetMembers() 获取完整成员列表并逐一调用 SendFunc。
+	// 使用普通 SendFunc（非阻塞）而非 SendFileFunc（带超时阻塞），
+	// 因为 CANCEL 是轻量控制消息，丢失可接受（房间即将被销毁，
+	// 客户端最终会收到 MsgRoomClosed 通知）。
+	members := r.GetMembers()
+	for _, m := range members {
+		if m.SendFunc != nil {
+			m.SendFunc(data)
+		}
+	}
+
+	logger.Info("Hub", "broadcast file cancel for expiry: room=%s, client=%s, transferId=%s",
+		r.ID, client.ID, client.activeTransferID)
 }
 
 // --- 文件传输生命周期处理函数 ---

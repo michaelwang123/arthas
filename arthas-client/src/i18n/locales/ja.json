@@ -50,6 +50,18 @@
   "share.copied": "コピーしました",
   "share.copiedMobile": "✓ コピーしました",
   "share.copyAriaLabel": "共有コードをコピー",
+  "share.qr.button": "QRコードを表示",
+  "share.qr.title": "スキャンして参加",
+  "share.qr.alt": "ルーム参加QRコード",
+  "share.qr.error": "QRコード生成に失敗",
+
+  "room.expiry.label": "有効期限",
+  "room.expiry.1h": "1時間",
+  "room.expiry.24h": "24時間",
+  "room.expiry.7d": "7日間",
+  "room.expiry.never": "無期限",
+  "room.countdown.hours": "残り{n}時間",
+  "room.countdown.minutes": "残り{n}分",
 
   "message.reply": "返信",
   "message.cancelReply": "返信をキャンセル",
@@ -95,6 +107,7 @@
   "system.userJoined": "{{name}}がルームに参加しました",
   "system.userLeft": "{{name}}がルームを退出しました",
   "system.roomClosed": "ルームが閉鎖されました",
+  "system.roomExpired": "ルームの有効期限が切れ、閉鎖されました",
   "system.decryptFailed": "このメッセージを復号できません",
   "system.invalidShareCode": "無効な共有コード",
   "system.rateLimited": "送信が速すぎます。しばらくお待ちください",
@@ -105,6 +118,10 @@
   "error.E004": "送信が速すぎます。しばらくお待ちください",
   "error.E005": "無効なメッセージ形式",
   "error.E006": "ルームパスワードが正しくありません",
+  "error.E007": "ルームリンクの有効期限が切れています",
+  "error.roomExpired": "ルームリンクの有効期限切れ",
+  "error.invalidShareCode": "共有コードの形式が無効です。正しい共有コードを手動で入力してください。",
+  "error.roomMayExpired": "ルームの有効期限が切れている可能性がありますが、参加を試みることができます",
 
   "notification.newMessage": "{{name}}から新しいメッセージ",
 

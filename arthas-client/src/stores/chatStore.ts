@@ -39,6 +39,7 @@ import {
   type RelayMessageData,
   type RelayReactionData,
   type MemberTypingData,
+  type RoomClosedData,
   type ErrorData,
 } from '../network/protocol';
 import { generateRoomKey } from '../crypto/keys';
@@ -135,6 +136,8 @@ export interface ChatState {
   members: Member[];
   hasPassword: boolean;
   ephemeral: number;
+  /** 房间过期时间戳（Unix 秒），0 表示无过期。来源：服务器 RoomCreated/RoomJoined 响应 */
+  expiresAt: number;
 
   // Messages
   messages: ChatMessage[];
@@ -157,7 +160,7 @@ export interface ChatState {
 
   // Actions
   connect: () => void;
-  createRoom: (name: string, password?: string, ephemeral?: number) => Promise<void>;
+  createRoom: (name: string, password?: string, ephemeral?: number, expiry?: number) => Promise<void>;
   joinRoom: (shareCode: string, name: string, password?: string) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   setTyping: (typing: boolean) => Promise<void>;
@@ -264,6 +267,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   members: [],
   hasPassword: false,
   ephemeral: 0,
+  expiresAt: 0,
   messages: [],
   typingMembers: new Map(),
   muted: localStorage.getItem('arthas_muted') === 'true',
@@ -289,7 +293,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setInterval(checkConnection, 500);
   },
 
-  createRoom: async (name: string, password?: string, ephemeral?: number) => {
+  createRoom: async (name: string, password?: string, ephemeral?: number, expiry?: number) => {
     const roomKey = await generateRoomKey();
     const hashedPwd = await hashPassword(password ?? '');
 
@@ -300,7 +304,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const keyPair = await generateSigningKeyPair();
 
     set({ myName: name, roomKey, ephemeral: ephemeral ?? 0, signingKeyPair: keyPair, publicKeyMap: new Map() });
-    ws.send(MSG_CREATE_ROOM, { name, password: hashedPwd, ephemeral: ephemeral ?? 0 });
+    ws.send(MSG_CREATE_ROOM, { name, password: hashedPwd, ephemeral: ephemeral ?? 0, expiry: expiry ?? 0 });
   },
 
   joinRoom: async (shareCode: string, name: string, password?: string) => {
@@ -511,6 +515,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       members: [],
       hasPassword: false,
       ephemeral: 0,
+      expiresAt: 0,
       messages: [],
       typingMembers: new Map(),
       replyTo: null,
@@ -608,14 +613,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const data = msg.data as RoomCreatedData;
         const { roomKey, ephemeral } = get();
 
-        // Generate share code asynchronously (includes ephemeral info)
+        // 📚 学习要点: expiresAt 来源于服务器响应
+        // 服务器是过期时间的唯一权威来源。客户端存储 expiresAt 用于：
+        // 1. 倒计时显示（ExpiryCountdown 组件）
+        // 2. 编码到分享码中（信息性，帮助加入者判断房间是否仍有效）
+        const expiresAt = data.expiresAt ?? 0;
+
+        // Generate share code asynchronously (includes ephemeral and expiresAt info)
         if (roomKey) {
-          encodeShareKey(data.roomId, roomKey, ephemeral).then((code) => {
+          encodeShareKey(data.roomId, roomKey, ephemeral, expiresAt).then((code) => {
             set({ shareCode: code });
           });
         }
 
-        set({ roomId: data.roomId });
+        set({ roomId: data.roomId, expiresAt });
         break;
       }
 
@@ -636,6 +647,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           myId,
           hasPassword: data.hasPassword ?? false,
           ephemeral: data.ephemeral ?? 0,
+          expiresAt: data.expiresAt ?? 0,
         });
 
         // 📚 学习要点: 公钥广播时机
@@ -1123,13 +1135,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // 3. UI 正确显示传输失败状态（而非永远停留在"传输中"）
         useFileTransferStore.getState().abortAllTransfers();
 
+        // 📚 学习要点: MsgRoomClosed reason 字段区分关闭原因
+        // reason="expired" 表示房间因过期被服务器自动销毁，显示专用过期消息。
+        // reason 为空或缺失表示常规关闭（所有人离开），显示通用关闭消息。
+        // 向后兼容：旧服务器不发送 reason 字段，此时 data 可能为空对象。
+        const closedData = msg.data as RoomClosedData | undefined;
+        const reason = closedData?.reason ?? '';
+
         const locale = useI18nStore.getState().locale;
         const systemMsg: ChatMessage = {
           id: generateMessageId(),
           stableId: '',
           senderId: 'system',
           senderName: 'System',
-          text: translate(locale, 'system.roomClosed'),
+          text: reason === 'expired'
+            ? translate(locale, 'system.roomExpired')
+            : translate(locale, 'system.roomClosed'),
           timestamp: Date.now(),
           isMine: false,
           isSystem: true,
@@ -1145,6 +1166,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           members: [],
           hasPassword: false,
           ephemeral: 0,
+          expiresAt: 0,
           messages: [...state.messages, systemMsg],
           typingMembers: new Map(),
           replyTo: null,
@@ -1184,13 +1206,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const data = msg.data as ErrorData;
 
         const locale = useI18nStore.getState().locale;
-        const errorKeys: Record<string, 'error.E001' | 'error.E002' | 'error.E003' | 'error.E004' | 'error.E005' | 'error.E006'> = {
+        const errorKeys: Record<string, 'error.E001' | 'error.E002' | 'error.E003' | 'error.E004' | 'error.E005' | 'error.E006' | 'error.E007'> = {
           E001: 'error.E001',
           E002: 'error.E002',
           E003: 'error.E003',
           E004: 'error.E004',
           E005: 'error.E005',
           E006: 'error.E006',
+          E007: 'error.E007',
         };
 
         const key = errorKeys[data.code];

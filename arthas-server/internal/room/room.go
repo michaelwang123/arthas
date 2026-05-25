@@ -48,18 +48,60 @@ type Room struct {
 	ID           string
 	PasswordHash string // SHA-256 hash of room password; empty string means no password.
 	Ephemeral    int    // Ephemeral message duration in seconds; 0 means disabled.
+	expiresAt    int64  // Unix seconds timestamp when the room expires; 0 means no expiration. Set at creation time, read-only thereafter.
 	mu           sync.RWMutex
 	members      map[string]*Member
 }
 
-// NewRoom creates a new Room with the given ID, optional password hash, and ephemeral duration.
-func NewRoom(id, passwordHash string, ephemeral int) *Room {
+// NewRoom creates a new Room with the given ID, optional password hash, ephemeral duration,
+// and expiration timestamp.
+//
+// Parameters:
+//   - id: unique room identifier (NanoID, 21 chars)
+//   - passwordHash: SHA-256 hash of room password; empty string means no password
+//   - ephemeral: ephemeral message duration in seconds; 0 means disabled
+//   - expiresAt: Unix seconds timestamp when the room expires; 0 means no expiration
+func NewRoom(id, passwordHash string, ephemeral int, expiresAt int64) *Room {
 	return &Room{
 		ID:           id,
 		PasswordHash: passwordHash,
 		Ephemeral:    ephemeral,
+		expiresAt:    expiresAt,
 		members:      make(map[string]*Member),
 	}
+}
+
+// GetExpiresAt 返回房间的过期时间戳（Unix 秒）。0 表示永不过期。
+//
+// 📚 学习要点: Getter 封装只读语义
+// expiresAt 在 NewRoom 创建时设置，之后不可修改。
+// 使用私有字段 + 公开 getter 在编译期强制只读约束：
+// 外部代码只能通过 GetExpiresAt() 读取，无法直接赋值修改。
+// 这比导出字段 + 文档约定"请勿修改"更安全 — 编译器替你检查。
+func (r *Room) GetExpiresAt() int64 {
+	return r.expiresAt
+}
+
+// IsExpired 判断房间是否已过期。
+//
+// 📚 学习要点: 纯函数设计（Pure Function Design）
+// IsExpired 接受 now 参数而非内部调用 time.Now()，这使其成为纯函数：
+// - 相同输入始终产生相同输出（无副作用、无外部依赖）
+// - 便于属性测试：可注入任意时间点验证边界条件，无需 mock time 包
+// - 便于推理正确性：调用方明确控制时间源
+//
+// 📚 学习要点: expiresAt 只读语义
+// expiresAt 在 NewRoom 创建时设置，之后不可修改（没有 setter 方法）。
+// 这意味着 IsExpired 只读取一个不可变字段 + 比较传入的 now 参数，
+// 天然线程安全，无需任何锁保护。多个 goroutine 可以并发调用 IsExpired
+// 而不会产生数据竞争。
+//
+// Parameters:
+//   - now: current Unix timestamp in seconds (caller provides, enabling pure function testing)
+//
+// Returns true if the room has a non-zero expiresAt and the current time exceeds it.
+func (r *Room) IsExpired(now int64) bool {
+	return r.expiresAt > 0 && now > r.expiresAt
 }
 
 // MemberCount returns the current number of members in the room.

@@ -11,6 +11,7 @@
 //
 // Feature: cli-client, Property 1: Share Code Round-Trip
 // Feature: cli-client, Property 6: Invalid Share Code Rejection
+// Feature: qr-share-and-room-expiry, Property 7: Share code round-trip (Go variant)
 package crypto
 
 import (
@@ -61,8 +62,8 @@ func TestProperty_ShareCodeRoundTrip(t *testing.T) {
 		key := genKey(t)
 		ephemeral := rapid.IntRange(0, 86400).Draw(t, "ephemeral")
 
-		// Build → Parse 往返
-		code := BuildShareCode(roomID, key, ephemeral)
+		// Build → Parse 往返（无过期）
+		code := BuildShareCode(roomID, key, ephemeral, 0)
 		parsed, err := ParseShareCode(code)
 
 		// 验证解析成功
@@ -84,6 +85,11 @@ func TestProperty_ShareCodeRoundTrip(t *testing.T) {
 		// 验证 ephemeral 还原
 		if parsed.Ephemeral != ephemeral {
 			t.Errorf("Ephemeral mismatch: got %d, want %d", parsed.Ephemeral, ephemeral)
+		}
+
+		// 验证 expiresAt 还原（无过期时应为 0）
+		if parsed.ExpiresAt != 0 {
+			t.Errorf("ExpiresAt mismatch: got %d, want 0", parsed.ExpiresAt)
 		}
 	})
 }
@@ -197,21 +203,21 @@ func TestProperty6_InvalidShareCode_InvalidBase64URLChars(t *testing.T) {
 	})
 }
 
-// TestProperty6_InvalidShareCode_WrongSegmentCount 验证冒号分隔段数不为 2 或 3 时，
+// TestProperty6_InvalidShareCode_WrongSegmentCount 验证冒号分隔段数不为 2、3 或 4 时，
 // ParseShareCode 必须返回错误。
 //
 // 📚 学习要点: 段数验证是解析器的第一道防线
-// 分享码格式严格定义为 2 或 3 段（冒号分隔）。
+// 分享码格式严格定义为 2、3 或 4 段（冒号分隔）。
 // 段数不对意味着输入根本不是合法的分享码格式，
 // 应在任何字段验证之前就被拒绝（fail-fast 原则）。
 //
 // **Validates: Requirements 2.2**
 func TestProperty6_InvalidShareCode_WrongSegmentCount(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
-		// 生成段数为 1（无冒号）或 4+（过多冒号）
+		// 生成段数为 1（无冒号）或 5+（过多冒号）
 		segmentCount := rapid.OneOf(
 			rapid.Just(1),
-			rapid.IntRange(4, 8),
+			rapid.IntRange(5, 8),
 		).Draw(t, "segmentCount")
 
 		// 使用合法字符生成各段（避免段内包含冒号）
@@ -247,4 +253,126 @@ func genStringFromCharset(t *rapid.T, length int, charset string) string {
 		chars[i] = charset[idx]
 	}
 	return string(chars)
+}
+
+// ---------------------------------------------------------------------------
+// Feature: qr-share-and-room-expiry, Property 7: Share code round-trip (Go variant)
+// ---------------------------------------------------------------------------
+
+// TestProperty7_ShareCodeRoundTrip_WithExpiresAt 验证分享码的 Build → Parse 往返一致性，
+// 包含 expiresAt 字段（4 段格式）。
+//
+// **Validates: Requirements 9.1, 9.2, 9.3, 9.4, 9.5, 3.4**
+//
+// 属性定义：
+// 对于任意合法的 roomID（21 字符 NanoID 字母表）、任意 32 字节密钥、
+// 任意非负 ephemeral 值、以及任意非负 expiresAt 值，
+// BuildShareCode 构建的字符串经 ParseShareCode 解析后，
+// 必须还原出完全相同的 roomID、keyBytes、ephemeral 和 expiresAt。
+//
+// 📚 学习要点: 为什么需要单独测试 expiresAt 的往返？
+// 原有的 TestProperty_ShareCodeRoundTrip 只测试 expiresAt=0 的情况（2/3 段格式）。
+// 4 段格式引入了新的编码路径（ephemeral 必须显式包含），
+// 需要验证这条路径的往返一致性不会因位置编码的复杂性而出错。
+func TestProperty7_ShareCodeRoundTrip_WithExpiresAt(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		// 生成随机但合法的输入
+		roomID := genRoomID(t)
+		key := genKey(t)
+		ephemeral := rapid.IntRange(0, 86400).Draw(t, "ephemeral")
+		expiresAt := rapid.Int64Range(1, 2000000000).Draw(t, "expiresAt")
+
+		// Build → Parse 往返（带过期时间）
+		code := BuildShareCode(roomID, key, ephemeral, expiresAt)
+		parsed, err := ParseShareCode(code)
+
+		// 验证解析成功
+		if err != nil {
+			t.Fatalf("ParseShareCode failed for valid input with expiresAt: %v\n  roomID=%q\n  ephemeral=%d\n  expiresAt=%d\n  code=%q",
+				err, roomID, ephemeral, expiresAt, code)
+		}
+
+		// 验证 roomID 还原
+		if parsed.RoomID != roomID {
+			t.Errorf("RoomID mismatch: got %q, want %q", parsed.RoomID, roomID)
+		}
+
+		// 验证 key 还原（逐字节比较）
+		if !bytes.Equal(parsed.KeyBytes, key) {
+			t.Errorf("KeyBytes mismatch: got %x, want %x", parsed.KeyBytes, key)
+		}
+
+		// 验证 ephemeral 还原
+		if parsed.Ephemeral != ephemeral {
+			t.Errorf("Ephemeral mismatch: got %d, want %d", parsed.Ephemeral, ephemeral)
+		}
+
+		// 验证 expiresAt 还原
+		if parsed.ExpiresAt != expiresAt {
+			t.Errorf("ExpiresAt mismatch: got %d, want %d", parsed.ExpiresAt, expiresAt)
+		}
+
+		// 验证输出为 4 段格式（expiresAt > 0 时必须为 4 段）
+		segments := strings.Split(code, ":")
+		if len(segments) != 4 {
+			t.Errorf("Expected 4 segments for expiresAt > 0, got %d (code=%q)", len(segments), code)
+		}
+	})
+}
+
+// TestProperty7_ShareCodeRoundTrip_MixedFormats 验证分享码在所有格式变体下的往返一致性。
+// 覆盖 2 段、3 段、4 段格式的完整输入空间。
+//
+// **Validates: Requirements 9.1, 9.2, 9.3, 9.4, 9.5, 3.4**
+//
+// 📚 学习要点: 混合格式测试的必要性
+// 分享码有三种格式（2/3/4 段），每种格式的编码和解码路径不同。
+// 此测试通过随机选择 expiresAt 为 0 或正数，覆盖所有格式变体，
+// 确保格式选择逻辑（基于 ephemeral 和 expiresAt 的值）正确无误。
+func TestProperty7_ShareCodeRoundTrip_MixedFormats(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		roomID := genRoomID(t)
+		key := genKey(t)
+		ephemeral := rapid.IntRange(0, 86400).Draw(t, "ephemeral")
+		// expiresAt 可以为 0（无过期）或正数（有过期）
+		expiresAt := rapid.Int64Range(0, 2000000000).Draw(t, "expiresAt")
+
+		code := BuildShareCode(roomID, key, ephemeral, expiresAt)
+		parsed, err := ParseShareCode(code)
+
+		if err != nil {
+			t.Fatalf("ParseShareCode failed: %v\n  roomID=%q ephemeral=%d expiresAt=%d\n  code=%q",
+				err, roomID, ephemeral, expiresAt, code)
+		}
+
+		// 验证所有字段还原
+		if parsed.RoomID != roomID {
+			t.Errorf("RoomID mismatch: got %q, want %q", parsed.RoomID, roomID)
+		}
+		if !bytes.Equal(parsed.KeyBytes, key) {
+			t.Errorf("KeyBytes mismatch")
+		}
+		if parsed.Ephemeral != ephemeral {
+			t.Errorf("Ephemeral mismatch: got %d, want %d", parsed.Ephemeral, ephemeral)
+		}
+		if parsed.ExpiresAt != expiresAt {
+			t.Errorf("ExpiresAt mismatch: got %d, want %d", parsed.ExpiresAt, expiresAt)
+		}
+
+		// 验证段数格式规则
+		segments := strings.Split(code, ":")
+		if expiresAt > 0 {
+			if len(segments) != 4 {
+				t.Errorf("Expected 4 segments for expiresAt=%d, got %d", expiresAt, len(segments))
+			}
+		} else if ephemeral > 0 {
+			if len(segments) != 3 {
+				t.Errorf("Expected 3 segments for ephemeral=%d expiresAt=0, got %d", ephemeral, len(segments))
+			}
+		} else {
+			if len(segments) != 2 {
+				t.Errorf("Expected 2 segments for ephemeral=0 expiresAt=0, got %d", len(segments))
+			}
+		}
+	})
 }

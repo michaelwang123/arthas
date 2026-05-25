@@ -50,6 +50,18 @@
   "share.copied": "Copied",
   "share.copiedMobile": "✓ Copied",
   "share.copyAriaLabel": "Copy share code",
+  "share.qr.button": "Show QR Code",
+  "share.qr.title": "Scan to Join",
+  "share.qr.alt": "Room join QR code",
+  "share.qr.error": "QR code generation failed",
+
+  "room.expiry.label": "Expiration",
+  "room.expiry.1h": "1 hour",
+  "room.expiry.24h": "24 hours",
+  "room.expiry.7d": "7 days",
+  "room.expiry.never": "Never",
+  "room.countdown.hours": "{n}h remaining",
+  "room.countdown.minutes": "{n}min remaining",
 
   "message.reply": "Reply",
   "message.cancelReply": "Cancel reply",
@@ -95,6 +107,7 @@
   "system.userJoined": "{{name}} joined the room",
   "system.userLeft": "{{name}} left the room",
   "system.roomClosed": "Room has been closed",
+  "system.roomExpired": "Room expired and was closed",
   "system.decryptFailed": "Unable to decrypt this message",
   "system.invalidShareCode": "Invalid share code",
   "system.rateLimited": "Sending too fast, please wait",
@@ -105,6 +118,10 @@
   "error.E004": "Sending too fast, please wait",
   "error.E005": "Invalid message format",
   "error.E006": "Incorrect room password",
+  "error.E007": "Room link has expired",
+  "error.roomExpired": "Room link has expired",
+  "error.invalidShareCode": "Invalid share code format. Please enter a valid share code manually.",
+  "error.roomMayExpired": "Room may have expired, but you can still try to join",
 
   "notification.newMessage": "New message from {{name}}",
 

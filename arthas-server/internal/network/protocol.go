@@ -61,6 +61,12 @@ const (
 	ErrCodeRateLimited    = "E004"
 	ErrCodeInvalidMessage = "E005"
 	ErrCodeWrongPassword  = "E006"
+
+	// ErrCodeRoomExpired 表示客户端尝试加入一个已过期的房间。
+	// 服务器在 handleJoinRoom 中检测到 room.IsExpired(now)==true 时返回此错误码。
+	// 此检查在密码验证和容量检查之前执行，提供实时过期拒绝能力，
+	// 即使 Expiry_Checker 尚未运行其周期性扫描也能立即拒绝过期房间。
+	ErrCodeRoomExpired = "E007"
 )
 
 // Message 通用消息信封，使用 MessagePack 二进制序列化。
@@ -76,6 +82,14 @@ type CreateRoomData struct {
 	Name      string `msgpack:"name"`
 	Password  string `msgpack:"password"`
 	Ephemeral int    `msgpack:"ephemeral"`
+
+	// Expiry 房间有效期秒数，由客户端在创建房间时指定。
+	// 取值范围：
+	//   - 0: 永不过期（默认行为，向后兼容）
+	//   - 负数: 服务器视为 0（防御性处理，不返回错误）
+	//   - 1 ~ 604800: 有效的过期时长（秒）
+	//   - >604800: 服务器静默截断为 604800（7 天上限，防止内存耗尽攻击）
+	Expiry int `msgpack:"expiry"`
 }
 
 // JoinRoomData 加入房间请求。
@@ -109,6 +123,13 @@ type PongData struct {
 // RoomCreatedData 房间创建成功响应。
 type RoomCreatedData struct {
 	RoomID string `msgpack:"roomId"`
+
+	// ExpiresAt 房间过期时间戳（Unix 秒）。
+	// 取值范围：
+	//   - 0: 房间永不过期
+	//   - >0: 房间将在此 Unix 时间戳后过期，由服务器计算（now + expiry）
+	// 客户端使用此值启动倒计时显示，但服务器是过期判定的唯一权威。
+	ExpiresAt int64 `msgpack:"expiresAt"`
 }
 
 // RoomJoinedData 加入房间成功响应，包含当前成员列表。
@@ -117,6 +138,13 @@ type RoomJoinedData struct {
 	Members     []MemberInfo `msgpack:"members"`
 	HasPassword bool         `msgpack:"hasPassword"`
 	Ephemeral   int          `msgpack:"ephemeral"`
+
+	// ExpiresAt 房间过期时间戳（Unix 秒）。
+	// 取值范围：
+	//   - 0: 房间永不过期
+	//   - >0: 房间将在此 Unix 时间戳后过期
+	// 加入者使用此值启动倒计时显示，与 RoomCreatedData.ExpiresAt 语义相同。
+	ExpiresAt int64 `msgpack:"expiresAt"`
 }
 
 // MemberJoinedData 新成员加入通知。
@@ -155,8 +183,19 @@ type MemberTypingData struct {
 	Typing bool   `msgpack:"typing"`
 }
 
-// RoomClosedData 房间关闭通知（无字段）。
-type RoomClosedData struct{}
+// RoomClosedData 房间关闭通知。
+// 📚 学习要点: omitempty 实现向后兼容
+// Reason 字段使用 omitempty tag，当值为空字符串时 msgpack 序列化会省略该字段。
+// 这确保旧客户端（不识别 reason 字段）收到的消息格式与之前完全一致，
+// 而新客户端可以根据 reason 字段区分关闭原因并显示不同的本地化消息。
+type RoomClosedData struct {
+	// Reason 房间关闭原因。
+	// 取值范围：
+	//   - "": 空字符串或缺失，表示常规关闭（所有成员离开）
+	//   - "expired": 房间因过期被 Expiry_Checker 自动销毁
+	// 客户端根据此字段显示不同的本地化提示消息。
+	Reason string `msgpack:"reason,omitempty"`
+}
 
 // ErrorData 错误响应。
 type ErrorData struct {
