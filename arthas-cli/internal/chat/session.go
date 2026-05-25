@@ -256,7 +256,8 @@ func RunCreate(serverURL, name string) error {
 			}
 
 			// 构建并显示 Share_Code
-			shareCode := crypto.BuildShareCode(roomID, roomKey, s.ephemeral)
+			// CLI 仅解析 expiresAt，不显示倒计时（静默处理）
+			shareCode := crypto.BuildShareCode(roomID, roomKey, s.ephemeral, 0)
 			display.ShowShareCode(shareCode)
 
 			// 生成 Ed25519 签名密钥对并广播公钥

@@ -200,7 +200,7 @@ func TestIntegration_JoinRoomFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to generate test key: %v", err)
 	}
-	shareCode := crypto.BuildShareCode(testRoomID, testKey, 0)
+	shareCode := crypto.BuildShareCode(testRoomID, testKey, 0, 0)
 
 	_, wsURL := setupTestServer(t, func(conn *websocket.Conn, msg *protocol.Message) {
 		switch msg.Type {
@@ -474,7 +474,7 @@ func TestIntegration_MessageSendReceiveCycle(t *testing.T) {
 // Validates: Requirements 2.7
 func TestIntegration_ErrorHandling_E001(t *testing.T) {
 	testKey, _ := crypto.GenerateRoomKey()
-	shareCode := crypto.BuildShareCode("abcdefghijklmnopqrstu", testKey, 0)
+	shareCode := crypto.BuildShareCode("abcdefghijklmnopqrstu", testKey, 0, 0)
 
 	_, wsURL := setupTestServer(t, func(conn *websocket.Conn, msg *protocol.Message) {
 		if msg.Type == protocol.MsgJoinRoom {
@@ -502,7 +502,7 @@ func TestIntegration_ErrorHandling_E001(t *testing.T) {
 // Validates: Requirements 2.8
 func TestIntegration_ErrorHandling_E002(t *testing.T) {
 	testKey, _ := crypto.GenerateRoomKey()
-	shareCode := crypto.BuildShareCode("abcdefghijklmnopqrstu", testKey, 0)
+	shareCode := crypto.BuildShareCode("abcdefghijklmnopqrstu", testKey, 0, 0)
 
 	_, wsURL := setupTestServer(t, func(conn *websocket.Conn, msg *protocol.Message) {
 		if msg.Type == protocol.MsgJoinRoom {
@@ -530,7 +530,7 @@ func TestIntegration_ErrorHandling_E002(t *testing.T) {
 // Validates: Requirements 2.9
 func TestIntegration_ErrorHandling_E006(t *testing.T) {
 	testKey, _ := crypto.GenerateRoomKey()
-	shareCode := crypto.BuildShareCode("abcdefghijklmnopqrstu", testKey, 0)
+	shareCode := crypto.BuildShareCode("abcdefghijklmnopqrstu", testKey, 0, 0)
 
 	_, wsURL := setupTestServer(t, func(conn *websocket.Conn, msg *protocol.Message) {
 		if msg.Type == protocol.MsgJoinRoom {

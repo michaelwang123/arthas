@@ -50,6 +50,18 @@
   "share.copied": "已复制",
   "share.copiedMobile": "✓ 已复制",
   "share.copyAriaLabel": "复制分享码",
+  "share.qr.button": "显示 QR 码",
+  "share.qr.title": "扫码加入房间",
+  "share.qr.alt": "房间加入二维码",
+  "share.qr.error": "QR 码生成失败",
+
+  "room.expiry.label": "有效期",
+  "room.expiry.1h": "1 小时",
+  "room.expiry.24h": "24 小时",
+  "room.expiry.7d": "7 天",
+  "room.expiry.never": "永不过期",
+  "room.countdown.hours": "还剩 {n} 小时",
+  "room.countdown.minutes": "还剩 {n} 分钟",
 
   "message.reply": "回复",
   "message.cancelReply": "取消回复",
@@ -95,6 +107,7 @@
   "system.userJoined": "{{name}} 加入了房间",
   "system.userLeft": "{{name}} 离开了房间",
   "system.roomClosed": "房间已关闭",
+  "system.roomExpired": "房间已过期，自动关闭",
   "system.decryptFailed": "无法解密此消息",
   "system.invalidShareCode": "分享码无效",
   "system.rateLimited": "发送过快，请稍后再试",
@@ -105,6 +118,10 @@
   "error.E004": "发送过快，请稍后再试",
   "error.E005": "消息格式无效",
   "error.E006": "房间密码错误",
+  "error.E007": "房间链接已过期",
+  "error.roomExpired": "房间链接已过期",
+  "error.invalidShareCode": "分享码格式无效，请手动输入正确的分享码",
+  "error.roomMayExpired": "房间可能已过期，但仍可尝试加入",
 
   "notification.newMessage": "{{name}} 发来了新消息",
 

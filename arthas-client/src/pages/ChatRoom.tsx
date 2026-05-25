@@ -7,6 +7,7 @@ import { MemberDrawer } from '../components/MemberDrawer';
 import { ShareKey } from '../components/ShareKey';
 import { TypingIndicator } from '../components/TypingIndicator';
 import { ConnectionBanner } from '../components/ConnectionBanner';
+import { ExpiryCountdown } from '../components/ExpiryCountdown';
 import { DropZone } from '../file-transfer/components/DropZone';
 import { initAudio, requestNotificationPermission } from '../utils/notification';
 import { useTranslation } from '../i18n';
@@ -25,6 +26,7 @@ export function ChatRoom() {
   const toggleMute = useChatStore((s) => s.toggleMute);
   const hasPassword = useChatStore((s) => s.hasPassword);
   const ephemeral = useChatStore((s) => s.ephemeral);
+  const expiresAt = useChatStore((s) => s.expiresAt);
 
   // Mobile member drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -56,6 +58,7 @@ export function ChatRoom() {
           <span className="text-sm text-gray-400 truncate max-w-[120px] sm:max-w-none">{roomId}</span>
           <span className="text-green-400" title={hasPassword ? '密码保护' : '端到端加密'}>{hasPassword ? '🔐' : '🔒'}</span>
           {ephemeral > 0 && <span className="text-amber-400" title={`${t('chat.header.room')} - ${ephemeral}s`}>⏱️</span>}
+          <ExpiryCountdown expiresAt={expiresAt} />
         </div>
         <div className="flex items-center gap-2">
           {/* Language switcher (desktop only) */}

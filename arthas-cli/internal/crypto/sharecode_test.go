@@ -58,6 +58,56 @@ func TestParseShareCode_ValidThreeSegment(t *testing.T) {
 	if sc.Ephemeral != 3600 {
 		t.Errorf("Ephemeral = %d, want 3600", sc.Ephemeral)
 	}
+	if sc.ExpiresAt != 0 {
+		t.Errorf("ExpiresAt = %d, want 0", sc.ExpiresAt)
+	}
+}
+
+// TestParseShareCode_ValidFourSegment 验证四段格式（含过期时间戳）的分享码解析。
+func TestParseShareCode_ValidFourSegment(t *testing.T) {
+	roomID := "ABCDEFGHIJ1234567890x" // 21 chars
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(255 - i)
+	}
+	keyEncoded := base64.RawURLEncoding.EncodeToString(key)
+	code := roomID + ":" + keyEncoded + ":3600:1700000000"
+
+	sc, err := ParseShareCode(code)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sc.RoomID != roomID {
+		t.Errorf("RoomID = %q, want %q", sc.RoomID, roomID)
+	}
+	if sc.Ephemeral != 3600 {
+		t.Errorf("Ephemeral = %d, want 3600", sc.Ephemeral)
+	}
+	if sc.ExpiresAt != 1700000000 {
+		t.Errorf("ExpiresAt = %d, want 1700000000", sc.ExpiresAt)
+	}
+}
+
+// TestParseShareCode_ValidFourSegment_ZeroEphemeral 验证四段格式中 ephemeral=0 的情况。
+func TestParseShareCode_ValidFourSegment_ZeroEphemeral(t *testing.T) {
+	roomID := "ABCDEFGHIJ1234567890x" // 21 chars
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 100)
+	}
+	keyEncoded := base64.RawURLEncoding.EncodeToString(key)
+	code := roomID + ":" + keyEncoded + ":0:1700000000"
+
+	sc, err := ParseShareCode(code)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sc.Ephemeral != 0 {
+		t.Errorf("Ephemeral = %d, want 0", sc.Ephemeral)
+	}
+	if sc.ExpiresAt != 1700000000 {
+		t.Errorf("ExpiresAt = %d, want 1700000000", sc.ExpiresAt)
+	}
 }
 
 // TestParseShareCode_InvalidFormats 验证各种无效格式被正确拒绝。
@@ -103,8 +153,8 @@ func TestParseShareCode_InvalidFormats(t *testing.T) {
 			want: "invalid share code",
 		},
 		{
-			name: "too many segments",
-			code: "abcdefghijklmnopqrstu:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:100:extra",
+			name: "too many segments (5)",
+			code: "abcdefghijklmnopqrstu:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:100:200:extra",
 			want: "expected format",
 		},
 		{
@@ -116,6 +166,16 @@ func TestParseShareCode_InvalidFormats(t *testing.T) {
 			name: "ephemeral negative",
 			code: "abcdefghijklmnopqrstu:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:-1",
 			want: "ephemeral must be non-negative",
+		},
+		{
+			name: "expiresAt not a number",
+			code: "abcdefghijklmnopqrstu:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:0:abc",
+			want: "expiresAt must be a valid integer",
+		},
+		{
+			name: "expiresAt negative",
+			code: "abcdefghijklmnopqrstu:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:0:-100",
+			want: "expiresAt must be non-negative",
 		},
 	}
 
@@ -140,7 +200,7 @@ func TestBuildShareCode_NonEphemeral(t *testing.T) {
 		key[i] = byte(i)
 	}
 
-	code := BuildShareCode(roomID, key, 0)
+	code := BuildShareCode(roomID, key, 0, 0)
 
 	// 应该只有两段（无 ephemeral 后缀）
 	parts := strings.Split(code, ":")
@@ -160,7 +220,7 @@ func TestBuildShareCode_Ephemeral(t *testing.T) {
 		key[i] = byte(i)
 	}
 
-	code := BuildShareCode(roomID, key, 7200)
+	code := BuildShareCode(roomID, key, 7200, 0)
 
 	parts := strings.Split(code, ":")
 	if len(parts) != 3 {
@@ -179,8 +239,8 @@ func TestShareCode_RoundTrip(t *testing.T) {
 		key[i] = byte(i * 7 % 256)
 	}
 
-	// 非临时模式
-	code := BuildShareCode(roomID, key, 0)
+	// 非临时模式，无过期
+	code := BuildShareCode(roomID, key, 0, 0)
 	sc, err := ParseShareCode(code)
 	if err != nil {
 		t.Fatalf("round-trip parse failed: %v", err)
@@ -200,14 +260,46 @@ func TestShareCode_RoundTrip(t *testing.T) {
 	if sc.Ephemeral != 0 {
 		t.Errorf("Ephemeral = %d, want 0", sc.Ephemeral)
 	}
+	if sc.ExpiresAt != 0 {
+		t.Errorf("ExpiresAt = %d, want 0", sc.ExpiresAt)
+	}
 
-	// 临时模式
-	code = BuildShareCode(roomID, key, 1800)
+	// 临时模式，无过期
+	code = BuildShareCode(roomID, key, 1800, 0)
 	sc, err = ParseShareCode(code)
 	if err != nil {
 		t.Fatalf("round-trip parse (ephemeral) failed: %v", err)
 	}
 	if sc.Ephemeral != 1800 {
 		t.Errorf("Ephemeral = %d, want 1800", sc.Ephemeral)
+	}
+	if sc.ExpiresAt != 0 {
+		t.Errorf("ExpiresAt = %d, want 0", sc.ExpiresAt)
+	}
+
+	// 有过期时间（4 段格式）
+	code = BuildShareCode(roomID, key, 3600, 1700000000)
+	sc, err = ParseShareCode(code)
+	if err != nil {
+		t.Fatalf("round-trip parse (expiresAt) failed: %v", err)
+	}
+	if sc.Ephemeral != 3600 {
+		t.Errorf("Ephemeral = %d, want 3600", sc.Ephemeral)
+	}
+	if sc.ExpiresAt != 1700000000 {
+		t.Errorf("ExpiresAt = %d, want 1700000000", sc.ExpiresAt)
+	}
+
+	// 有过期时间，ephemeral=0（4 段格式，ephemeral 显式为 0）
+	code = BuildShareCode(roomID, key, 0, 1700000000)
+	sc, err = ParseShareCode(code)
+	if err != nil {
+		t.Fatalf("round-trip parse (expiresAt, ephemeral=0) failed: %v", err)
+	}
+	if sc.Ephemeral != 0 {
+		t.Errorf("Ephemeral = %d, want 0", sc.Ephemeral)
+	}
+	if sc.ExpiresAt != 1700000000 {
+		t.Errorf("ExpiresAt = %d, want 1700000000", sc.ExpiresAt)
 	}
 }

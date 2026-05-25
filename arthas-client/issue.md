@@ -1,114 +1,110 @@
-# Voice Push-to-Talk 模块问题清单
+# QR 码分享 & 房间链接过期 — 代码优化清单
 
-## 概述
-
-语音模块代码评审发现 3 个关键功能性 Bug、2 个逻辑缺陷、2 个性能问题和 1 个可维护性问题。
-**全部已修复。**
-
----
-
-## P0 — 关键 Bug（功能性阻断）
-
-### ~~Bug 2: extraMetadata 未传递到 sendEncryptedMetadata~~ ✅ 已修复
-
-- **文件**: `src/file-transfer/sender.ts`
-- **问题**: `sendFile()` 调用 `sendEncryptedMetadata(transferId, file, roomKey)` 只传 3 个参数，未调用 `consumeExtraMetadata(transferId)` 获取语音元数据并传递为第 4 个参数
-- **影响**: `isVoice: true` 和 `duration` 永远不会出现在加密 metadata 中，接收方将所有语音消息当作普通文件处理
-- **修复**: 导入 `consumeExtraMetadata`，在 sendFile 中调用并传递给 `sendEncryptedMetadata`
-
-### ~~Bug 1: voiceStore 从未注册 onTransferComplete 回调~~ ✅ 已修复
-
-- **文件**: `src/voice/voiceStore.ts`
-- **问题**: 设计文档说明 voiceStore 应调用 `fileTransferStore.registerTransferCompleteCallback()` 注册回调，但实际代码中从未执行
-- **影响**: 接收方解密完成后，blob URL 不会进入 voiceStore 的 blobCache，接收的语音消息永远不可播放
-- **修复**: 添加延迟回调注册（`ensureCallbackRegistered`），通过 Zustand subscribe 触发，避免模块加载顺序问题
-
-### ~~Bug 3: sender.ts insertChatFileMessage 无条件执行导致重复消息~~ ✅ 已修复
-
-- **文件**: `src/file-transfer/sender.ts`
-- **问题**: voiceSender 提前插入 ChatVoiceMessage 并设置 `chatMessageId`，但 `sendFile()` 无条件调用 `insertChatFileMessage`
-- **影响**: 语音消息在发送方聊天列表中出现两条
-- **修复**: 在 sendFile 中检查 `transfer.chatMessageId` 是否已设置，已设置则跳过插入
+## 状态说明
+- ⬜ 待处理
+- 🔄 进行中
+- ✅ 已完成
+- ⏭️ 延后处理（需要更大范围重构）
 
 ---
 
-## P1 — 逻辑缺陷
+## 🔴 P0 — 并发安全
 
-### ~~LRU 播放时不更新访问顺序~~ ✅ 已修复
-
-- **文件**: `src/voice/voiceStore.ts` — `playVoice` action
-- **问题**: 用户播放语音消息时，该消息不会在 `lruOrder` 中移到末尾
-- **影响**: 频繁播放的旧消息仍在 lruOrder 头部，会被优先淘汰
-- **修复**: 在 `playVoice` 中更新 `lruOrder`，将播放的消息移到末尾
-
-### ~~发送方自己的语音消息不可回放~~ ✅ 已修复
-
-- **文件**: `src/voice/voiceSender.ts`
-- **问题**: 发送方不会收到 `handleFileComplete` 回调，blobCache 中没有自己的语音 blob URL
-- **影响**: 发送方无法回放自己刚发送的语音消息
-- **修复**: 在 `sendVoice` 中调用 `URL.createObjectURL(blob)` 并注册到 `voiceStore.blobCache`
+### 1. cleanupExpiredRooms 在 RLock 下修改 client 字段
+- **文件**: `arthas-server/internal/network/hub.go`
+- **问题**: `client.activeTransferID = ""` 和 `client.RoomID = ""` 在 `h.mu.RLock()` 下执行，属于数据竞争（readPump goroutine 可能同时读写这些字段）
+- **影响**: 遵循项目现有模式（handleClientDisconnect 也如此），属于全局架构债务
+- **状态**: ⏭️ 延后处理 — 需要全局引入 per-client mutex，涉及 20+ 调用点，影响范围大
 
 ---
 
-## P2 — 性能问题
+## 🟡 P1 — 可测试性 & 可维护性
 
-### ~~updatePlaybackProgress 每 250ms 创建新 Map~~ ✅ 已修复
+### 2. NowFunc 未被 cleanupExpiredRooms 使用
+- **文件**: `arthas-server/internal/network/hub.go`
+- **问题**: `cleanupExpiredRooms` 直接调用 `time.Now().Unix()` 而非 `h.roomManager.NowFunc()`
+- **修复**: 改为 `now := h.roomManager.NowFunc()`
+- **状态**: ✅ 已完成
 
-- **文件**: `src/voice/voiceStore.ts` — `updatePlaybackProgress` action
-- **问题**: 每次 `timeupdate` 事件都创建新 Map 并 setState，导致不必要的重渲染
-- **影响**: 大量语音消息时可能造成 CPU 开销
-- **修复**: 添加 0.1 秒变化阈值（Threshold Filtering），只有 currentTime 变化超过 100ms 才更新 store，减少约 50% 的 Map 创建
+### 3. timeFormat.ts 硬编码 locale 字符串，与 i18n JSON 重复
+- **文件**: `arthas-client/src/utils/timeFormat.ts`
+- **问题**: `formatRemainingTime` 用 switch-case 硬编码了 `还剩 X 小时` 等文案，而 locale JSON 中已有 `room.countdown.hours` / `room.countdown.minutes`
+- **修复**: 重构为接受可选 `translator` 函数参数，传入时使用 i18n key，不传时使用内置 fallback（向后兼容）
+- **状态**: ✅ 已完成
 
-### ~~playbackStates Map 无限增长~~ ✅ 已修复
-
-- **文件**: `src/voice/voiceStore.ts` — `evictBlob` action
-- **问题**: `playbackStates` Map 只在 `cleanup()` 时清理，每条播放过的消息都留下条目
-- **影响**: 长时间使用时内存缓慢增长
-- **修复**: 在 `evictBlob` 中同步删除对应的 `playbackStates` 条目
-
----
-
-## P3 — 可维护性
-
-### ~~字段命名 `recordingError` 语义不清~~ ✅ 已修复
-
-- **文件**: `src/voice/voiceStore.ts`, `voiceSender.ts`, `VoiceErrorToast.tsx`, 测试文件
-- **问题**: `recordingError` 同时承载录音错误和播放错误，名称误导
-- **修复**: 全局重命名为 `voiceError`（通过 semantic rename，影响 4 个文件 18 处）
-
-### 注释密度过高 — 暂不处理
-
-- **文件**: 整个 `src/voice/` 目录
-- **问题**: voiceStore.ts 等文件中 60%+ 是注释
-- **决定**: 作为学习项目，保留详细注释。未来如果项目转为生产项目，可将教程性注释移到独立文档
+### 4. QRCodeModal useEffect 依赖 `t` 函数导致不必要重新生成
+- **文件**: `arthas-client/src/components/QRCodeModal.tsx`
+- **问题**: QR 生成 effect 依赖 `[shareCode, t]`，切换语言时 `t` 引用变化触发 QR 重新生成
+- **修复**: 移除 `t` 依赖，error 状态存储标记字符串，渲染时通过 `t()` 本地化
+- **状态**: ✅ 已完成
 
 ---
 
-## 修复进度
+## 🟢 P2 — 代码质量改进
 
-| 优先级 | 问题 | 状态 |
-|--------|------|------|
-| P0 | Bug 2: extraMetadata 未传递 | ✅ 已修复 |
-| P0 | Bug 1: 回调未注册 | ✅ 已修复 |
-| P0 | Bug 3: 重复消息 | ✅ 已修复 |
-| P1 | LRU 播放时不更新 | ✅ 已修复 |
-| P1 | 发送方不可回放 | ✅ 已修复 |
-| P2 | 进度更新性能 | ✅ 已修复 |
-| P2 | playbackStates 泄漏 | ✅ 已修复 |
-| P3 | 字段命名 | ✅ 已修复 |
-| P3 | 注释密度 | 保留（学习项目） |
+### 5. ExpiryCountdown timer 嵌套 setInterval 逻辑脆弱
+- **文件**: `arthas-client/src/components/ExpiryCountdown.tsx`
+- **问题**: 60s interval 内部创建新的 1s interval，存在两个 interval 同时运行的风险窗口
+- **修复**: 改用 `setTimeout` 递归模式，每次 tick 自然选择正确延迟，消除频率切换复杂性
+- **状态**: ✅ 已完成
+
+### 6. Room.ExpiresAt 导出字段缺乏封装
+- **文件**: `arthas-server/internal/room/room.go`
+- **问题**: 设计声明 ExpiresAt 只读，但导出字段允许任何代码修改
+- **修复**: 改为私有字段 `expiresAt` + `GetExpiresAt() int64` getter，编译期强制只读
+- **状态**: ✅ 已完成
+
+### 7. parseNonNegativeInt 的 MAX_SAFE_INTEGER 检查不完整
+- **文件**: `arthas-client/src/crypto/shareKey.ts`
+- **问题**: `/^\d+$/` 匹配的纯数字串经 `Number()` 转换后不会报 Infinity，但超过 15 位会有精度丢失
+- **修复**: 加 `value.length > 15` 前置检查，空字符串也提前拒绝
+- **状态**: ✅ 已完成
+
+### 8. QRCodeModal 关闭按钮 aria-label 语义不准确
+- **文件**: `arthas-client/src/components/QRCodeModal.tsx`
+- **问题**: 关闭按钮的 `aria-label` 使用了 `t('share.qr.title')`（"扫码加入房间"），应为"关闭"
+- **修复**: 改为 `aria-label="Close"`
+- **状态**: ✅ 已完成
 
 ---
 
-## 验证结果
+## 🔵 P3 — 性能与 UX 优化
 
-- **测试**: 281 通过 / 1 失败（pre-existing chunker 5MB 超时，与语音模块无关）
-- **TypeScript**: 生产代码零错误（5 个错误均在测试文件的 mock 类型中）
-- **修改文件汇总**:
-  - `src/file-transfer/sender.ts` — Bug 2 + Bug 3
-  - `src/voice/voiceStore.ts` — Bug 1 + P1 LRU + P2 性能 + P2 泄漏 + P3 重命名
-  - `src/voice/voiceSender.ts` — P1 发送方回放 + P3 重命名
-  - `src/voice/components/VoiceErrorToast.tsx` — P3 重命名
-  - `src/voice/__tests__/voiceStore.property.test.ts` — P3 重命名
-  - `src/voice/__tests__/voiceSender.property.test.ts` — 测试 mock 适配
-  - `src/voice/index.ts` — 导出 `initVoiceModule`
+### 9. GetExpiredRooms O(n) 线性扫描
+- **文件**: `arthas-server/internal/room/manager.go`
+- **问题**: 每 60s 遍历所有房间，当前规模可接受，但数千房间时可能成为瓶颈
+- **修复**: 新增 `expiringRooms map[string]int64` 索引，仅追踪有过期时间的房间。`GetExpiredRooms` 只遍历此子集，将扫描范围从 O(所有房间) 降为 O(有过期时间的房间)。新增 `ForEachExpiring` 回调遍历方法。
+- **状态**: ✅ 已完成
+
+### 10. 无服务器端过期预警
+- **文件**: `arthas-server/internal/network/hub.go`
+- **问题**: 房间过期时立即踢出所有成员，正在输入的消息丢失
+- **修复**: 新增 `warnApproachingExpiry(now int64)` 方法，在 expiryTicker 中 cleanupExpiredRooms 之后调用。对剩余 ≤ 5 分钟的房间发送系统预警消息（使用 `warnedExpiry map[string]bool` 确保幂等性）。
+- **状态**: ✅ 已完成
+
+---
+
+## 执行总结
+
+本次优化完成了 **9/10 项改进**（#2-#10），仅跳过 #1（per-client mutex，需要全局重构 20+ 调用点）。
+
+### 验证结果
+- Go Server: `go build ./...` ✅ 编译通过
+- Go Server: `go test ./...` ✅ 全部通过（5 packages）
+- Go CLI: `go test ./...` ✅ 全部通过
+- Frontend: `npm test` ✅ 343/344 通过（1 个预存在的 typing test 失败，与本次改动无关）
+- TypeScript 诊断: 所有修改文件 0 错误
+
+### 改动文件清单
+
+| 文件 | 改动类型 |
+|------|----------|
+| `arthas-server/internal/room/room.go` | `ExpiresAt` → 私有 `expiresAt` + `GetExpiresAt()` getter |
+| `arthas-server/internal/room/manager.go` | 新增 `expiringRooms` 索引 + `ForEachExpiring` 方法 + 优化 `GetExpiredRooms` |
+| `arthas-server/internal/network/hub.go` | `NowFunc()` 替代 `time.Now()` + `warnedExpiry` + `warnApproachingExpiry` |
+| `arthas-server/internal/room/room_property_test.go` | 重建（编码修复 + `GetExpiresAt()` 适配） |
+| `arthas-server/internal/network/hub_expiry_test.go` | 重建（编码修复 + `GetExpiresAt()` 适配 + NowFunc 注入） |
+| `arthas-client/src/utils/timeFormat.ts` | 新增可选 `translator` 参数 |
+| `arthas-client/src/components/QRCodeModal.tsx` | 移除 `t` effect 依赖 + 修复 aria-label |
+| `arthas-client/src/components/ExpiryCountdown.tsx` | 重写为 `setTimeout` 递归模式 |
+| `arthas-client/src/crypto/shareKey.ts` | `parseNonNegativeInt` 加 length 前置检查 |
