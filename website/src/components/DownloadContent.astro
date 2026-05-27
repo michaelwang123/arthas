@@ -1,19 +1,19 @@
 ---
 /**
- * DownloadContent 共享组件 �?下载页面的完整内容（含逻辑、HTML、JS、CSS�?
+ * DownloadContent 共享组件 — 下载页面的完整内容（含逻辑、HTML、JS、CSS）
  *
- * 本组件封装了下载页面的所有展示逻辑，通过 locale prop 支持中英文切换�?
- * EN �?ZH 下载页面只需导入此组件并传入对应 locale，消�?CSS 重复�?
+ * 本组件封装了下载页面的所有展示逻辑，通过 locale prop 支持中英文切换。
+ * EN 和 ZH 下载页面只需导入此组件并传入对应 locale，消除 CSS 重复。
  *
- * 📚 学习要点: 组件提取消除多语言页面的代码重�?
- * 之前 EN/ZH 下载页面各自包含完全相同�?~300 �?CSS�?
- * 提取为共享组件后�?
- * - 样式只定义一次，Astro �?scoped styles 自动应用到所有使用处
- * - 结构变更只需修改一个文�?
+ * 📚 学习要点: 组件提取消除多语言页面的代码重复
+ * 之前 EN/ZH 下载页面各自包含完全相同的 ~300 行 CSS。
+ * 提取为共享组件后：
+ * - 样式只定义一次，Astro 的 scoped styles 自动应用到所有使用处
+ * - 结构变更只需修改一个文件
  * - 页面文件简化为 Layout 包裹 + SEO props，职责更清晰
  *
- * @see src/pages/download.astro �?英文下载页（使用本组件）
- * @see src/pages/zh/download.astro �?中文下载页（使用本组件）
+ * @see src/pages/download.astro — 英文下载页（使用本组件）
+ * @see src/pages/zh/download.astro — 中文下载页（使用本组件）
  */
 
 import { t } from '../i18n/utils';
@@ -21,7 +21,7 @@ import type { Locale } from '../i18n/utils';
 import release from '../data/release.json';
 
 interface Props {
-  /** 当前语言标识�?*/
+  /** 当前语言标识符 */
   locale: Locale;
 }
 
@@ -30,7 +30,7 @@ const { locale } = Astro.props;
 const { version, fallback } = release;
 
 /**
- * 平台下载数据 �?按操作系统和架构分组
+ * 平台下载数据 — 按操作系统和架构分组
  */
 const platforms = [
   { os: 'linux', arch: 'amd64', label: t('download.linux.amd64', locale) },
@@ -41,7 +41,7 @@ const platforms = [
 ];
 
 /**
- * 生成下载 URL �?遵循 GitHub Releases 命名约定
+ * 生成下载 URL — 遵循 GitHub Releases 命名约定
  */
 function getDownloadUrl(binary: string, os: string, arch: string): string {
   const ext = os === 'windows' ? '.exe' : '';
@@ -65,7 +65,7 @@ const downloadAriaPrefix = locale === 'zh' ? '下载' : 'Download';
 <section class="download-page" aria-labelledby="download-heading">
   <div class="download-container">
 
-    {/* ===== 版本号展�?===== */}
+    {/* ===== 版本号展示 ===== */}
     <header class="download-header">
       <h1 id="download-heading">{t('download.title', locale)}</h1>
       <p class="version-badge" aria-label={`${t('download.version', locale)}: ${version}`}>
@@ -75,7 +75,7 @@ const downloadAriaPrefix = locale === 'zh' ? '下载' : 'Download';
       <p class="download-description">{t('download.description', locale)}</p>
     </header>
 
-    {/* ===== Fallback 提示（当预编译二进制不可用时�?===== */}
+    {/* ===== Fallback 提示（当预编译二进制不可用时） ===== */}
     {fallback && (
       <div class="fallback-notice" role="alert">
         <p>{t('download.fallback.notice', locale)}</p>
@@ -117,7 +117,7 @@ const downloadAriaPrefix = locale === 'zh' ? '下载' : 'Download';
       </div>
     </section>
 
-    {/* ===== Docker 自托�?===== */}
+    {/* ===== Docker 自托管 ===== */}
     <section class="docker-section" aria-labelledby="docker-heading">
       <h2 id="docker-heading">{t('download.docker.title', locale)}</h2>
       <p class="section-description">{t('download.docker.description', locale)}</p>
@@ -137,7 +137,7 @@ const downloadAriaPrefix = locale === 'zh' ? '下载' : 'Download';
       </div>
     </section>
 
-    {/* ===== 快速开�?===== */}
+    {/* ===== 快速开始 ===== */}
     <section class="quickstart-section" aria-labelledby="quickstart-heading">
       <h2 id="quickstart-heading">{t('download.quickstart.title', locale)}</h2>
 
@@ -172,7 +172,7 @@ const downloadAriaPrefix = locale === 'zh' ? '下载' : 'Download';
         rel="noopener noreferrer"
         class="github-link"
       >
-        {t('download.github.releases', locale)} �?
+        {t('download.github.releases', locale)} ↗
       </a>
     </section>
 
@@ -190,7 +190,7 @@ const downloadAriaPrefix = locale === 'zh' ? '下载' : 'Download';
       try {
         await navigator.clipboard.writeText(codeEl.textContent || '');
         const originalText = btn.textContent;
-        btn.textContent = btn.getAttribute('data-copied-text') || '�?;
+        btn.textContent = btn.getAttribute('data-copied-text') || '✓';
         btn.classList.add('copied');
         setTimeout(() => {
           btn.textContent = originalText;
