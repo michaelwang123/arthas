@@ -25,6 +25,10 @@
   "trust.agpl.description": "Copyleft ensures all derivatives remain open. Your privacy is protected by law.",
   "trust.servernothing.title": "Server Sees Nothing",
   "trust.servernothing.description": "All encryption and decryption happens client-side. Keys never leave your device.",
+  "trust.diagram.client": "Client",
+  "trust.diagram.encrypt": "🔒 Encrypt",
+  "trust.diagram.server": "Server (blind relay)",
+  "trust.diagram.decrypt": "🔓 Decrypt",
 
   "howitworks.title": "How It Works",
   "howitworks.step1.label": "Create",

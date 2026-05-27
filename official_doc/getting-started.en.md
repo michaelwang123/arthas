@@ -31,7 +31,7 @@ This guide helps you run the Arthas project locally in 5 minutes.
 ## Step 1: Clone the Project
 
 ```bash
-git clone https://github.com/arthas/arthas.git
+git clone https://github.com/michaelwang123/arthas.git
 cd arthas
 ```
 

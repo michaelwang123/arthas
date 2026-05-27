@@ -96,15 +96,15 @@ const trustItems = [
       Client → 🔒 Encrypt → Server (blind relay) → 🔓 Decrypt → Client */}
   <div class="architecture-diagram" aria-label="Zero-knowledge architecture flow">
     <div class="diagram-flow">
-      <span class="diagram-node">Client</span>
+      <span class="diagram-node">{t('trust.diagram.client', locale)}</span>
       <span class="diagram-arrow" aria-hidden="true">→</span>
-      <span class="diagram-node diagram-encrypt">🔒 Encrypt</span>
+      <span class="diagram-node diagram-encrypt">{t('trust.diagram.encrypt', locale)}</span>
       <span class="diagram-arrow" aria-hidden="true">→</span>
-      <span class="diagram-node diagram-server">Server (blind relay)</span>
+      <span class="diagram-node diagram-server">{t('trust.diagram.server', locale)}</span>
       <span class="diagram-arrow" aria-hidden="true">→</span>
-      <span class="diagram-node diagram-decrypt">🔓 Decrypt</span>
+      <span class="diagram-node diagram-decrypt">{t('trust.diagram.decrypt', locale)}</span>
       <span class="diagram-arrow" aria-hidden="true">→</span>
-      <span class="diagram-node">Client</span>
+      <span class="diagram-node">{t('trust.diagram.client', locale)}</span>
     </div>
   </div>
 </section>

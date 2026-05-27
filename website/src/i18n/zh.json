@@ -25,6 +25,10 @@
   "trust.agpl.description": "Copyleft 确保所有衍生作品保持开源。你的隐私受法律保护。",
   "trust.servernothing.title": "服务器零感知",
   "trust.servernothing.description": "所有加解密在客户端完成，密钥永远不会离开你的设备。",
+  "trust.diagram.client": "客户端",
+  "trust.diagram.encrypt": "🔒 加密",
+  "trust.diagram.server": "服务器（盲转发）",
+  "trust.diagram.decrypt": "🔓 解密",
 
   "howitworks.title": "使用流程",
   "howitworks.step1.label": "创建",

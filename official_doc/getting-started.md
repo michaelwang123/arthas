@@ -29,7 +29,7 @@
 ## 第一步：克隆项目
 
 ```bash
-git clone https://github.com/arthas/arthas.git
+git clone https://github.com/michaelwang123/arthas.git
 cd arthas
 ```
 

@@ -60,7 +60,7 @@ Arthas 是一个开源的端到端加密 (E2EE) 实时聊天应用。用户可�
 
 ```bash
 # 克隆项目
-git clone https://github.com/arthas/arthas.git
+git clone https://github.com/michaelwang123/arthas.git
 cd arthas
 
 # 启动后端

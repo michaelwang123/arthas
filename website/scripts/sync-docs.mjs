@@ -209,6 +209,29 @@ function injectFrontmatter(content, filename) {
 }
 
 /**
+ * 移除 Markdown 内容中的语言切换行。
+ *
+ * 📚 学习要点: 为什么要移除语言切换行？
+ * - 源文档（official_doc/）中包含手动的语言切换链接（如 `[中文](xxx) | English`）
+ * - Starlight 已内置语言切换器（页面头部的 "Select language" 下拉菜单）
+ * - 保留手动链接会导致页面顶部出现冗余的语言切换文本，显得不专业
+ * - 移除后让 Starlight 统一管理语言切换体验
+ *
+ * 匹配模式：以 `[` 开头、包含 Markdown 链接语法、且含有 `|` 分隔符的行
+ * 例如：`[中文](getting-started.md) | English`
+ *       `[中文](/arthas/zh/architecture/) | English`
+ *
+ * @param {string} content - Markdown 文件内容
+ * @returns {string} 移除语言切换行后的内容
+ */
+function stripLanguageSwitcher(content) {
+  // 匹配语言切换行：以 [ 开头，包含 ](...)，且有 | 分隔符
+  // 同时移除该行后面的空行（避免留下多余空白）
+  // 使用 \r?\n 兼容 Windows (CRLF) 和 Unix (LF) 换行符
+  return content.replace(/^\[.+\]\(.+\)\s*\|.+\r?\n(\r?\n)?/m, '');
+}
+
+/**
  * 复制文件并注入 Starlight frontmatter。
  *
  * @param {string} srcPath - 源文件路径
@@ -218,7 +241,8 @@ function injectFrontmatter(content, filename) {
  */
 function copyWithFrontmatter(srcPath, destPath, filename, locale = 'en') {
   const content = readFileSync(srcPath, 'utf-8');
-  const withLinks = transformInternalLinks(content, locale);
+  const withoutSwitcher = stripLanguageSwitcher(content);
+  const withLinks = transformInternalLinks(withoutSwitcher, locale);
   const withLangs = normalizeCodeBlockLanguages(withLinks);
   const processed = injectFrontmatter(withLangs, filename);
   writeFileSync(destPath, processed, 'utf-8');
