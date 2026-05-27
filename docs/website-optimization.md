@@ -70,9 +70,9 @@
 | 2   | git clone URL 错误　　 | 高　　 | ✅ 已修复 — 更新为 michaelwang123/arthas.git　　　　　　　　　　　　|
 | 3   | 版本号硬编码　　　　　 | 中　　 | ⬜ 延后 — 需要 GitHub API 集成　　　　　　　　　　　　　　　　　　　|
 | 4   | Trust Section 未国际化 | 中　　 | ✅ 已修复 — 添加 trust.diagram.* i18n keys　　　　　　　　　　　　　|
-| 5   | 生产 HTML 含学习注释　 | 中　　 | ⬜ 延后 — compressHTML 与 Starlight 不兼容，需自定义 postbuild 脚本 |
-| 6   | og:image SVG 兼容性　　| 低　　 | ✅ 已修复 — 生成 PNG 版本，build 时自动从 SVG 转换　　　　　　　　 |
-| 7   | Launch App URL　　　　 | 低　　 | ⬜ 待确认　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 |
+| 5   | 生产 HTML 含学习注释　 | 中　　 | ✅ 已修复 — postbuild 脚本移除 HTML 注释，节省 41.7KB　　　　　　　|
+| 6   | og:image SVG 兼容性　　| 低　　 | ✅ 已修复 — 生成 PNG 版本，build 时自动从 SVG 转换　　　　　　　　　|
+| 7   | Launch App URL　　　　 | 低　　 | ✅ 已确认 — arthas-blush.vercel.app 为正式生产 URL，无需修改　　　　|
 
 ---
 
@@ -101,3 +101,13 @@
 - `website/package.json` — build 脚本中添加 generate-og-image 步骤，添加 @resvg/resvg-js devDependency
 
 **验证：** `npm run build` 成功，dist/og-image.png 存在（68KB）。
+
+### 2026-05-27 — Issue 5 修复（移除生产 HTML 注释）
+
+**修改文件：**
+- `website/scripts/strip-html-comments.mjs` — 新增 postbuild 脚本，递归遍历 dist/ 移除 HTML 注释
+- `website/package.json` — build 脚本末尾添加 strip-html-comments 步骤
+
+**效果：** 25 个 HTML 文件共节省 41.7KB 传输体积。JS 内的 `//` 注释（2 处）保留不影响。
+
+**验证：** `npm run build` 成功，`学习要点` 在 HTML 注释中的出现次数从 22+ 降为 0。
