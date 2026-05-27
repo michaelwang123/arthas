@@ -803,9 +803,6 @@ function processQueue(): void {
     };
   });
 
-  // TODO: task 4.3 — 触发 sender.ts 的实际发送逻辑
-  // sender.sendFile(file, roomKey) 将在 task 4.3 中实现
-  // 发送完成后，sender.ts 会调用 completeActiveSend() 或 failActiveSend()
   console.log('[FileTransfer] Queue processing: starting send for', nextTransferId);
 
   // 获取房间密钥并触发发送

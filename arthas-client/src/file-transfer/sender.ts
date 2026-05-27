@@ -335,7 +335,6 @@ export function setupOfflineDetection(): void {
 
   window.addEventListener('offline', () => {
     isPaused = true;
-    // TODO: 实现 60s 离线超时判断（记录离线开始时间）
 
     // 更新活跃传输的 UI 状态（如果有的话）
     const { activeSendId } = useFileTransferStore.getState();
@@ -346,7 +345,6 @@ export function setupOfflineDetection(): void {
 
   window.addEventListener('online', () => {
     isPaused = false;
-    // TODO: 实现 60s 离线超时判断（重置在线时间）
 
     // 检查 WebSocket 是否仍然连接
     if (isConnected()) {
