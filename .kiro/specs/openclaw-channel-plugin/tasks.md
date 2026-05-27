@@ -6,8 +6,17 @@
 
 ## Tasks
 
+- [ ] 0. 前置调研：验证 OpenClaw SDK API (~1h)
+  - [ ] 0.1 安装 @openclaw/sdk 并检查实际导出的类型
+    - 确认 definePlugin() 函数签名
+    - 确认 ChannelAdapter 接口的方法列表和参数类型
+    - 确认消息格式（IncomingMessage / OutgoingMessage 的字段）
+    - 参考 openclaw-channel-dingtalk 的实现模式
+    - 如果 SDK API 与 design.md 中的假设不同，更新 design.md
+    - _Requirements: 1.1_
+
 - [ ] 1. 项目初始化与基础设施 (~2h)
-  - [ ] 1.1 创建 `arthas-openclaw-channel/` 目录结构
+  - [ ] 1.1 创建 `packages/openclaw-channel/` 目录结构
     - 初始化 package.json（name: @arthas/openclaw-channel, type: module）
     - 配置 tsconfig.json（strict, ESM output）
     - 添加 OpenClaw SDK 依赖（@openclaw/sdk）
@@ -122,3 +131,35 @@
 - 插件运行在 OpenClaw Gateway 进程内（Node.js 环境）
 - 分享码格式：`roomId:base64Key:ephemeralFlag:expiresAt`（4 段，冒号分隔）
 - 文件传输复用现有协议，无需服务器端改动
+- 代码位于 `packages/openclaw-channel/`（monorepo 内独立 npm 包）
+
+## Task Dependency Graph
+
+```
+Task 0 (SDK 调研)
+  │
+  ▼
+Task 1 (项目初始化)
+  │
+  ├──────────────┐
+  ▼              ▼
+Task 2         Task 3
+(加密引擎)     (协议层)
+  │              │
+  └──────┬───────┘
+         ▼
+       Task 4
+    (WebSocket 客户端)
+         │
+         ▼
+       Task 5
+    (Channel Adapter)
+         │
+         ▼
+       Task 6
+    (测试与文档)
+```
+
+**可并行的任务：** Task 2（加密引擎）和 Task 3（协议层）互不依赖，可以并行开发。
+
+**关键路径：** 0 → 1 → 2/3 → 4 → 5 → 6（约 16h 串行，并行可压缩到 ~13h）

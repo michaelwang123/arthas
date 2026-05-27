@@ -21,6 +21,16 @@ Arthas OpenClaw Channel Plugin 是一个 TypeScript/JavaScript 插件，将 Arth
 4. **msgpack 编解码** — 遵循 Arthas 的二进制协议（MessagePack 格式）
 5. **无服务器端改动** — Arthas 服务器不需要任何修改，AI Agent 就是一个普通的房间参与者
 6. **npm 发布** — 最终以 `@arthas/openclaw-channel` npm 包形式发布
+7. **Monorepo 内开发** — 代码位于 Arthas 主仓库 `packages/openclaw-channel/` 目录，独立 npm 发布
+
+## Non-Goals (v1 不做)
+
+- **多房间支持** — v1 只连接一个 Arthas 房间，不支持同时监听多个房间
+- **Agent 主动创建房间** — Agent 不会自动创建房间，需要用户先创建并提供分享码
+- **消息历史回放** — Arthas 不存储历史消息，Agent 不需要处理历史回放
+- **@mention 过滤** — v1 中 Agent 响应房间内所有非系统消息，不做 @mention 区分
+- **语音消息处理** — v1 不处理语音消息（仅文本和文件）
+- **房间过期自动续期** — 分享码过期后需要运维手动更新配置
 
 ## Glossary
 
@@ -68,9 +78,10 @@ Arthas OpenClaw Channel Plugin 是一个 TypeScript/JavaScript 插件，将 Arth
 
 1. THE plugin SHALL be configurable via OpenClaw's standard plugin configuration (package.json `openclaw` field or environment variables)
 2. THE plugin SHALL require at minimum: `ARTHAS_SERVER_URL` and `ARTHAS_SHARE_CODE`
-3. THE plugin SHALL support optional configuration: `ARTHAS_DISPLAY_NAME` (agent's display name in the room), `ARTHAS_SIGNING_ENABLED` (Ed25519 signing)
+3. THE plugin SHALL support optional configuration: `ARTHAS_DISPLAY_NAME` (agent's display name in the room), `ARTHAS_SIGNING_ENABLED` (Ed25519 signing), `ARTHAS_ROOM_PASSWORD` (for password-protected rooms)
 4. THE plugin SHALL validate configuration on startup and provide clear error messages for missing/invalid values
 5. THE plugin SHALL be installable via `npm install @arthas/openclaw-channel`
+6. IF `ARTHAS_ROOM_PASSWORD` is configured, THEN THE plugin SHALL include the SHA-256 password hash in the JOIN request to authenticate with password-protected rooms
 
 ### Requirement 4: 消息生命周期
 
@@ -78,13 +89,15 @@ Arthas OpenClaw Channel Plugin 是一个 TypeScript/JavaScript 插件，将 Arth
 
 #### Acceptance Criteria
 
-1. WHEN a user sends a message in the Arthas room, THE plugin SHALL forward it to the OpenClaw Gateway within 100ms of decryption
-2. WHEN the AI agent produces a response, THE plugin SHALL encrypt and send it to the Arthas room within 100ms
+1. WHEN a user sends a message in the Arthas room, THE plugin SHALL forward it to the OpenClaw Gateway without adding perceptible latency (target < 50ms for decryption + forwarding)
+2. WHEN the AI agent produces a response, THE plugin SHALL encrypt and send it to the Arthas room without adding perceptible latency (target < 50ms for encryption + sending)
 3. THE plugin SHALL support multi-line agent responses (sent as a single message)
 4. THE plugin SHALL ignore system messages (join/leave notifications) and not forward them to the agent
 5. THE plugin SHALL ignore its own messages (prevent echo loops)
 6. THE plugin SHALL support typing indicators (send encrypted typing status while agent is processing)
 7. IF the agent response exceeds 4000 characters, THEN THE plugin SHALL split it into multiple messages
+8. IN multi-user rooms, THE plugin SHALL respond to all non-system messages from any participant (v1 does not implement @mention filtering)
+9. WHEN the plugin is the only participant remaining in the room, THE plugin SHALL remain connected and wait for new users to join
 
 ### Requirement 5: 文件传输支持
 

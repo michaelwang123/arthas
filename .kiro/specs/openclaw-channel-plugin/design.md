@@ -41,14 +41,14 @@
 ## Project Structure
 
 ```
-arthas-openclaw-channel/
+packages/openclaw-channel/
 ├── package.json              # npm 包配置 + openclaw plugin metadata
 ├── tsconfig.json             # TypeScript 配置
 ├── src/
 │   ├── index.ts              # Plugin 入口，注册 channel adapter
 │   ├── adapter.ts            # OpenClaw Channel Adapter 实现
 │   ├── client.ts             # Arthas WebSocket 客户端
-│   ├── crypto.ts             # AES-256-GCM 加密/解密（复用 arthas-cli 逻辑）
+│   ├── crypto.ts             # AES-256-GCM 加密/解密（复用 arthas-client 逻辑）
 │   ├── protocol.ts           # msgpack 编解码 + 消息类型定义
 │   ├── config.ts             # 配置验证与加载
 │   └── types.ts              # TypeScript 类型定义
@@ -61,14 +61,17 @@ arthas-openclaw-channel/
 
 ## Design Decisions
 
-### D1: 独立 npm 包（而非 monorepo 内模块）
+### D1: Monorepo 内独立 npm 包
 
 **选择理由：**
 - OpenClaw 插件通过 `npm install` 安装，需要独立发布
-- 与 Arthas 主仓库解耦，独立版本管理
-- 用户无需 clone 整个 Arthas 仓库即可使用插件
+- 放在 Arthas 主仓库 `packages/openclaw-channel/` 目录（monorepo 模式）
+- 可以直接引用 arthas-client 的加密代码（避免重写），通过 TypeScript project references 或构建时 bundle
+- 独立 npm 发布（类似 `@astrojs/sitemap` 在 astro monorepo 中的模式）
 
-**权衡：** 加密逻辑需要从 arthas-cli 的 Go 代码移植为 TypeScript（或从 arthas-client 的 Web Crypto 代码提取）。选择从 Web 客户端提取，因为同为 TypeScript 生态。
+**权衡：** monorepo 内开发意味着 CI 需要额外配置（只在 `packages/openclaw-channel/` 变更时触发发布）。但好处是加密逻辑可以直接复用 `arthas-client/src/crypto/` 而非重写。
+
+**目录位置：** `packages/openclaw-channel/`（仓库根目录下新建 `packages/` 目录）
 
 ### D2: 复用 Web Crypto API 加密实现
 
@@ -171,6 +174,7 @@ ARTHAS_SERVER_URL=wss://your-arthas-server.com/ws
 ARTHAS_SHARE_CODE=abc123:key456:0:0
 ARTHAS_DISPLAY_NAME=AI Assistant
 ARTHAS_SIGNING_ENABLED=false
+ARTHAS_ROOM_PASSWORD=optional-room-password
 ```
 
 ### D6: 重连策略
@@ -197,12 +201,12 @@ Arthas 的文件传输使用分片协议（META → CHUNK × N → COMPLETE）�
 
 ## Performance Budget
 
-| 指标 | 目标 |
-|------|------|
-| 消息转发延迟 | < 100ms（解密 + 转发） |
-| 重连时间 | < 5s（首次重连） |
-| 内存占用 | < 50MB（含 WebSocket buffer） |
-| npm 包大小 | < 500KB（不含 devDependencies） |
+| 指标 | 目标 | 说明 |
+|------|------|------|
+| 消息转发延迟 | < 50ms | 解密 + 转发，不应增加用户可感知延迟（LLM 响应本身 1-30s） |
+| 重连时间 | < 5s | 首次重连（指数退避后续更长） |
+| 内存占用 | < 50MB | 含 WebSocket buffer + 文件传输缓冲 |
+| npm 包大小 | < 200KB | 不含 devDependencies，bundled 后 |
 
 ## Security Considerations
 
