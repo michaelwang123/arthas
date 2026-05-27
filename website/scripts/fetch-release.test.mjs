@@ -1,20 +1,20 @@
 /**
- * fetch-release.test.mjs — fetch-release.mjs 的单元测试
+ * fetch-release.test.mjs �?fetch-release.mjs 的单元测�?
  *
  * 📚 学习要点: Node.js 内置测试框架
- * - Node.js 18+ 提供 `node:test` 模块，无需安装第三方测试框架
+ * - Node.js 18+ 提供 `node:test` 模块，无需安装第三方测试框�?
  * - `node:assert` 提供断言功能
- * - `mock` 模块支持函数/方法 mock（类似 Jest 的 jest.fn()）
+ * - `mock` 模块支持函数/方法 mock（类�?Jest �?jest.fn()�?
  * - 运行方式：node --test scripts/fetch-release.test.mjs
  *
- * 测试覆盖：
- * - 成功 API 响应的解析（transformReleaseData）
- * - API 不可达时的 fallback 行为（getFallbackData + main 集成）
- * - JSON 输出格式验证（schema 结构）
+ * 测试覆盖�?
+ * - 成功 API 响应的解析（transformReleaseData�?
+ * - API 不可达时�?fallback 行为（getFallbackData + main 集成�?
+ * - JSON 输出格式验证（schema 结构�?
  *
- * 与其他模块的关系：
- * - 直接导入 fetch-release.mjs 的导出函数进行单元测试
- * - 验证 Requirements 7.2（下载链接解析）和 7.6（fallback 机制）
+ * 与其他模块的关系�?
+ * - 直接导入 fetch-release.mjs 的导出函数进行单元测�?
+ * - 验证 Requirements 7.2（下载链接解析）�?7.6（fallback 机制�?
  */
 
 import { describe, it, beforeEach, afterEach, mock } from 'node:test';
@@ -36,8 +36,8 @@ import {
 // ─── 测试数据 ─────────────────────────────────────────────────────────────────
 
 /**
- * 模拟 GitHub API 返回的完整 Release 对象（精简版）。
- * 实际 API 返回更多字段，这里只包含脚本使用的字段。
+ * 模拟 GitHub API 返回的完�?Release 对象（精简版）�?
+ * 实际 API 返回更多字段，这里只包含脚本使用的字段�?
  */
 const MOCK_GITHUB_RELEASE = {
   tag_name: 'v2.1.0',
@@ -45,17 +45,17 @@ const MOCK_GITHUB_RELEASE = {
   assets: [
     {
       name: 'arthas-server-linux-amd64',
-      browser_download_url: 'https://github.com/punkcanyang/arthas/releases/download/v2.1.0/arthas-server-linux-amd64',
+      browser_download_url: 'https://github.com/michaelwang123/arthas/releases/download/v2.1.0/arthas-server-linux-amd64',
       size: 15_000_000,
     },
     {
       name: 'arthas-cli-darwin-arm64',
-      browser_download_url: 'https://github.com/punkcanyang/arthas/releases/download/v2.1.0/arthas-cli-darwin-arm64',
+      browser_download_url: 'https://github.com/michaelwang123/arthas/releases/download/v2.1.0/arthas-cli-darwin-arm64',
       size: 12_500_000,
     },
     {
       name: 'arthas-server-windows-amd64.exe',
-      browser_download_url: 'https://github.com/punkcanyang/arthas/releases/download/v2.1.0/arthas-server-windows-amd64.exe',
+      browser_download_url: 'https://github.com/michaelwang123/arthas/releases/download/v2.1.0/arthas-server-windows-amd64.exe',
       size: 16_200_000,
     },
   ],
@@ -80,7 +80,7 @@ describe('transformReleaseData', () => {
     assert.equal(result.assets.length, 3);
     assert.deepEqual(result.assets[0], {
       name: 'arthas-server-linux-amd64',
-      url: 'https://github.com/punkcanyang/arthas/releases/download/v2.1.0/arthas-server-linux-amd64',
+      url: 'https://github.com/michaelwang123/arthas/releases/download/v2.1.0/arthas-server-linux-amd64',
       size: 15_000_000,
     });
   });
@@ -206,7 +206,7 @@ describe('JSON output format', () => {
   it('successful response should match expected schema', () => {
     const result = transformReleaseData(MOCK_GITHUB_RELEASE);
 
-    // 验证顶层字段存在且类型正确
+    // 验证顶层字段存在且类型正�?
     assert.equal(typeof result.version, 'string');
     assert.ok(result.version.startsWith('v'), 'version should start with "v"');
     assert.ok(Array.isArray(result.assets), 'assets should be an array');
@@ -214,7 +214,7 @@ describe('JSON output format', () => {
     assert.equal(typeof result.fallback, 'boolean');
     assert.equal(result.fallback, false);
 
-    // 验证每个 asset 的结构
+    // 验证每个 asset 的结�?
     for (const asset of result.assets) {
       assert.equal(typeof asset.name, 'string');
       assert.equal(typeof asset.url, 'string');
@@ -227,7 +227,7 @@ describe('JSON output format', () => {
   it('fallback response should match expected schema', () => {
     const result = getFallbackData();
 
-    // 验证顶层字段存在且类型正确
+    // 验证顶层字段存在且类型正�?
     assert.equal(typeof result.version, 'string');
     assert.ok(result.version.startsWith('v'), 'version should start with "v"');
     assert.ok(Array.isArray(result.assets), 'assets should be an array');
@@ -241,7 +241,7 @@ describe('JSON output format', () => {
     const data = transformReleaseData(MOCK_GITHUB_RELEASE);
     const jsonString = JSON.stringify(data, null, 2);
 
-    // 验证 JSON 可以被正确解析回来
+    // 验证 JSON 可以被正确解析回�?
     const parsed = JSON.parse(jsonString);
     assert.deepEqual(parsed, data);
   });

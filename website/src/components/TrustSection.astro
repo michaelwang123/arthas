@@ -1,20 +1,20 @@
 ---
 /**
- * TrustSection — 安全信任展示组件
+ * TrustSection �?安全信任展示组件
  *
- * 本组件展示 Arthas 的 4 个核心信任指标，帮助访客建立对产品安全性的信心。
- * 在加密通信产品中，信任是用户决策的关键因素 — 本区域通过具体证据
- * （开源代码、零知识架构、法律保障、技术实现）消除用户疑虑。
+ * 本组件展�?Arthas �?4 个核心信任指标，帮助访客建立对产品安全性的信心�?
+ * 在加密通信产品中，信任是用户决策的关键因素 �?本区域通过具体证据
+ * （开源代码、零知识架构、法律保障、技术实现）消除用户疑虑�?
  *
- * 📚 学习要点: 信任建设的 4 层模型
- * 1. 开源透明 — "代码公开，你可以自己验证"（技术信任）
- * 2. 零知识架构 — "服务器看不到你的数据"（架构信任）
- * 3. AGPL-3.0 — "法律保证衍生作品也必须开源"（法律信任）
- * 4. 客户端加密 — "密钥永远不离开你的设备"（实现信任）
+ * 📚 学习要点: 信任建设�?4 层模�?
+ * 1. 开源透明 �?"代码公开，你可以自己验证"（技术信任）
+ * 2. 零知识架�?�?"服务器看不到你的数据"（架构信任）
+ * 3. AGPL-3.0 �?"法律保证衍生作品也必须开�?（法律信任）
+ * 4. 客户端加�?�?"密钥永远不离开你的设备"（实现信任）
  *
- * 与其他模块的关系：
- * - 被 src/pages/index.astro 和 src/pages/zh/index.astro 引用
- * - 使用 src/i18n/utils.ts 的 t() 函数获取多语言文案
+ * 与其他模块的关系�?
+ * - �?src/pages/index.astro �?src/pages/zh/index.astro 引用
+ * - 使用 src/i18n/utils.ts �?t() 函数获取多语言文案
  * - 引用 src/styles/global.css 中定义的 CSS 变量
  */
 
@@ -23,7 +23,7 @@ import type { Locale } from '../i18n/utils';
 
 /**
  * 组件 Props 接口
- * @property locale - 可选的语言标识符，若未提供则从 URL 自动检测
+ * @property locale - 可选的语言标识符，若未提供则从 URL 自动检�?
  */
 interface Props {
   locale?: Locale;
@@ -33,17 +33,17 @@ const { locale: propLocale } = Astro.props;
 const locale = propLocale ?? getLocaleFromUrl(Astro.url);
 
 /**
- * 📚 学习要点: 数据驱动的信任指标
- * 将信任指标抽取为数组，保持模板简洁且易于维护。
- * 每个指标包含：图标（emoji）、标题 key、描述 key。
- * 未来可扩展为包含链接（如 GitHub 仓库、许可证页面）。
+ * 📚 学习要点: 数据驱动的信任指�?
+ * 将信任指标抽取为数组，保持模板简洁且易于维护�?
+ * 每个指标包含：图标（emoji）、标�?key、描�?key�?
+ * 未来可扩展为包含链接（如 GitHub 仓库、许可证页面）�?
  */
 const trustItems = [
   {
     icon: '🌐',
     titleKey: 'trust.opensource.title',
     descKey: 'trust.opensource.description',
-    link: 'https://github.com/punkcanyang/arthas',
+    link: 'https://github.com/michaelwang123/arthas',
   },
   {
     icon: '🔐',
@@ -58,7 +58,7 @@ const trustItems = [
     link: 'https://www.gnu.org/licenses/agpl-3.0.html',
   },
   {
-    icon: '🛡️',
+    icon: '🛡�?,
     titleKey: 'trust.servernothing.title',
     descKey: 'trust.servernothing.description',
     link: null,
@@ -84,7 +84,7 @@ const trustItems = [
             rel="noopener"
             class="trust-link"
           >
-            →
+            �?
           </a>
         )}
       </article>
@@ -92,18 +92,18 @@ const trustItems = [
   </div>
 
   {/* 📚 学习要点: 简化架构图
-      使用 ASCII/文字表示加密流程，比 SVG 更易维护且无外部依赖。
-      Client → 🔒 Encrypt → Server (blind relay) → 🔓 Decrypt → Client */}
+      使用 ASCII/文字表示加密流程，比 SVG 更易维护且无外部依赖�?
+      Client �?🔒 Encrypt �?Server (blind relay) �?🔓 Decrypt �?Client */}
   <div class="architecture-diagram" aria-label="Zero-knowledge architecture flow">
     <div class="diagram-flow">
       <span class="diagram-node">Client</span>
-      <span class="diagram-arrow" aria-hidden="true">→</span>
+      <span class="diagram-arrow" aria-hidden="true">�?/span>
       <span class="diagram-node diagram-encrypt">🔒 Encrypt</span>
-      <span class="diagram-arrow" aria-hidden="true">→</span>
+      <span class="diagram-arrow" aria-hidden="true">�?/span>
       <span class="diagram-node diagram-server">Server (blind relay)</span>
-      <span class="diagram-arrow" aria-hidden="true">→</span>
+      <span class="diagram-arrow" aria-hidden="true">�?/span>
       <span class="diagram-node diagram-decrypt">🔓 Decrypt</span>
-      <span class="diagram-arrow" aria-hidden="true">→</span>
+      <span class="diagram-arrow" aria-hidden="true">�?/span>
       <span class="diagram-node">Client</span>
     </div>
   </div>
@@ -128,7 +128,7 @@ const trustItems = [
     margin-bottom: 3rem;
   }
 
-  /* 信任卡片网格 — 2x2 布局 */
+  /* 信任卡片网格 �?2x2 布局 */
   .trust-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -195,7 +195,7 @@ const trustItems = [
   }
 
   /* --------------------------------------------------------------------------
-     架构图 — 水平流程展示
+     架构�?�?水平流程展示
      -------------------------------------------------------------------------- */
 
   .architecture-diagram {
@@ -245,7 +245,7 @@ const trustItems = [
   }
 
   /* --------------------------------------------------------------------------
-     响应式 — 移动端
+     响应�?�?移动�?
      -------------------------------------------------------------------------- */
 
   @media (max-width: 767px) {
@@ -258,7 +258,7 @@ const trustItems = [
       margin-bottom: 2rem;
     }
 
-    /* 移动端单列 */
+    /* 移动端单�?*/
     .trust-grid {
       grid-template-columns: 1fr;
     }
@@ -267,8 +267,8 @@ const trustItems = [
       padding: 1.5rem 1.25rem;
     }
 
-    /* 📚 学习要点: 移动端最小字体 16px (Req 4.3)
-       信任描述文本在移动端提升至 1rem (16px)，确保可读性。 */
+    /* 📚 学习要点: 移动端最小字�?16px (Req 4.3)
+       信任描述文本在移动端提升�?1rem (16px)，确保可读性�?*/
     .trust-description {
       font-size: 1rem;
     }
