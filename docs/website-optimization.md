@@ -64,15 +64,15 @@
 
 ## 修复状态追踪
 
-| # | 问题 | 优先级 | 状态 |
-|---|------|--------|------|
-| 1 | 语言切换行多余 | 高 | ✅ 已修复 — sync-docs.mjs 添加 stripLanguageSwitcher 函数 |
-| 2 | git clone URL 错误 | 高 | ✅ 已修复 — 更新为 michaelwang123/arthas.git |
-| 3 | 版本号硬编码 | 中 | ⬜ 延后 — 需要 GitHub API 集成 |
-| 4 | Trust Section 未国际化 | 中 | ✅ 已修复 — 添加 trust.diagram.* i18n keys |
-| 5 | 生产 HTML 含学习注释 | 中 | ⬜ 延后 — compressHTML 与 Starlight 不兼容，需自定义 postbuild 脚本 |
-| 6 | og:image SVG 兼容性 | 低 | ⬜ 待修复 |
-| 7 | Launch App URL | 低 | ⬜ 待确认 |
+| #   | 问题　　　　　　　　　 | 优先级 | 状态　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 |
+| -----| ------------------------| --------| --------------------------------------------------------------------|
+| 1   | 语言切换行多余　　　　 | 高　　 | ✅ 已修复 — sync-docs.mjs 添加 stripLanguageSwitcher 函数　　　　　 |
+| 2   | git clone URL 错误　　 | 高　　 | ✅ 已修复 — 更新为 michaelwang123/arthas.git　　　　　　　　　　　　|
+| 3   | 版本号硬编码　　　　　 | 中　　 | ⬜ 延后 — 需要 GitHub API 集成　　　　　　　　　　　　　　　　　　　|
+| 4   | Trust Section 未国际化 | 中　　 | ✅ 已修复 — 添加 trust.diagram.* i18n keys　　　　　　　　　　　　　|
+| 5   | 生产 HTML 含学习注释　 | 中　　 | ⬜ 延后 — compressHTML 与 Starlight 不兼容，需自定义 postbuild 脚本 |
+| 6   | og:image SVG 兼容性　　| 低　　 | ✅ 已修复 — 生成 PNG 版本，build 时自动从 SVG 转换　　　　　　　　 |
+| 7   | Launch App URL　　　　 | 低　　 | ⬜ 待确认　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 |
 
 ---
 
@@ -90,3 +90,14 @@
 - `website/src/components/TrustSection.astro` — 架构图使用 i18n 动态渲染
 
 **验证：** `npm run build` 成功，25 页面正常生成。
+
+### 2026-05-27 — Issue 6 修复（og:image PNG）
+
+**修改文件：**
+- `website/scripts/generate-og-image.mjs` — 新增脚本，使用 @resvg/resvg-js 将 SVG 转为 1200×630 PNG
+- `website/public/og-image.png` — 生成的 PNG 文件（67KB）
+- `website/src/layouts/Landing.astro` — og:image 和 twitter:image URL 从 .svg 改为 .png
+- `website/astro.config.mjs` — Starlight head 中的 og:image/twitter:image 从 .svg 改为 .png
+- `website/package.json` — build 脚本中添加 generate-og-image 步骤，添加 @resvg/resvg-js devDependency
+
+**验证：** `npm run build` 成功，dist/og-image.png 存在（68KB）。

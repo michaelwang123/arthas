@@ -112,11 +112,10 @@ const zhUrl = new URL(
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonicalURL} />
     <!-- 
-      OG image: SVG format works for Twitter/X, Slack, Discord, LinkedIn.
-      TODO: For full Facebook compatibility, export og-image.svg to PNG (1200x630)
-      and update this URL to og-image.png. Use: npx @resvg/resvg-js-cli og-image.svg og-image.png
+      OG image: PNG format for maximum compatibility across all platforms.
+      Generated from og-image.svg using @resvg/resvg-js (see scripts/generate-og-image.mjs).
     -->
-    <meta property="og:image" content="https://michaelwang123.github.io/arthas/og-image.svg" />
+    <meta property="og:image" content="https://michaelwang123.github.io/arthas/og-image.png" />
 
     <!--
       📚 学习要点: Twitter Card 标签
@@ -129,7 +128,7 @@ const zhUrl = new URL(
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={`${title} | Arthas`} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content="https://michaelwang123.github.io/arthas/og-image.svg" />
+    <meta name="twitter:image" content="https://michaelwang123.github.io/arthas/og-image.png" />
 
     <!--
       📚 学习要点: hreflang 标签

@@ -79,7 +79,7 @@ export default defineConfig({
           tag: 'meta',
           attrs: {
             property: 'og:image',
-            content: 'https://michaelwang123.github.io/arthas/og-image.svg',
+            content: 'https://michaelwang123.github.io/arthas/og-image.png',
           },
         },
         {
@@ -93,7 +93,7 @@ export default defineConfig({
           tag: 'meta',
           attrs: {
             name: 'twitter:image',
-            content: 'https://michaelwang123.github.io/arthas/og-image.svg',
+            content: 'https://michaelwang123.github.io/arthas/og-image.png',
           },
         },
       ],

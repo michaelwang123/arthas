@@ -7,7 +7,7 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev": "astro dev",
-    "build": "node scripts/fetch-release.mjs && node scripts/sync-docs.mjs && astro build",
+    "build": "node scripts/generate-og-image.mjs && node scripts/fetch-release.mjs && node scripts/sync-docs.mjs && astro build",
     "preview": "astro preview",
     "astro": "astro",
     "sync-docs": "node scripts/sync-docs.mjs",
@@ -16,11 +16,12 @@
     "test": "node --test scripts/fetch-release.test.mjs"
   },
   "dependencies": {
-    "astro": "^4.16.0",
+    "@astrojs/sitemap": "3.2.1",
     "@astrojs/starlight": "^0.28.0",
-    "@astrojs/sitemap": "3.2.1"
+    "astro": "^4.16.0"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "typescript": "^5.6.0"
   },
   "engines": {
