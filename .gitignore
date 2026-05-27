@@ -49,3 +49,9 @@ scripts/
 
 # Demo recording raw video (too large for git)
 docs/show/demo-full.mp4
+
+# Website (Astro)
+website/node_modules/
+website/dist/
+website/src/content/docs/
+website/src/data/release.json

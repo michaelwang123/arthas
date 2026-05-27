@@ -1,0 +1,531 @@
+---
+/**
+ * DownloadContent 共享组件 — 下载页面的完整内容（含逻辑、HTML、JS、CSS）
+ *
+ * 本组件封装了下载页面的所有展示逻辑，通过 locale prop 支持中英文切换。
+ * EN 和 ZH 下载页面只需导入此组件并传入对应 locale，消除 CSS 重复。
+ *
+ * 📚 学习要点: 组件提取消除多语言页面的代码重复
+ * 之前 EN/ZH 下载页面各自包含完全相同的 ~300 行 CSS。
+ * 提取为共享组件后：
+ * - 样式只定义一次，Astro 的 scoped styles 自动应用到所有使用处
+ * - 结构变更只需修改一个文件
+ * - 页面文件简化为 Layout 包裹 + SEO props，职责更清晰
+ *
+ * @see src/pages/download.astro — 英文下载页（使用本组件）
+ * @see src/pages/zh/download.astro — 中文下载页（使用本组件）
+ */
+
+import { t } from '../i18n/utils';
+import type { Locale } from '../i18n/utils';
+import release from '../data/release.json';
+
+interface Props {
+  /** 当前语言标识符 */
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+
+const { version, fallback } = release;
+
+/**
+ * 平台下载数据 — 按操作系统和架构分组
+ */
+const platforms = [
+  { os: 'linux', arch: 'amd64', label: t('download.linux.amd64', locale) },
+  { os: 'linux', arch: 'arm64', label: t('download.linux.arm64', locale) },
+  { os: 'darwin', arch: 'amd64', label: t('download.macos.amd64', locale) },
+  { os: 'darwin', arch: 'arm64', label: t('download.macos.arm64', locale) },
+  { os: 'windows', arch: 'amd64', label: t('download.windows.amd64', locale) },
+];
+
+/**
+ * 生成下载 URL — 遵循 GitHub Releases 命名约定
+ */
+function getDownloadUrl(binary: string, os: string, arch: string): string {
+  const ext = os === 'windows' ? '.exe' : '';
+  return `https://github.com/punkcanyang/arthas/releases/download/${version}/${binary}-${os}-${arch}${ext}`;
+}
+
+const githubReleasesUrl = 'https://github.com/punkcanyang/arthas/releases';
+
+const dockerComposeYml = `version: "3.8"
+services:
+  arthas:
+    image: ghcr.io/punkcanyang/arthas-server:latest
+    ports:
+      - "8080:8080"
+    restart: unless-stopped`;
+
+// aria-label 根据语言切换
+const downloadAriaPrefix = locale === 'zh' ? '下载' : 'Download';
+---
+
+<section class="download-page" aria-labelledby="download-heading">
+  <div class="download-container">
+
+    {/* ===== 版本号展示 ===== */}
+    <header class="download-header">
+      <h1 id="download-heading">{t('download.title', locale)}</h1>
+      <p class="version-badge" aria-label={`${t('download.version', locale)}: ${version}`}>
+        <span class="version-label">{t('download.version', locale)}</span>
+        <span class="version-number">{version}</span>
+      </p>
+      <p class="download-description">{t('download.description', locale)}</p>
+    </header>
+
+    {/* ===== Fallback 提示（当预编译二进制不可用时） ===== */}
+    {fallback && (
+      <div class="fallback-notice" role="alert">
+        <p>{t('download.fallback.notice', locale)}</p>
+        <a href={githubReleasesUrl} target="_blank" rel="noopener noreferrer">
+          {t('download.fallback.link', locale)}
+        </a>
+      </div>
+    )}
+
+    {/* ===== 平台下载卡片 ===== */}
+    <section class="platforms-section" aria-labelledby="platforms-heading">
+      <h2 id="platforms-heading">{t('download.platforms', locale)}</h2>
+      <p class="section-description">{t('download.platforms.description', locale)}</p>
+
+      <div class="platform-grid">
+        {platforms.map((platform) => (
+          <article class="platform-card">
+            <h3 class="platform-name">{platform.label}</h3>
+            <div class="download-buttons">
+              <a
+                href={getDownloadUrl('arthas-server', platform.os, platform.arch)}
+                class="download-btn download-btn--server"
+                download
+                aria-label={`${downloadAriaPrefix} arthas-server (${platform.label})`}
+              >
+                {t('download.server', locale)}
+              </a>
+              <a
+                href={getDownloadUrl('arthas-cli', platform.os, platform.arch)}
+                class="download-btn download-btn--cli"
+                download
+                aria-label={`${downloadAriaPrefix} arthas-cli (${platform.label})`}
+              >
+                {t('download.cli', locale)}
+              </a>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    {/* ===== Docker 自托管 ===== */}
+    <section class="docker-section" aria-labelledby="docker-heading">
+      <h2 id="docker-heading">{t('download.docker.title', locale)}</h2>
+      <p class="section-description">{t('download.docker.description', locale)}</p>
+
+      <div class="code-block-wrapper">
+        <div class="code-block-header">
+          <span class="code-block-filename">docker-compose.yml</span>
+          <button
+            class="copy-btn"
+            data-copy-target="docker-compose-code"
+            aria-label={t('download.docker.copy', locale)}
+          >
+            {t('download.docker.copy', locale)}
+          </button>
+        </div>
+        <pre id="docker-compose-code"><code>{dockerComposeYml}</code></pre>
+      </div>
+    </section>
+
+    {/* ===== 快速开始 ===== */}
+    <section class="quickstart-section" aria-labelledby="quickstart-heading">
+      <h2 id="quickstart-heading">{t('download.quickstart.title', locale)}</h2>
+
+      <div class="quickstart-grid">
+        <article class="quickstart-card">
+          <h3>{t('download.quickstart.tier1.title', locale)}</h3>
+          <ol class="quickstart-steps">
+            <li>{t('download.quickstart.tier1.step1', locale)}</li>
+            <li><code>{t('download.quickstart.tier1.step2', locale)}</code></li>
+            <li><code>{t('download.quickstart.tier1.step3', locale)}</code></li>
+          </ol>
+        </article>
+
+        <article class="quickstart-card">
+          <h3>{t('download.quickstart.tier2.title', locale)}</h3>
+          <ol class="quickstart-steps">
+            <li>{t('download.quickstart.tier2.step1', locale)}</li>
+            <li><code>{t('download.quickstart.tier2.step2', locale)}</code></li>
+            <li>{t('download.quickstart.tier2.step3', locale)}</li>
+          </ol>
+        </article>
+      </div>
+    </section>
+
+    {/* ===== GitHub Releases 兜底链接 ===== */}
+    <section class="github-section" aria-labelledby="github-heading">
+      <h2 id="github-heading">{t('download.github.releases', locale)}</h2>
+      <p class="section-description">{t('download.github.releases.description', locale)}</p>
+      <a
+        href={githubReleasesUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="github-link"
+      >
+        {t('download.github.releases', locale)} ↗
+      </a>
+    </section>
+
+  </div>
+</section>
+
+<script>
+  document.querySelectorAll('.copy-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const targetId = btn.getAttribute('data-copy-target');
+      if (!targetId) return;
+      const codeEl = document.getElementById(targetId);
+      if (!codeEl) return;
+
+      try {
+        await navigator.clipboard.writeText(codeEl.textContent || '');
+        const originalText = btn.textContent;
+        btn.textContent = btn.getAttribute('data-copied-text') || '✓';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.classList.remove('copied');
+        }, 2000);
+      } catch {
+        console.warn('Clipboard API not available');
+      }
+    });
+  });
+</script>
+
+<style>
+  .download-page {
+    padding: 3rem 1.5rem;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .download-container {
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+  }
+
+  .download-header {
+    text-align: center;
+  }
+
+  .download-header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: 1rem;
+  }
+
+  .version-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255, 215, 0, 0.1);
+    border: 1px solid var(--color-accent);
+    border-radius: 2rem;
+    padding: 0.4rem 1.2rem;
+    margin-bottom: 1rem;
+  }
+
+  .version-label {
+    color: var(--color-text-secondary);
+    font-size: 0.875rem;
+  }
+
+  .version-number {
+    color: var(--color-accent);
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+
+  .download-description {
+    color: var(--color-text-secondary);
+    font-size: 1.1rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .fallback-notice {
+    background: rgba(192, 104, 32, 0.1);
+    border: 1px solid var(--color-accent-secondary);
+    border-radius: 0.75rem;
+    padding: 1.25rem 1.5rem;
+    text-align: center;
+  }
+
+  .fallback-notice p {
+    color: var(--color-text-primary);
+    margin-bottom: 0.75rem;
+  }
+
+  .fallback-notice a {
+    color: var(--color-accent);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  h2 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: 0.5rem;
+  }
+
+  .section-description {
+    color: var(--color-text-secondary);
+    margin-bottom: 1.5rem;
+  }
+
+  .platform-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .platform-card {
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-hairline);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .platform-card:hover {
+    border-color: rgba(255, 215, 0, 0.3);
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.05);
+  }
+
+  .platform-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .download-buttons {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .download-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background-color 150ms ease-out, transform 150ms ease-out;
+  }
+
+  .download-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .download-btn--server {
+    background: var(--color-accent);
+    color: #0d0d1a;
+  }
+
+  .download-btn--server:hover {
+    background: #ffe44d;
+    color: #0d0d1a;
+  }
+
+  .download-btn--cli {
+    background: rgba(255, 215, 0, 0.15);
+    color: var(--color-accent);
+    border: 1px solid var(--color-accent);
+  }
+
+  .download-btn--cli:hover {
+    background: rgba(255, 215, 0, 0.25);
+    color: var(--color-accent);
+  }
+
+  .code-block-wrapper {
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-hairline);
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+
+  .code-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--color-hairline);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .code-block-filename {
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+    font-family: monospace;
+  }
+
+  .copy-btn {
+    background: rgba(255, 215, 0, 0.1);
+    color: var(--color-accent);
+    border: 1px solid rgba(255, 215, 0, 0.3);
+    border-radius: 0.375rem;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .copy-btn:hover {
+    background: rgba(255, 215, 0, 0.2);
+  }
+
+  .copy-btn.copied {
+    background: rgba(34, 197, 94, 0.2);
+    border-color: rgba(34, 197, 94, 0.5);
+    color: #22c55e;
+  }
+
+  pre {
+    margin: 0;
+    padding: 1.25rem;
+    overflow-x: auto;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--color-text-primary);
+  }
+
+  code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+
+  .quickstart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .quickstart-card {
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-hairline);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+  }
+
+  .quickstart-card h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--color-accent);
+    margin-bottom: 1rem;
+  }
+
+  .quickstart-steps {
+    list-style: none;
+    counter-reset: step;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .quickstart-steps li {
+    counter-increment: step;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    color: var(--color-text-primary);
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .quickstart-steps li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    background: rgba(255, 215, 0, 0.15);
+    color: var(--color-accent);
+    border-radius: 50%;
+    font-size: 0.8rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .quickstart-steps li code {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.85rem;
+    color: var(--color-text-primary);
+  }
+
+  .github-section {
+    text-align: center;
+    padding: 2rem;
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-hairline);
+    border-radius: 0.75rem;
+  }
+
+  .github-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: rgba(255, 215, 0, 0.1);
+    border: 1px solid var(--color-accent);
+    border-radius: 0.5rem;
+    color: var(--color-accent);
+    font-weight: 600;
+    text-decoration: none;
+    margin-top: 0.5rem;
+  }
+
+  .github-link:hover {
+    background: rgba(255, 215, 0, 0.2);
+    color: var(--color-accent);
+  }
+
+  @media (max-width: 767px) {
+    .download-page {
+      padding: 2rem 1rem;
+    }
+
+    .download-header h1 {
+      font-size: 2rem;
+    }
+
+    .platform-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .quickstart-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .download-buttons {
+      flex-direction: column;
+    }
+
+    .download-btn {
+      justify-content: center;
+    }
+  }
+</style>

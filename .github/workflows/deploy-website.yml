@@ -1,0 +1,131 @@
+# ============================================================================
+# Arthas 项目官网 — GitHub Pages 自动部署 Workflow
+# ============================================================================
+# 📚 学习要点: 静态站点 CI/CD 流水线
+# 此工作流在 main 分支的 website/ 或 official_doc/ 目录有变更时自动触发，
+# 构建 Astro 静态站点并部署到 GitHub Pages。
+#
+# 与 release.yml 的关系：
+# - release.yml: 仅在推送版本标签时触发，构建 Docker 镜像
+# - deploy-website.yml: 仅在网站或文档源文件变更时触发，部署静态站点
+# 两者触发条件完全独立，互不干扰。
+#
+# 部署流程: checkout → pnpm setup → install → sync-docs → build → upload → deploy
+# ============================================================================
+
+name: Deploy Website to GitHub Pages
+
+# 📚 学习要点: 路径过滤触发
+# paths 过滤确保只有网站源码或文档源文件变更时才触发部署。
+# 这避免了 Go 代码、CLI 代码等无关变更浪费 CI 资源。
+# 两个路径的含义：
+# - website/**: 网站源码（组件、样式、配置等）
+# - official_doc/**: 文档源文件（sync-docs 会将其同步到网站内容目录）
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'official_doc/**'
+
+# 📚 学习要点: GitHub Pages 部署所需权限
+# contents:read — 允许 checkout 代码
+# pages:write — 允许上传构建产物到 Pages
+# id-token:write — 允许 OIDC token 认证（deploy-pages action 需要）
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 📚 学习要点: 并发控制
+# 确保同一时间只有一个部署在进行。cancel-in-progress: false 表示
+# 如果有新的 push 触发了新的部署，新部署会排队等待当前部署完成。
+# 这避免了部署中途被取消导致的不一致状态（Pages 部署是原子操作，
+# 但排队策略更保守，确保每次触发的部署都能完整执行）。
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # ==========================================================================
+  # Build Job: 构建静态站点并上传产物
+  # ==========================================================================
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 📚 学习要点: pnpm 安装策略
+      # 显式指定 pnpm 版本 9，确保 CI 环境与本地开发环境一致。
+      # pnpm/action-setup@v4 也支持从 package.json 的 packageManager 字段读取版本，
+      # 但显式指定更可靠，避免 packageManager 字段缺失时的意外行为。
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      # 📚 学习要点: Node.js 缓存策略
+      # cache: pnpm 启用依赖缓存，后续构建跳过已下载的包。
+      # cache-dependency-path 指向 website/ 下的 lockfile，
+      # 确保缓存 key 基于网站依赖（而非仓库其他部分）。
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: website/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 📚 学习要点: 文档同步步骤
+      # sync-docs.mjs 将 official_doc/ 中的 Markdown 文件复制到
+      # src/content/docs/（英文）和 src/content/docs/zh/（中文）。
+      # 必须在 build 之前执行，确保 Astro 内容集合包含最新文档。
+      - name: Sync documentation from official_doc/
+        run: node scripts/sync-docs.mjs
+
+      # 📚 学习要点: 构建失败即停止部署
+      # pnpm build 如果失败会返回非零退出码，GitHub Actions 默认行为是
+      # 终止后续步骤。这满足 Req 1.4: "build 失败时停止部署，不修改已发布站点"。
+      - name: Build Astro site
+        run: pnpm build
+
+      # 📚 学习要点: 构建后验证
+      # 在部署前验证构建产物的完整性和链接可达性。
+      # 任何验证失败都会阻止部署，确保不会发布损坏的站点。
+      - name: Validate build output
+        run: node scripts/validate-build.mjs
+
+      - name: Validate internal links
+        run: node scripts/validate-links.mjs
+
+      # 📚 学习要点: Pages 产物上传
+      # upload-pages-artifact 将 dist/ 目录打包为 GitHub Pages 部署产物。
+      # path 使用仓库根目录的相对路径（不受 working-directory 影响）。
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/dist
+
+  # ==========================================================================
+  # Deploy Job: 将构建产物部署到 GitHub Pages
+  # ==========================================================================
+  # 📚 学习要点: 部署与构建分离
+  # 将 deploy 作为独立 job 有两个好处：
+  # 1. 构建失败时不会触发部署（needs: build 依赖关系）
+  # 2. environment 配置提供部署 URL 和保护规则
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

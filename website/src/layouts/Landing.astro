@@ -1,0 +1,465 @@
+---
+/**
+ * Landing 布局 — 自定义营销页面的 HTML 骨架
+ *
+ * 本文件是 Arthas 官网所有自定义页面（首页、下载页、路线图页）的基础布局。
+ * 它独立于 Starlight 的文档布局，提供完整的 HTML 结构控制。
+ *
+ * 📚 学习要点: Astro Layout 模式
+ * Astro 的 Layout 组件是一种特殊的 .astro 文件，通过 <slot /> 接收子内容。
+ * 页面文件（如 index.astro）通过 `<Layout>...</Layout>` 包裹内容，
+ * Layout 负责 <html>/<head>/<body> 结构，页面只关心自己的内容区域。
+ * 这实现了关注点分离：SEO/meta/导航在 Layout 中统一管理，页面专注内容。
+ *
+ * 职责边界：
+ * - 本文件：HTML 骨架、meta 标签 slot、hreflang、canonical、语言检测脚本、语义结构
+ * - 页面文件：通过 props 传入 title/description，通过 <slot /> 填充 <main> 内容
+ * - 组件文件：Header/Nav/Footer 的具体实现（后续任务创建）
+ *
+ * 与其他模块的关系：
+ * - 引用 src/styles/global.css 获取暗色主题变量
+ * - 使用 import.meta.env.BASE_URL 处理子目录部署路径
+ * - 被 src/pages/index.astro、src/pages/zh/index.astro 等页面使用
+ */
+
+import '../styles/global.css';
+import { getLocaleFromUrl, t, baseWithSlash } from '../i18n/utils';
+import Header from '../components/Header.astro';
+
+// 📚 学习要点: Astro.props — 组件间数据传递
+// Astro 组件通过 Astro.props 接收父组件传入的属性。
+// 这里 title 和 description 由每个页面文件在使用 Layout 时传入，
+// 用于生成该页面特定的 <title> 和 <meta name="description">。
+interface Props {
+  /** 页面标题，显示在浏览器标签页和搜索结果中 (30-60 字符最佳) */
+  title: string;
+  /** 页面描述，用于 SEO meta description (50-160 字符最佳) */
+  description: string;
+  /** robots 指令，默认 "index, follow"。404 等页面可设为 "noindex, nofollow" */
+  robots?: string;
+}
+
+const { title, description, robots = 'index, follow' } = Astro.props;
+
+// 📚 学习要点: 动态 lang 属性
+// HTML 的 lang 属性告诉浏览器和屏幕阅读器页面的主要语言。
+// 中文页面应使用 lang="zh"，英文页面使用 lang="en"。
+// 从 URL 自动检测，确保每个语言版本的 HTML 标签正确。
+const locale = getLocaleFromUrl(Astro.url);
+const htmlLang = locale === 'zh' ? 'zh' : 'en';
+
+// 📚 学习要点: Canonical URL 计算
+// canonical URL 告诉搜索引擎"这个页面的权威地址是什么"。
+// 当同一内容可通过多个 URL 访问时（如带/不带尾部斜杠），
+// canonical 防止搜索引擎将它们视为重复内容而降低排名。
+// Astro.site 来自 astro.config.mjs 的 site 配置。
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+
+// 📚 学习要点: BASE_URL 与子目录部署
+// import.meta.env.BASE_URL 在 build 时被替换为 astro.config.mjs 中的 base 值。
+// 对于本项目，它的值是 '/arthas/'（注意尾部斜杠）。
+// 所有内部链接必须使用此变量前缀，绝不硬编码 '/arthas/'，
+// 这样如果将来部署路径变更，只需修改 astro.config.mjs 一处。
+const base = import.meta.env.BASE_URL;
+
+// 📚 学习要点: hreflang — 多语言 SEO
+// hreflang 标签告诉搜索引擎同一页面的不同语言版本 URL。
+// 搜索引擎会根据用户的语言偏好展示对应版本的搜索结果。
+// x-default 表示"没有匹配语言时的默认版本"（通常指向英文）。
+
+const enUrl = new URL(
+  Astro.url.pathname.replace('/zh/', '/').replace('/zh', '/'),
+  Astro.site
+);
+const zhUrl = new URL(
+  Astro.url.pathname.startsWith(`${baseWithSlash}zh`)
+    ? Astro.url.pathname
+    : Astro.url.pathname.replace(base, `${baseWithSlash}zh`),
+  Astro.site
+);
+---
+
+<!doctype html>
+<html lang={htmlLang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- 页面标题和描述 — 由各页面通过 props 传入 -->
+    <title>{title} | Arthas</title>
+    <meta name="description" content={description} />
+    <meta name="robots" content={robots} />
+
+    <!-- Favicon — SVG 格式，支持暗色模式自适应和无限缩放 -->
+    <link rel="icon" href="/arthas/favicon.svg" type="image/svg+xml" />
+
+    <!-- Canonical URL — 防止重复内容问题 -->
+    <link rel="canonical" href={canonicalURL} />
+
+    <!--
+      📚 学习要点: Open Graph 协议
+      Open Graph (OG) 是 Facebook 发明的元数据协议，现已成为社交分享的事实标准。
+      当用户在社交平台（Twitter、Slack、Discord、微信等）分享链接时，
+      平台会读取 OG 标签来生成富预览卡片（标题 + 描述 + 图片）。
+
+      og:image 使用 SVG 格式 — Twitter/Slack/Discord 均支持 SVG 预览图。
+      注意: Facebook 不支持 SVG 格式的 og:image。如需完整 Facebook 兼容性，
+      应手动导出 1200×630px 的 PNG 版本并更新此处引用。
+      对于开发者工具项目，Twitter/Slack/Discord 是主要分享渠道，SVG 足够。
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={`${title} | Arthas`} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalURL} />
+    <!-- 
+      OG image: SVG format works for Twitter/X, Slack, Discord, LinkedIn.
+      TODO: For full Facebook compatibility, export og-image.svg to PNG (1200x630)
+      and update this URL to og-image.png. Use: npx @resvg/resvg-js-cli og-image.svg og-image.png
+    -->
+    <meta property="og:image" content="https://michaelwang123.github.io/arthas/og-image.svg" />
+
+    <!--
+      📚 学习要点: Twitter Card 标签
+      Twitter 有自己的 meta 标签体系（twitter:*），但也会回退读取 OG 标签。
+      显式声明 twitter:card 类型可以控制卡片样式：
+      - summary: 小图 + 标题 + 描述（适合文章）
+      - summary_large_image: 大图横幅（适合产品/项目展示）
+      我们选择 summary_large_image 以最大化视觉冲击力。
+    -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={`${title} | Arthas`} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content="https://michaelwang123.github.io/arthas/og-image.svg" />
+
+    <!--
+      📚 学习要点: hreflang 标签
+      搜索引擎通过 hreflang 了解页面的语言版本关系：
+      - hreflang="en": 英文版本的绝对 URL
+      - hreflang="zh": 中文版本的绝对 URL
+      - hreflang="x-default": 无匹配语言时的默认版本（通常是英文）
+      三个标签必须同时出现在所有语言版本的页面上，形成双向引用。
+    -->
+    <link rel="alternate" hreflang="en" href={enUrl} />
+    <link rel="alternate" hreflang="zh" href={zhUrl} />
+    <link rel="alternate" hreflang="x-default" href={enUrl} />
+
+    <!--
+      📚 学习要点: 语言检测与重定向（内联脚本）
+      为什么放在 <head> 中作为内联脚本？
+      1. 在 DOM 渲染前执行 — 用户不会看到错误语言的内容闪烁（FOUC）
+      2. localStorage 优先 — 尊重用户之前的手动选择（通过语言切换器设置）
+      3. 使用 window.location.replace() 而非 assign() — 不在浏览器历史中留下记录
+      4. navigator.language 检测仅在首页触发 — 避免首次访问子页面时意外重定向
+
+      重定向策略（满足 Req 5.4 + 5.5）：
+      - 首页（/arthas/）：使用 localStorage 或 navigator.language 检测，重定向到中文版
+      - 其他页面（/arthas/download/、/arthas/roadmap/ 等）：
+        仅当 localStorage 中有明确的语言偏好时才重定向到对应语言版本。
+        这确保用户通过语言切换器设置的偏好在所有页面间保持一致。
+
+      降级策略：如果用户禁用 JavaScript，将始终看到当前 URL 对应的语言版本（可接受的降级）。
+    -->
+    <script is:inline>
+      (function() {
+        var path = window.location.pathname;
+        var base = '/arthas/';
+        // 判断当前页面是否为中文版（URL 中包含 /zh/）
+        var isZh = path.startsWith(base + 'zh');
+        var saved = localStorage.getItem('arthas-locale');
+
+        if (path === base || path === '/arthas') {
+          // 📚 学习要点: 首页语言检测
+          // 首页是用户最常直接访问的入口，因此同时使用：
+          // 1. localStorage（用户之前的明确选择）
+          // 2. navigator.language（浏览器语言偏好，作为首次访问的 fallback）
+          var lang = saved || (navigator.language.startsWith('zh') ? 'zh' : 'en');
+          if (lang === 'zh') {
+            window.location.replace(base + 'zh/');
+          }
+        } else if (saved) {
+          // 📚 学习要点: 仅在自定义页面执行语言重定向
+          // Only redirect on custom pages (download, roadmap), not on Starlight doc pages.
+          // Starlight has its own i18n routing for docs — 它会根据 URL 中的语言前缀
+          // 自动提供对应语言的文档内容，无需我们手动重定向。
+          // 如果对 doc 页面也重定向，会与 Starlight 的路由冲突导致 404。
+          var isCustomPage = path.indexOf('/download') !== -1 || path.indexOf('/roadmap') !== -1;
+          if (isCustomPage) {
+            if (saved === 'zh' && !isZh) {
+              var zhPath = path.replace(base, base + 'zh/');
+              window.location.replace(zhPath);
+            } else if (saved === 'en' && isZh) {
+              var enPath = path.replace(base + 'zh/', base);
+              window.location.replace(enPath);
+            }
+          }
+        }
+      })();
+    </script>
+
+    <!-- 额外的 head 内容 slot — 页面可注入自定义 meta 标签 -->
+    <slot name="head" />
+  </head>
+
+  <body>
+    <!--
+      📚 学习要点: 语义化 HTML 结构
+      使用语义化标签（header/nav/main/footer）而非通用 div 的好处：
+      1. 可访问性：屏幕阅读器通过 landmark roles 帮助用户快速导航
+      2. SEO：搜索引擎理解页面结构，正确识别主要内容区域
+      3. 可维护性：代码自文档化，开发者一眼看出各区域职责
+      4. 浏览器默认行为：某些浏览器为语义标签提供内置的导航快捷键
+    -->
+
+    <!--
+      📚 学习要点: 组件化导航栏
+      Header 已提取为独立组件（src/components/Header.astro），
+      遵循单一职责原则：Layout 负责页面骨架，Header 负责导航逻辑。
+      这使得导航栏可以在多个页面中复用，且修改时只需改一处。
+    -->
+    <Header />
+
+    <!-- 主内容区域 — 页面特定内容通过默认 slot 注入 -->
+    <main class="site-main">
+      <slot />
+    </main>
+
+    <!-- 页面底部 — 链接和版权信息 -->
+    <footer class="site-footer">
+      <!--
+        Footer 具体内容将由后续任务（2.6）实现为独立组件。
+        此处保留语义结构骨架。
+      -->
+      <slot name="footer" />
+    </footer>
+
+    <!--
+      📚 学习要点: "回到顶部" 按钮（Back to Top）
+      固定定位在视口右下角，默认隐藏。当用户滚动超过一个视口高度（100vh）后出现。
+      点击后平滑滚动到页面顶部。
+
+      设计决策：
+      - 使用 opacity + pointer-events 控制显隐（而非 display:none），
+        这样可以使用 CSS transition 实现淡入淡出动画。
+      - 44x44px 最小尺寸满足 WCAG 2.5.5 触摸目标要求。
+      - aria-label 提供无障碍文本描述。
+      - 使用 scroll 事件 + 节流（throttle）避免性能问题。
+    -->
+    <button
+      class="back-to-top"
+      type="button"
+      aria-label="Back to top"
+      data-back-to-top
+      hidden
+    >
+      <!--
+        📚 学习要点: 向上箭头 SVG 图标
+        使用 SVG 而非 Unicode 字符（↑），确保跨平台渲染一致。
+        aria-hidden="true" 让屏幕阅读器忽略装饰性图标，
+        按钮的 aria-label 已提供完整的语义描述。
+      -->
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="5 12 10 7 15 12" />
+      </svg>
+    </button>
+
+    <script>
+      /**
+       * "回到顶部" 按钮 — 客户端交互逻辑
+       *
+       * 📚 学习要点: 滚动事件节流（Throttle）
+       * scroll 事件在滚动时每帧触发（60fps = 每秒 60 次），
+       * 如果每次都执行 DOM 操作会导致性能问题（jank）。
+       * 使用 requestAnimationFrame 作为天然节流：
+       * - 每帧最多执行一次回调
+       * - 浏览器自动在合适的时机调用（通常 16.6ms 间隔）
+       * - 比 setTimeout 节流更精确，与渲染管线同步
+       */
+      function initBackToTop(): void {
+        const btn = document.querySelector('[data-back-to-top]') as HTMLButtonElement | null;
+        if (!btn) return;
+
+        // 防止重复绑定（View Transitions 场景）
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = 'true';
+
+        let ticking = false;
+
+        /**
+         * 📚 学习要点: 视口高度阈值判断
+         * window.innerHeight 返回当前视口高度（即 100vh 的像素值）。
+         * 当 scrollY 超过此值时，说明用户已滚动超过第一屏，
+         * 此时显示"回到顶部"按钮是合理的 UX 时机。
+         */
+        function checkScroll(): void {
+          const threshold = window.innerHeight;
+          const shouldShow = window.scrollY > threshold;
+
+          if (shouldShow) {
+            btn!.hidden = false;
+            // 📚 学习要点: 双 rAF 确保 hidden 移除后触发 CSS transition
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                btn!.setAttribute('data-visible', '');
+              });
+            });
+          } else {
+            btn!.removeAttribute('data-visible');
+            // 等待淡出动画完成后隐藏
+            setTimeout(() => {
+              if (!btn!.hasAttribute('data-visible')) {
+                btn!.hidden = true;
+              }
+            }, 200);
+          }
+        }
+
+        /**
+         * 📚 学习要点: rAF 节流模式
+         * ticking 标志位确保在一帧内只调度一次 checkScroll。
+         * 当 scroll 事件触发时：
+         * 1. 如果 ticking=false，调度 rAF 并设 ticking=true
+         * 2. rAF 回调执行 checkScroll 后重置 ticking=false
+         * 3. 下一次 scroll 事件才能再次调度
+         * 这保证了每帧最多执行一次 DOM 读写，避免 layout thrashing。
+         */
+        window.addEventListener('scroll', () => {
+          if (!ticking) {
+            requestAnimationFrame(() => {
+              checkScroll();
+              ticking = false;
+            });
+            ticking = true;
+          }
+        }, { passive: true });
+
+        /**
+         * 📚 学习要点: smooth scroll 行为
+         * window.scrollTo({ top: 0, behavior: 'smooth' }) 使用浏览器原生平滑滚动。
+         * 比手动实现 JS 动画更流畅（浏览器可使用 GPU 加速），
+         * 且自动适配用户的 prefers-reduced-motion 系统设置。
+         */
+        btn.addEventListener('click', () => {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        // 初始检查（页面可能已经滚动到中间位置，如刷新后）
+        checkScroll();
+      }
+
+      // 📚 学习要点: 统一初始化工具
+      // 使用 onReady 封装多场景事件绑定（首次加载 + View Transitions），
+      // 避免每个组件重复相同的 3 行样板代码。详见 src/scripts/onReady.ts。
+      import { onReady } from '../scripts/onReady';
+      onReady(initBackToTop);
+    </script>
+  </body>
+</html>
+
+<style>
+  /**
+   * Landing 布局基础样式
+   *
+   * 📚 学习要点: Astro scoped styles
+   * <style> 标签中的样式默认是 scoped 的（只作用于当前组件）。
+   * Astro 通过添加唯一的 data-astro-cid-xxx 属性实现样式隔离，
+   * 避免全局样式污染。如需全局样式，使用 <style is:global>。
+   *
+   * Header 相关样式已移至 src/components/Header.astro（组件化后自包含）。
+   * 本文件只保留 Layout 骨架样式：main 区域和 footer。
+   */
+
+  /* 主内容区域 — 为固定 header 留出顶部空间 */
+  .site-main {
+    min-height: 100vh;
+    padding-top: 4rem; /* header 高度补偿 */
+  }
+
+  /* 页脚 — 暗色背景，顶部分割线 */
+  .site-footer {
+    border-top: 1px solid var(--color-hairline);
+    background-color: var(--color-bg-surface);
+    padding: 2rem 1.5rem;
+  }
+
+  /* 响应式调整 — 移动端 */
+  @media (max-width: 767px) {
+    .site-main {
+      padding-top: 3.5rem;
+    }
+  }
+
+  /*
+   * ===== "回到顶部" 按钮样式 =====
+   *
+   * 📚 学习要点: 固定定位 + 视觉层级
+   * position: fixed 使按钮脱离文档流，始终固定在视口右下角。
+   * z-index: 50 低于 header（100）但高于普通内容，
+   * 确保按钮不会被 header 遮挡，也不会遮挡模态对话框。
+   *
+   * 📚 学习要点: 触摸目标尺寸
+   * 44x44px 是 WCAG 2.5.5 要求的最小触摸目标尺寸。
+   * 使用 min-width + min-height 确保即使内容（图标）较小，
+   * 可点击区域仍满足无障碍要求。
+   */
+  .back-to-top {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    z-index: 50;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0.625rem;
+    border: 1px solid var(--color-accent, #ffd700);
+    border-radius: 50%;
+    background-color: rgba(13, 13, 26, 0.9);
+    color: var(--color-accent, #ffd700);
+    cursor: pointer;
+    opacity: 0;
+    transform: translateY(0.5rem);
+    transition: opacity 200ms ease-out, transform 200ms ease-out, background-color 200ms ease-out;
+    backdrop-filter: blur(4px);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /*
+   * 📚 学习要点: data 属性驱动的显隐动画
+   * 使用 [data-visible] 属性选择器控制可见状态，
+   * 与 JS 中的 setAttribute/removeAttribute 配合。
+   * 这种模式将动画逻辑留在 CSS 中，JS 只负责状态切换。
+   */
+  .back-to-top[data-visible] {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .back-to-top:hover {
+    background-color: var(--color-accent, #ffd700);
+    color: var(--color-bg-primary, #0d0d1a);
+  }
+
+  /*
+   * 📚 学习要点: focus-visible 无障碍焦点样式
+   * :focus-visible 仅在键盘导航时显示焦点环（鼠标点击不显示），
+   * 兼顾视觉美观和键盘用户的无障碍需求。
+   * outline-offset 确保焦点环不与按钮边框重叠。
+   */
+  .back-to-top:focus-visible {
+    outline: 2px solid var(--color-accent, #ffd700);
+    outline-offset: 2px;
+  }
+
+  .back-to-top svg {
+    flex-shrink: 0;
+  }
+
+  /* 移动端调整 — 缩小边距避免遮挡内容 */
+  @media (max-width: 767px) {
+    .back-to-top {
+      bottom: 1.5rem;
+      right: 1rem;
+    }
+  }
+</style>

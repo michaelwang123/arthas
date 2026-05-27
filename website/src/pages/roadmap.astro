@@ -1,0 +1,28 @@
+---
+/**
+ * 路线图页面（英文版） — Arthas 项目开发进度可视化
+ *
+ * 📚 学习要点: 组件提取后的页面文件职责
+ * 页面文件只负责 Layout 包裹和 SEO props，
+ * 所有展示逻辑封装在 RoadmapContent 组件中。
+ *
+ * 路由映射：
+ * - 文件路径: src/pages/roadmap.astro
+ * - 生成 URL: /arthas/roadmap
+ *
+ * @see src/components/RoadmapContent.astro — 共享内容组件
+ * @see src/pages/zh/roadmap.astro — 对应的中文版本
+ */
+
+import Landing from '../layouts/Landing.astro';
+import Footer from '../components/Footer.astro';
+import RoadmapContent from '../components/RoadmapContent.astro';
+---
+
+<Landing
+  title="Development Roadmap"
+  description="Track Arthas development progress across all phases — from initial scaffold to future features."
+>
+  <RoadmapContent locale="en" />
+  <Footer slot="footer" />
+</Landing>

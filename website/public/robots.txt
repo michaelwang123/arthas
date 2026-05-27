@@ -1,0 +1,17 @@
+# Arthas Project Website — robots.txt
+#
+# 📚 学习要点: robots.txt 的作用
+# robots.txt 是搜索引擎爬虫访问网站时首先读取的文件。
+# 它告诉爬虫哪些页面可以抓取、哪些应该忽略。
+# Sitemap 指令帮助爬虫发现所有页面，加速索引过程。
+#
+# 部署位置: https://michaelwang123.github.io/arthas/robots.txt
+# 注意: GitHub Pages 子目录部署时，robots.txt 仍需放在 public/ 根目录，
+# Astro 构建时会将其输出到 dist/ 根目录，最终可通过 /arthas/robots.txt 访问。
+
+# 允许所有搜索引擎爬虫访问所有页面
+User-agent: *
+Allow: /
+
+# 站点地图位置 — 帮助搜索引擎发现所有可索引页面
+Sitemap: https://michaelwang123.github.io/arthas/sitemap-index.xml

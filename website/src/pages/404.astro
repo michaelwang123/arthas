@@ -1,0 +1,209 @@
+---
+/**
+ * 404 错误页面 — 用户访问不存在的路径时展示
+ *
+ * 本文件是 Arthas 官网的自定义 404 页面。当用户访问不存在的 URL 时，
+ * Astro 会自动渲染此页面（文件名 `404.astro` 是 Astro 的约定）。
+ *
+ * 📚 学习要点: Astro 404 页面机制
+ * Astro 约定 `src/pages/404.astro` 为自定义 404 页面。
+ * 在 SSG（静态站点生成）模式下，build 时会生成 `404.html`，
+ * 托管平台（GitHub Pages、Netlify 等）会自动将未匹配的请求指向此文件。
+ * 注意：404 页面无法使用 Astro.url 准确判断用户请求的原始路径，
+ * 因为静态 404.html 是预渲染的，不知道运行时的实际 URL。
+ *
+ * 设计决策：
+ * - 同时展示英文和中文文案（因为无法从静态 404 页面可靠检测用户语言）
+ * - 使用 Landing 布局保持与其他页面一致的视觉风格
+ * - 居中布局 + 品牌 Logo，让用户确认仍在 Arthas 站点内
+ * - 提供明确的"返回首页"链接，减少用户迷失感
+ * - 使用 noindex 防止搜索引擎索引错误页面
+ *
+ * 与其他模块的关系：
+ * - 使用 src/layouts/Landing.astro 作为页面布局
+ * - 引用 src/assets/logo.svg 展示品牌标识
+ * - 使用 import.meta.env.BASE_URL 确保链接在子目录部署下正确
+ * - 翻译文案来自 src/i18n/en.json 和 src/i18n/zh.json 的 notfound.* 键
+ *
+ * 路由映射：
+ * - 文件路径: src/pages/404.astro
+ * - 生成文件: /arthas/404.html
+ */
+
+import Landing from '../layouts/Landing.astro';
+import { t } from '../i18n/utils';
+import logoSvg from '../assets/logo.svg';
+
+// 📚 学习要点: 静态 404 页面的 i18n 策略
+// 由于 404.html 是在 build 时预渲染的单一文件，
+// 无法像普通页面那样通过 URL 路径（/zh/ vs /）判断语言。
+// 解决方案：同时展示两种语言的文案，确保所有用户都能理解。
+// 这是静态站点 404 页面的常见做法（Next.js、Gatsby 等也推荐此模式）。
+const enTitle = t('notfound.title', 'en');
+const enMessage = t('notfound.message', 'en');
+const enBack = t('notfound.back', 'en');
+
+const zhTitle = t('notfound.title', 'zh');
+const zhMessage = t('notfound.message', 'zh');
+const zhBack = t('notfound.back', 'zh');
+
+// 📚 学习要点: BASE_URL 用于内部链接
+// import.meta.env.BASE_URL 在 build 时被替换为 astro.config.mjs 中的 base 值（'/arthas'）。
+// 所有内部链接必须使用此变量，确保子目录部署时链接正确。
+const homeUrl = import.meta.env.BASE_URL;
+const homeUrlWithSlash = homeUrl.endsWith('/') ? homeUrl : `${homeUrl}/`;
+---
+
+<Landing
+  title="404 — Page Not Found"
+  description="The page you are looking for does not exist or has been moved."
+  robots="noindex, nofollow"
+>
+  <section class="not-found" aria-labelledby="not-found-heading">
+    {/* 品牌 Logo — 让用户确认仍在 Arthas 站点 */}
+    <img
+      src={logoSvg.src}
+      alt="Arthas Logo"
+      class="not-found__logo"
+      width="180"
+      height="40"
+    />
+
+    {/* 404 状态码 — 大字号视觉焦点 */}
+    <h1 id="not-found-heading" class="not-found__code">404</h1>
+
+    {/* 错误信息 — 英文 + 中文双语展示 */}
+    <div class="not-found__messages">
+      <p class="not-found__title">{enTitle}</p>
+      <p class="not-found__message">{enMessage}</p>
+
+      <p class="not-found__title not-found__title--zh">{zhTitle}</p>
+      <p class="not-found__message">{zhMessage}</p>
+    </div>
+
+    {/* 返回首页链接 — 双语，使用 import.meta.env.BASE_URL */}
+    <div class="not-found__actions">
+      <a href={homeUrlWithSlash} class="not-found__link">
+        {enBack}
+      </a>
+      <a href={`${homeUrlWithSlash}zh/`} class="not-found__link not-found__link--zh">
+        {zhBack}
+      </a>
+    </div>
+  </section>
+</Landing>
+
+<style>
+  /**
+   * 404 页面样式 — 居中布局 + 暗色主题
+   *
+   * 📚 学习要点: Flexbox 垂直水平居中
+   * 使用 min-height: 80vh + flex + align-items/justify-content: center
+   * 实现内容在视口中垂直水平居中。80vh 而非 100vh 是因为
+   * Landing 布局已有 header（约 4rem 高度），避免内容被推到视口下方。
+   */
+
+  .not-found {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 80vh;
+    padding: 2rem 1.5rem;
+    text-align: center;
+  }
+
+  /* Logo — 适当间距，不喧宾夺主 */
+  .not-found__logo {
+    margin-bottom: 2rem;
+    opacity: 0.9;
+  }
+
+  /* 404 数字 — 超大字号，品牌金色，视觉锚点 */
+  .not-found__code {
+    font-size: clamp(5rem, 15vw, 10rem);
+    font-weight: 800;
+    color: var(--color-accent);
+    line-height: 1;
+    margin: 0 0 1.5rem;
+    letter-spacing: -0.02em;
+    /* 微妙的文字阴影增加深度感 */
+    text-shadow: 0 0 40px rgba(255, 215, 0, 0.2);
+  }
+
+  /* 消息区域 */
+  .not-found__messages {
+    margin-bottom: 2.5rem;
+  }
+
+  /* 错误标题 — 主文本色 */
+  .not-found__title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0 0 0.25rem;
+  }
+
+  /* 中文标题 — 与英文之间增加间距 */
+  .not-found__title--zh {
+    margin-top: 1rem;
+  }
+
+  /* 错误描述 — 次要文本色 */
+  .not-found__message {
+    font-size: 1rem;
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+
+  /* 操作按钮区域 */
+  .not-found__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+  }
+
+  /* 返回首页链接 — 按钮样式 */
+  .not-found__link {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    border: 1px solid var(--color-accent);
+    border-radius: 0.5rem;
+    color: var(--color-accent);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.95rem;
+  }
+
+  .not-found__link:hover {
+    background-color: var(--color-hover-bg);
+    color: var(--color-accent);
+  }
+
+  /* 中文链接 — 次要样式，边框更淡 */
+  .not-found__link--zh {
+    border-color: var(--color-text-secondary);
+    color: var(--color-text-secondary);
+  }
+
+  .not-found__link--zh:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    background-color: var(--color-hover-bg);
+  }
+
+  /* 响应式 — 移动端调整 */
+  @media (max-width: 480px) {
+    .not-found__actions {
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .not-found__link {
+      width: 100%;
+      max-width: 200px;
+      text-align: center;
+    }
+  }
+</style>

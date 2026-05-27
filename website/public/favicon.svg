@@ -1,0 +1,36 @@
+<!--
+  Arthas Favicon — Lock Icon (SVG)
+  
+  📚 学习要点: SVG Favicon 设计
+  为什么使用 SVG 而非 PNG/ICO？
+  - SVG 是矢量格式，在任何分辨率下都清晰（16x16 到 512x512）
+  - 文件体积极小（<1KB），加载速度快
+  - 支持 CSS 媒体查询（如 prefers-color-scheme），可适配系统主题
+  - 现代浏览器（Chrome 80+, Firefox 41+, Safari 12+）均支持 SVG favicon
+  
+  设计原则：
+  - 简洁的锁形图标，在 16x16 像素下仍可辨识
+  - 使用 Arthas 品牌金色 (#ffd700) 作为主色调
+  - 深色背景确保在浏览器标签栏中醒目
+  - 圆角矩形外框增加现代感
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- 背景：圆角深色矩形，确保在浅色标签栏中也清晰可见 -->
+  <rect width="32" height="32" rx="6" ry="6" fill="#0d0d1a"/>
+  
+  <!-- 锁环（shackle）：锁的上半部分弧形 -->
+  <path
+    d="M11 14V11a5 5 0 0 1 10 0v3"
+    fill="none"
+    stroke="#ffd700"
+    stroke-width="2.5"
+    stroke-linecap="round"
+  />
+  
+  <!-- 锁体（body）：圆角矩形 -->
+  <rect x="9" y="14" width="14" height="11" rx="2" ry="2" fill="#ffd700"/>
+  
+  <!-- 锁孔（keyhole）：圆形 + 三角形组合 -->
+  <circle cx="16" cy="18.5" r="2" fill="#0d0d1a"/>
+  <path d="M15 20 L16 23 L17 20 Z" fill="#0d0d1a"/>
+</svg>

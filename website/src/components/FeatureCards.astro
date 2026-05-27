@@ -1,0 +1,272 @@
+---
+/**
+ * FeatureCards — 首页核心特性卡片网格组件
+ *
+ * 展示 Arthas 的 6 个核心特性，每张卡片包含图标、标题和简短描述。
+ * 使用 CSS Grid 实现响应式布局：桌面 3 列、平板 2 列、手机 1 列。
+ *
+ * 📚 学习要点: CSS Grid 响应式布局策略
+ * 使用 media query 断点切换 grid-template-columns，而非 auto-fit/minmax。
+ * 原因：auto-fit + minmax 虽然更简洁，但在卡片数量固定（6 张）时，
+ * 无法精确控制每个断点的列数（可能出现 4 列或 5 列的中间态）。
+ * 显式断点确保设计意图在所有视口宽度下都被精确执行。
+ *
+ * 与其他模块的关系：
+ * - 被 src/pages/index.astro 和 src/pages/zh/index.astro 引用
+ * - 使用 src/i18n/utils.ts 的 t() 函数获取多语言文案
+ * - 引用 src/styles/global.css 中定义的 CSS 变量（颜色、过渡）
+ *
+ * @requires src/i18n/utils.ts - t() 翻译函数, getLocaleFromUrl() 语言检测
+ * @requires src/styles/global.css - CSS 自定义属性（--color-bg-surface 等）
+ */
+
+import { t, getLocaleFromUrl } from '../i18n/utils';
+import type { Locale } from '../i18n/utils';
+
+/**
+ * 组件 Props 接口
+ * @property locale - 可选的语言标识符，若未提供则从 URL 自动检测
+ */
+interface Props {
+  locale?: Locale;
+}
+
+const { locale: propLocale } = Astro.props;
+const locale = propLocale ?? getLocaleFromUrl(Astro.url);
+
+/**
+ * 📚 学习要点: 数据驱动的组件设计
+ * 将卡片数据抽取为数组，而非在模板中硬编码 6 个重复的 HTML 块。
+ * 优势：
+ * - 新增/删除特性只需修改数组，无需改动模板结构
+ * - 保证所有卡片的 HTML 结构完全一致（避免复制粘贴错误）
+ * - 便于未来从外部数据源（JSON/CMS）加载
+ */
+const features = [
+  { icon: '🔐', titleKey: 'features.e2ee.title', descKey: 'features.e2ee.description' },
+  { icon: '⚡', titleKey: 'features.nosignup.title', descKey: 'features.nosignup.description' },
+  { icon: '💨', titleKey: 'features.selfdestruct.title', descKey: 'features.selfdestruct.description' },
+  { icon: '📁', titleKey: 'features.filesharing.title', descKey: 'features.filesharing.description' },
+  { icon: '🎙️', titleKey: 'features.voice.title', descKey: 'features.voice.description' },
+  { icon: '💻', titleKey: 'features.cli.title', descKey: 'features.cli.description' },
+];
+---
+
+<section class="feature-cards" aria-label="Core Features">
+  <div class="feature-grid">
+    {features.map((feature, index) => (
+      <article class="feature-card" data-animate-card data-card-index={index}>
+        {/* 图标作为装饰性元素，aria-hidden 避免屏幕阅读器朗读 emoji */}
+        <span class="feature-icon" aria-hidden="true">{feature.icon}</span>
+        <h3 class="feature-title">{t(feature.titleKey, locale)}</h3>
+        <p class="feature-description">{t(feature.descKey, locale)}</p>
+      </article>
+    ))}
+  </div>
+</section>
+
+{/*
+  📚 学习要点: 渐进增强的滚动动画
+  使用 IntersectionObserver 实现卡片入场动画，遵循渐进增强原则：
+  - CSS 默认让卡片可见（opacity: 1），确保 JS 失败时内容仍可访问
+  - JS 加载后才添加 .animate-ready 类，将卡片设为不可见初始态
+  - 当卡片进入视口时添加 .visible 类触发过渡动画
+  - 尊重 prefers-reduced-motion：如果用户偏好减少动画，跳过整个动画逻辑
+  这样即使 JS 被禁用或加载失败，用户仍能看到所有内容。
+*/}
+<script>
+  /**
+   * 📚 学习要点: IntersectionObserver 滚动揭示动画
+   * 为什么用 IntersectionObserver 而非 scroll 事件监听？
+   * - 性能：浏览器原生优化，不在主线程频繁触发回调
+   * - 精度：可设置 threshold 精确控制触发时机
+   * - 简洁：无需手动计算元素位置和视口关系
+   * - 内存：unobserve 后自动释放，无需手动清理
+   *
+   * 📚 学习要点: 渐进增强策略
+   * 动画是增强体验，不是核心功能。实现顺序：
+   * 1. HTML/CSS 确保内容默认可见（无 JS 也能用）
+   * 2. JS 加载后才隐藏卡片（添加 animate-ready 类）
+   * 3. IntersectionObserver 触发时显示卡片（添加 visible 类）
+   * 如果任何步骤失败，用户始终能看到内容。
+   */
+  ;(function initFeatureCardAnimations() {
+    // 尊重用户的减少动画偏好 — 直接跳过所有动画逻辑
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const cards = document.querySelectorAll<HTMLElement>('[data-animate-card]');
+    if (!cards.length) return;
+
+    // 📚 学习要点: 交错延迟（Stagger Delay）
+    // 每张卡片比前一张多延迟 120ms 出现，创造"依次揭示"的视觉节奏。
+    // 120ms 是经过测试的平衡值：太短（<80ms）看不出交错，太长（>200ms）显得拖沓。
+    const STAGGER_MS = 120;
+
+    // 设置初始隐藏态 + 交错延迟
+    cards.forEach((card) => {
+      const index = Number(card.dataset.cardIndex) || 0;
+      card.style.transitionDelay = `${index * STAGGER_MS}ms`;
+      card.classList.add('animate-ready');
+    });
+
+    // 📚 学习要点: IntersectionObserver threshold 选择
+    // threshold: 0.1 表示卡片 10% 进入视口时触发。
+    // 为什么不用 0（刚出现就触发）？因为用户可能还没注意到卡片，
+    // 10% 确保卡片已经部分可见时才开始动画，视觉效果更自然。
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            (entry.target as HTMLElement).classList.add('visible');
+            // 动画只触发一次 — unobserve 释放资源
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    cards.forEach((card) => observer.observe(card));
+  })();
+</script>
+
+<style>
+  /**
+   * 📚 学习要点: Astro Scoped Styles
+   * Astro 的 <style> 标签默认是 scoped（作用域隔离）。
+   * 编译后会自动添加 data-astro-cid-xxx 属性选择器，
+   * 确保样式不会泄漏到其他组件，也不会被外部样式意外覆盖。
+   * 这让每个组件可以安全使用简单的类名（如 .feature-card）。
+   */
+
+  .feature-cards {
+    width: 100%;
+    padding: 4rem 1.5rem;
+  }
+
+  /* CSS Grid 容器 — 默认 1 列（移动端优先） */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  /* 平板断点 (768px - 1023px): 2 列 */
+  @media (min-width: 768px) {
+    .feature-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  /* 桌面断点 (≥1024px): 3 列 */
+  @media (min-width: 1024px) {
+    .feature-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  /* 单张特性卡片 */
+  .feature-card {
+    background-color: var(--color-bg-surface);
+    border: 1px solid var(--color-hairline);
+    border-radius: 12px;
+    padding: 2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+
+    /*
+     * 📚 学习要点: GPU 加速的 hover 动画
+     * transform 和 box-shadow 的过渡不会触发 layout reflow，
+     * 浏览器可以将其交给 GPU 合成层处理，性能远优于改变 top/left/margin。
+     * will-change: transform 提示浏览器提前创建合成层（但不要滥用）。
+     */
+    transition: transform 250ms ease-out, box-shadow 250ms ease-out;
+  }
+
+  /* 卡片悬停效果 — 微妙的上浮 + 阴影 */
+  .feature-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(255, 215, 0, 0.08),
+                0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  /* 特性图标 — 大尺寸装饰性 emoji */
+  .feature-icon {
+    font-size: 2.5rem;
+    line-height: 1;
+  }
+
+  /* 特性标题 — 粗体，主文本色 */
+  .feature-title {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin: 0;
+    line-height: 1.3;
+  }
+
+  /* 特性描述 — 次要文本色，适中行高提升可读性 */
+  .feature-description {
+    font-size: 0.9375rem;
+    color: var(--color-text-secondary);
+    margin: 0;
+    line-height: 1.6;
+  }
+
+  /* ==========================================================================
+     滚动揭示动画 — IntersectionObserver 驱动的入场效果
+     ========================================================================== */
+
+  /**
+   * 📚 学习要点: 渐进增强的动画 CSS
+   * .animate-ready 类由 JS 添加，将卡片设为初始隐藏态。
+   * 如果 JS 未加载，该类不存在，卡片保持默认可见（opacity: 1）。
+   * .visible 类在卡片进入视口时由 IntersectionObserver 添加，触发过渡。
+   *
+   * 为什么用 class 切换而非直接操作 style？
+   * - 关注点分离：JS 只负责时机控制，CSS 负责视觉表现
+   * - 可维护性：调整动画参数只需改 CSS，无需改 JS
+   * - 性能：浏览器可以批量处理 class 变更的样式重计算
+   */
+
+  /* 初始隐藏态 — 仅在 JS 成功加载后生效 */
+  .feature-card.animate-ready {
+    opacity: 0;
+    transform: translateY(20px);
+    /*
+     * 📚 学习要点: 过渡时间 500ms + ease-out
+     * 500ms 是入场动画的最佳区间（400-600ms）：
+     * - 足够长让用户感知到动画的优雅
+     * - 不会长到让用户觉得等待
+     * ease-out（快进慢出）模拟物体减速停止的物理运动，视觉最自然。
+     */
+    transition: opacity 500ms ease-out, transform 500ms ease-out;
+  }
+
+  /* 可见态 — 卡片进入视口后的最终状态 */
+  .feature-card.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* 移动端确保最小触摸目标和可读性 */
+  @media (max-width: 767px) {
+    .feature-cards {
+      padding: 3rem 1rem;
+    }
+
+    .feature-card {
+      padding: 1.5rem 1.25rem;
+    }
+
+    /* 📚 学习要点: 移动端最小字体 16px (Req 4.3)
+       确保所有正文内容在移动端至少 16px，提升可读性。 */
+    .feature-description {
+      font-size: 1rem;
+    }
+  }
+</style>

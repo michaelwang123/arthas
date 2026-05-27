@@ -1,0 +1,28 @@
+---
+/**
+ * 下载页面（中文版） — Arthas 二进制下载与自托管指南
+ *
+ * 📚 学习要点: 多语言页面的组件复用
+ * 中英文下载页面共享同一个 DownloadContent 组件，
+ * 仅通过 locale prop 切换语言，消除了 ~300 行重复 CSS。
+ *
+ * 路由映射：
+ * - 文件路径: src/pages/zh/download.astro
+ * - 生成 URL: /arthas/zh/download
+ *
+ * @see src/components/DownloadContent.astro — 共享内容组件
+ * @see src/pages/download.astro — 对应的英文版本
+ */
+
+import Landing from '../../layouts/Landing.astro';
+import Footer from '../../components/Footer.astro';
+import DownloadContent from '../../components/DownloadContent.astro';
+---
+
+<Landing
+  title="下载 Arthas — 端到端加密聊天与文件传输"
+  description="下载适用于你平台的 Arthas 二进制文件，或使用 Docker 自托管。端到端加密聊天和文件共享。"
+>
+  <DownloadContent locale="zh" />
+  <Footer slot="footer" />
+</Landing>

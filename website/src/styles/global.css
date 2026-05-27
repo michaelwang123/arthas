@@ -1,0 +1,258 @@
+/**
+ * Arthas 官网全局样式 — 暗色主题与设计系统
+ *
+ * 📚 学习要点: CSS Custom Properties 设计系统
+ * 使用 CSS 自定义属性（CSS Variables）构建设计系统的优势：
+ * - 单一数据源：所有颜色、字体、间距在一处定义，全站引用
+ * - 运行时可变：与 Sass 变量不同，CSS Variables 可在运行时通过 JS 修改
+ * - 级联继承：子元素自动继承父元素的变量值，支持局部覆盖
+ * - 主题切换：通过改变 :root 上的变量值即可切换整站主题
+ *
+ * 本文件职责：
+ * 1. 定义 Arthas 品牌色彩系统（暗色调色板）
+ * 2. 覆盖 Starlight 内置 CSS 变量，强制暗色模式
+ * 3. 设置全局字体栈（Inter + CJK 回退）
+ * 4. 定义交互元素的 CSS 过渡动画
+ *
+ * 与其他模块的关系：
+ * - 被 astro.config.mjs 的 customCss 引用，全局加载
+ * - ThemeSelectOverride.astro 隐藏主题切换按钮，配合本文件强制暗色
+ * - 所有组件（Hero、FeatureCards 等）引用这里定义的变量
+ */
+
+/* ==========================================================================
+   1. 品牌色彩系统 — Arthas Design Tokens
+   ========================================================================== */
+
+/**
+ * 📚 学习要点: 暗色主题色彩选择
+ * - 背景色 luminance < 15 确保足够暗，减少屏幕眩光
+ * - 表面色使用 void purple (#1a0a2e) 增加层次感，避免纯黑的单调
+ * - 强调色 dawn gold (#ffd700) 在暗背景上对比度极高（13.74:1），用于 CTA 按钮
+ * - 文本色 #e8e8e8 vs 背景 #0d0d1a 对比度约 15.73:1，远超 WCAG AA 的 4.5:1 要求
+ * - 次要文本 #a0a0b0 vs 背景 #0d0d1a 对比度约 7.48:1，同样满足 WCAG AA
+ * - 次要强调色 #c06820 vs 背景 #0d0d1a 对比度 4.81:1，满足 WCAG AA 4.5:1
+ */
+:root {
+  /* 背景色 — 页面主背景，luminance < 15 */
+  --color-bg-primary: #0d0d1a;
+  /* 表面色 — 导航栏、侧边栏、卡片背景（void purple） */
+  --color-bg-surface: #1a0a2e;
+  /* 强调色 — CTA 按钮、链接高亮、交互元素（dawn gold） */
+  --color-accent: #ffd700;
+  /* 次要强调色 — 次要按钮、标签、装饰元素（warm amber）
+     📚 学习要点: 原色 #8b4513 对比度仅 2.72:1，不满足 WCAG AA 3:1 大文本要求。
+     调整为 #c06820 后对比度 4.81:1，满足 4.5:1 正文要求。 */
+  --color-accent-secondary: #c06820;
+  /* 主文本色 — 正文、标题 */
+  --color-text-primary: #e8e8e8;
+  /* 次要文本色 — 描述、辅助信息 */
+  --color-text-secondary: #a0a0b0;
+
+  /* 分割线 — 低透明度白色，微妙的视觉分隔 */
+  --color-hairline: rgba(255, 255, 255, 0.1);
+  /* 悬停态背景 — 用于按钮和卡片的 hover 效果 */
+  --color-hover-bg: rgba(255, 215, 0, 0.08);
+}
+
+/* ==========================================================================
+   2. Starlight CSS 变量覆盖 — 强制暗色模式
+   ========================================================================== */
+
+/**
+ * 📚 学习要点: 强制暗色模式策略
+ * Starlight 默认支持 light/dark 主题切换（通过 data-theme 属性）。
+ * 我们的设计要求只有暗色模式，实现方式：
+ * 1. 将 light 和 dark 的 CSS 变量都设为相同的暗色值（本文件）
+ * 2. 用空组件替换 ThemeSelect（ThemeSelectOverride.astro）隐藏切换按钮
+ * 这样无论 Starlight 内部状态如何，视觉始终是暗色。
+ */
+:root,
+:root[data-theme='light'],
+:root[data-theme='dark'] {
+  /* 页面背景 */
+  --sl-color-bg: var(--color-bg-primary);
+  /* 导航栏背景 */
+  --sl-color-bg-nav: var(--color-bg-surface);
+  /* 侧边栏背景 */
+  --sl-color-bg-sidebar: var(--color-bg-surface);
+  /* 正文文本色 */
+  --sl-color-text: var(--color-text-primary);
+  /* 强调文本色（链接、活跃项） */
+  --sl-color-text-accent: var(--color-accent);
+  /* 分割线颜色 */
+  --sl-color-hairline: var(--color-hairline);
+
+  /* Starlight 额外变量覆盖 — 确保所有 UI 元素一致 */
+  --sl-color-white: var(--color-text-primary);
+  --sl-color-gray-1: #e8e8e8;
+  --sl-color-gray-2: #c0c0c8;
+  --sl-color-gray-3: #a0a0b0;
+  --sl-color-gray-4: #606070;
+  --sl-color-gray-5: #383848;
+  --sl-color-gray-6: #1a1a2e;
+  --sl-color-black: #0d0d1a;
+
+  /* 强调色系列 */
+  --sl-color-accent-low: rgba(255, 215, 0, 0.1);
+  --sl-color-accent: var(--color-accent);
+  --sl-color-accent-high: #ffe44d;
+}
+
+/* ==========================================================================
+   3. 全局字体栈
+   ========================================================================== */
+
+/**
+ * 📚 学习要点: 跨平台字体回退策略
+ * 字体栈设计原则：
+ * - 系统字体优先 (-apple-system 等): 零网络请求，即时渲染
+ * - CJK 回退: 中文用户需要专门的中文字体支持
+ *   - Noto Sans SC: Google 开源，覆盖最广
+ *   - PingFang SC: macOS/iOS 系统中文字体
+ *   - Hiragino Sans GB: macOS 旧版中文字体
+ *   - Microsoft YaHei: Windows 系统中文字体
+ *
+ * 注意: Inter 字体未被加载（无 @font-face 或 Google Fonts 引用），
+ * 因此从字体栈中移除，避免浏览器无意义的字体查找。
+ */
+:root,
+:root[data-theme='light'],
+:root[data-theme='dark'] {
+  --sl-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei";
+  --sl-font-system: var(--sl-font);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ==========================================================================
+   4. CSS 过渡动画 — 交互元素
+   ========================================================================== */
+
+/**
+ * 📚 学习要点: CSS 过渡时间选择
+ * - 150ms: 微交互（按钮 hover、链接颜色变化）— 即时反馈感
+ * - 250ms: 中等交互（卡片悬停、展开/收起）— 可感知但不拖沓
+ * - 400ms: 大型动画（页面过渡、滚动揭示）— 优雅但不影响效率
+ * - ease-out: 快速开始、缓慢结束，符合物理直觉（物体减速停止）
+ *
+ * 📚 学习要点: 作用域限定策略
+ * 过渡规则仅作用于自定义页面区域（.site-main、.site-footer），
+ * 避免影响 Starlight 文档页面的内置交互样式。
+ * Starlight 有自己的 transition 定义，全局覆盖会导致冲突。
+ */
+
+/* 链接和按钮 — 仅限自定义页面区域 (150ms) */
+.site-main a,
+.site-footer a,
+.site-main button,
+.site-footer button {
+  transition: color 150ms ease-out,
+              background-color 150ms ease-out,
+              border-color 150ms ease-out,
+              box-shadow 150ms ease-out,
+              transform 150ms ease-out;
+}
+
+/* 滚动揭示和页面过渡 — 较长过渡 (400ms) */
+.reveal,
+.fade-in,
+[data-animate] {
+  transition: opacity 400ms ease-out,
+              transform 400ms ease-out;
+}
+
+/* 尊重用户的减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   5. 全局基础样式
+   ========================================================================== */
+
+/* 确保暗色背景覆盖整个页面，防止水平溢出 */
+html {
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-size: 16px;
+  overflow-x: hidden;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* 链接默认使用强调色 */
+a {
+  color: var(--color-accent);
+}
+
+a:hover {
+  color: var(--color-accent-high, #ffe44d);
+}
+
+/* 选中文本样式 — 使用品牌色 */
+::selection {
+  background-color: rgba(255, 215, 0, 0.3);
+  color: var(--color-text-primary);
+}
+
+/* 滚动条样式（Webkit 浏览器） — 与暗色主题一致 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg-surface);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 215, 0, 0.3);
+}
+
+/* 图片和媒体约束 — 防止溢出 */
+img,
+video,
+svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ==========================================================================
+   6. 响应式基础 — 移动端最小字体保障
+   ========================================================================== */
+
+/**
+ * 📚 学习要点: 移动端最小字体尺寸
+ * WCAG 和移动端可用性最佳实践要求正文文本至少 16px。
+ * 小于 16px 的文字在移动设备上难以阅读，且 iOS Safari 会自动缩放
+ * 包含小字体的表单元素（导致布局问题）。
+ * 此规则确保所有视口宽度 < 768px 时，body 基础字体为 16px。
+ */
+@media (max-width: 767px) {
+  body {
+    font-size: 16px;
+  }
+}

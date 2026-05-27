@@ -1,0 +1,29 @@
+{
+  "name": "arthas-website",
+  "version": "1.0.0",
+  "description": "Arthas 项目官网 — 基于 Astro + Starlight 构建的静态文档与营销站点",
+  "type": "module",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "node scripts/fetch-release.mjs && node scripts/sync-docs.mjs && astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "sync-docs": "node scripts/sync-docs.mjs",
+    "validate-links": "node scripts/validate-links.mjs",
+    "validate-build": "node scripts/validate-build.mjs",
+    "test": "node --test scripts/fetch-release.test.mjs"
+  },
+  "dependencies": {
+    "astro": "^4.16.0",
+    "@astrojs/starlight": "^0.28.0",
+    "@astrojs/sitemap": "3.2.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

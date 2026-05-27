@@ -1,0 +1,80 @@
+---
+/**
+ * 中文首页 — Arthas 官网中文入口页面
+ *
+ * 本文件是中文用户进入 Arthas 官网时看到的首页。
+ * 结构与英文首页（src/pages/index.astro）完全一致，
+ * 区别在于显式传递 locale='zh' 给所有组件，确保渲染中文文案。
+ *
+ * 📚 学习要点: Astro 多语言路由策略
+ * Astro 通过文件系统路由实现 i18n：
+ * - src/pages/index.astro → /arthas/ （英文，默认语言无前缀）
+ * - src/pages/zh/index.astro → /arthas/zh/ （中文，语言前缀）
+ *
+ * 这种"目录即语言"的模式简单直观：
+ * - 每个语言版本是独立的静态 HTML 文件
+ * - 搜索引擎可以分别索引不同语言版本
+ * - 无需客户端 JS 切换语言（build-time 已生成所有版本）
+ *
+ * 为什么显式传递 locale='zh'？
+ * 虽然组件内部可以通过 getLocaleFromUrl(Astro.url) 自动检测，
+ * 但显式传递更清晰地表达意图，且在开发时更容易追踪数据流。
+ * 两种方式效果相同 — 因为此文件路径包含 /zh/，自动检测也会返回 'zh'。
+ *
+ * 路由映射：
+ * - 文件路径: src/pages/zh/index.astro
+ * - 生成 URL: /arthas/zh/ （中文首页）
+ *
+ * 与其他模块的关系：
+ * - 使用 src/layouts/Landing.astro 作为页面布局
+ * - 组合 Hero、FeatureCards、HowItWorks、TrustSection、Footer 组件
+ * - 所有组件接收 locale='zh'，渲染中文翻译文案
+ *
+ * @see src/pages/index.astro — 对应的英文版本
+ */
+
+import Landing from '../../layouts/Landing.astro';
+import Hero from '../../components/Hero.astro';
+import FeatureCards from '../../components/FeatureCards.astro';
+import HowItWorks from '../../components/HowItWorks.astro';
+import TrustSection from '../../components/TrustSection.astro';
+import Footer from '../../components/Footer.astro';
+---
+
+{/* 📚 学习要点: 中文 SEO meta 标签
+    中文页面的 title 和 description 使用中文撰写，
+    搜索引擎会根据页面语言和 hreflang 标签向中文用户展示这些内容。
+    Landing 布局会自动生成正确的 hreflang 标签（因为 URL 包含 /zh/）。 */}
+<Landing
+  title="Arthas — 端到端加密临时聊天与文件传输"
+  description="端到端加密的临时聊天和安全文件传输工具。无需注册，零知识架构，阅后即焚。开源 AGPL-3.0 协议。"
+>
+  {/* 📚 学习要点: JSON-LD 结构化数据（Schema.org）
+      schema.org 结构化数据是语言无关的 — 中英文页面使用相同的 JSON-LD。
+      搜索引擎通过 hreflang 标签区分语言版本，而非通过 JSON-LD 内容。
+      因此这里的 description 使用英文（schema.org 标准实践），
+      页面可见内容的中文翻译由组件自身处理。 */}
+  <script type="application/ld+json" slot="head" set:html={JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Arthas",
+    "description": "End-to-end encrypted temporary chat. No signup, zero knowledge, self-destruct.",
+    "url": "https://michaelwang123.github.io/arthas",
+    "applicationCategory": "CommunicationApplication",
+    "operatingSystem": "Web, Linux, macOS, Windows",
+    "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  })} />
+  {/* 显式传递 locale='zh' 确保所有组件渲染中文文案 */}
+  <Hero locale="zh" />
+  <FeatureCards locale="zh" />
+  <HowItWorks locale="zh" />
+  <TrustSection locale="zh" />
+
+  {/* Footer 通过 named slot 注入到 Landing 布局的 <footer> 区域 */}
+  <Footer slot="footer" />
+</Landing>

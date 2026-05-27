@@ -1,0 +1,846 @@
+---
+/**
+ * Header 组件 — 固定定位导航栏 + 移动端汉堡菜单
+ *
+ * 本文件实现 Arthas 官网的全局导航头部，在所有自定义页面中复用。
+ * 包含品牌 Logo、主导航链接、GitHub Star 按钮、语言切换器，
+ * 以及移动端（< 768px）的汉堡菜单按钮和全屏导航抽屉。
+ *
+ * 📚 学习要点: 响应式导航模式
+ * 桌面端（≥ 768px）使用水平导航栏，所有链接一字排开。
+ * 移动端（< 768px）隐藏水平导航，显示汉堡按钮（☰），
+ * 点击后展开全屏导航抽屉（overlay），包含所有导航项。
+ * 这是移动优先设计的标准模式，兼顾可用性和屏幕空间。
+ *
+ * 📚 学习要点: 渐进增强（Progressive Enhancement）
+ * 汉堡菜单使用最少的 JavaScript — 仅切换一个 data 属性。
+ * CSS 负责所有动画和布局变化（transform + opacity transition）。
+ * 即使 JS 加载失败，页面仍可通过桌面端导航访问所有链接。
+ *
+ * 职责边界：
+ * - 本文件：导航结构、active 状态检测、响应式布局、移动端抽屉
+ * - Landing.astro：引入本组件，提供页面骨架
+ * - LanguageSwitcher.astro：语言切换的具体实现
+ *
+ * 与其他模块的关系：
+ * - 引用 src/assets/logo.svg 作为品牌标识
+ * - 使用 src/i18n/utils.ts 获取多语言导航文案
+ * - 使用 src/styles/global.css 中定义的 CSS 变量
+ * - 被 src/layouts/Landing.astro 引入
+ *
+ * 满足需求：
+ * - Req 4.2: 汉堡菜单按钮（< 768px），水平导航（≥ 768px）
+ * - Req 4.3: 全屏导航抽屉
+ * - Req 4.4: 44x44px 最小触摸目标
+ * - Req 10.1: 固定定位导航栏，滚动时始终可见
+ * - Req 10.3: Active 导航项视觉区分（颜色 + 下划线 + 字重）
+ * - Req 10.5: 语义化 <nav> 元素 + aria-label
+ */
+
+import { getLocaleFromUrl, t, baseWithSlash } from '../i18n/utils';
+import LanguageSwitcher from './LanguageSwitcher.astro';
+import logoSvg from '../assets/logo.svg';
+
+// 📚 学习要点: Astro.url — 当前页面 URL
+// Astro 在构建时为每个页面提供 Astro.url，包含完整的 URL 信息。
+// 我们用它来：1) 推断当前语言 2) 判断哪个导航项是 active 状态。
+const locale = getLocaleFromUrl(Astro.url);
+
+// 📚 学习要点: BASE_URL 与子目录部署
+// import.meta.env.BASE_URL 在 build 时被替换为 astro.config.mjs 中的 base 值。
+// 所有内部链接必须使用此变量前缀，绝不硬编码 '/arthas/'。
+const base = import.meta.env.BASE_URL;
+
+// 📚 学习要点: Active 状态检测 — 排除法
+// 之前使用 10+ 个 .includes() 逐一列举文档页面路径，每新增文档页面都需更新。
+// 改为排除法：不是首页、不是下载页、不是路线图、不是 404 → 就是文档页。
+// 这样新增文档页面时无需修改 Header 组件。
+const currentPath = Astro.url.pathname;
+const isHome = currentPath === base
+  || currentPath === baseWithSlash
+  || currentPath === `${baseWithSlash}zh/`
+  || currentPath === `${baseWithSlash}zh`;
+const isDownload = currentPath.includes('/download');
+const isRoadmap = currentPath.includes('/roadmap');
+const isDocs = !isHome && !isDownload && !isRoadmap
+  && !currentPath.endsWith('/404')
+  && currentPath !== base
+  && currentPath !== baseWithSlash;
+---
+
+<!--
+  📚 学习要点: 固定定位导航栏
+  position: fixed 使 header 脱离文档流，始终固定在视口顶部。
+  这确保用户在长页面滚动时始终能访问导航，提升可用性。
+  z-index: 100 确保 header 覆盖在页面内容之上。
+  backdrop-filter: blur() 创建毛玻璃效果，让用户感知到下方有内容。
+-->
+<header class="site-header">
+  <nav class="site-nav" aria-label="Main navigation">
+    <!--
+      Logo — 品牌标识，点击返回首页
+      📚 学习要点: SVG Logo 引入方式
+      Astro 的 import 会返回 SVG 文件的 URL（含 content hash），
+      使用 <img> 标签引入确保浏览器缓存和 CDN 优化。
+      aria-label 提供无障碍文本，因为 img 的 alt 已描述图片内容。
+    -->
+    <a href={locale === 'zh' ? `${baseWithSlash}zh/` : baseWithSlash} class="nav-logo" aria-label="Arthas Home">
+      <img src={logoSvg.src} alt="Arthas" width="120" height="28" />
+    </a>
+
+    <!--
+      📚 学习要点: 导航链接的 active 状态检测
+      通过比较当前 URL 路径与链接目标路径来判断哪个导航项是"当前页面"。
+      active 状态通过 CSS class 实现视觉区分（金色下划线 + 高亮颜色），
+      同时使用 aria-current="page" 告知屏幕阅读器当前位置。
+      这满足 WCAG 2.4.8（Location）— 用户始终知道自己在网站中的位置。
+    -->
+    <div class="nav-links">
+      <a
+        href={locale === 'zh' ? `${baseWithSlash}zh/` : baseWithSlash}
+        class:list={['nav-link', { active: isHome }]}
+        aria-current={isHome ? 'page' : undefined}
+      >
+        {t('nav.home', locale)}
+      </a>
+      <a
+        href={locale === 'zh' ? `${baseWithSlash}zh/getting-started/` : `${baseWithSlash}getting-started/`}
+        class:list={['nav-link', { active: isDocs }]}
+        aria-current={isDocs ? 'page' : undefined}
+      >
+        {t('nav.docs', locale)}
+      </a>
+      <a
+        href={locale === 'zh' ? `${baseWithSlash}zh/download/` : `${baseWithSlash}download/`}
+        class:list={['nav-link', { active: isDownload }]}
+        aria-current={isDownload ? 'page' : undefined}
+      >
+        {t('nav.download', locale)}
+      </a>
+      <a
+        href={locale === 'zh' ? `${baseWithSlash}zh/roadmap/` : `${baseWithSlash}roadmap/`}
+        class:list={['nav-link', { active: isRoadmap }]}
+        aria-current={isRoadmap ? 'page' : undefined}
+      >
+        {t('nav.roadmap', locale)}
+      </a>
+      <a
+        href="https://github.com/punkcanyang/arthas"
+        class="nav-link"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {t('nav.github', locale)}
+      </a>
+    </div>
+
+    <!--
+      📚 学习要点: GitHub Star 链接
+      GitHub star 按钮引导访客为项目加星，是开源项目的社交证明。
+      使用 target="_blank" + rel="noopener noreferrer" 安全地在新标签页打开。
+      noopener 防止新页面通过 window.opener 访问原页面（安全最佳实践）。
+      noreferrer 额外隐藏 referrer 信息（隐私保护）。
+    -->
+    <a
+      href="https://github.com/punkcanyang/arthas"
+      class="nav-github-star"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Star Arthas on GitHub"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/>
+      </svg>
+      <span>Star</span>
+    </a>
+
+    <!-- 语言切换 — 允许用户在中英文之间切换（桌面端） -->
+    <LanguageSwitcher />
+
+    <!--
+      📚 学习要点: 汉堡菜单按钮（移动端专用）
+      此按钮仅在 viewport < 768px 时可见（通过 CSS media query 控制）。
+      点击后切换 data-mobile-nav-open 属性来控制导航抽屉的显示/隐藏。
+
+      无障碍设计：
+      - aria-expanded: 告知屏幕阅读器菜单当前是展开还是收起状态
+      - aria-controls: 关联到被控制的导航抽屉元素 ID
+      - aria-label: 提供按钮的文字描述（因为按钮内容是图标）
+      - 44x44px 最小尺寸满足 WCAG 2.5.5 触摸目标要求
+    -->
+    <button
+      class="nav-hamburger"
+      type="button"
+      aria-expanded="false"
+      aria-controls="mobile-nav-drawer"
+      aria-label={t('nav.menu.open', locale)}
+      data-hamburger-btn
+    >
+      <!--
+        📚 学习要点: SVG 汉堡图标
+        使用 SVG 而非 Unicode 字符（☰），因为：
+        1. SVG 在所有平台渲染一致（Unicode 字符在不同 OS/字体下外观差异大）
+        2. SVG 可通过 CSS 精确控制颜色和尺寸
+        3. aria-hidden="true" 确保屏幕阅读器忽略装饰性图标
+      -->
+      <svg class="hamburger-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <line x1="3" y1="12" x2="21" y2="12" />
+        <line x1="3" y1="18" x2="21" y2="18" />
+      </svg>
+    </button>
+  </nav>
+</header>
+
+<!--
+  📚 学习要点: 全屏导航抽屉（Mobile Navigation Drawer）
+  抽屉放在 <header> 外部，使用 fixed 定位覆盖整个视口。
+  这样做的原因：
+  1. 避免被 header 的 overflow 或 z-index 上下文限制
+  2. 全屏覆盖需要独立的 stacking context
+  3. 语义上，抽屉是一个独立的导航区域（role="dialog"）
+
+  交互设计：
+  - 默认隐藏（transform: translateX(100%)），从右侧滑入
+  - 打开时添加 data-open 属性，CSS transition 驱动动画
+  - 背景使用半透明遮罩，点击可关闭（tap-outside-to-close）
+  - body 滚动锁定防止背景内容滚动
+
+  无障碍设计：
+  - role="dialog" + aria-modal="true" 告知辅助技术这是模态对话框
+  - aria-label 提供抽屉的文字描述
+  - 关闭按钮有明确的 aria-label
+  - 焦点管理：打开时焦点移入抽屉，关闭时焦点返回汉堡按钮
+-->
+<div
+  class="mobile-nav-drawer"
+  id="mobile-nav-drawer"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Navigation menu"
+  data-mobile-nav-drawer
+  hidden
+>
+  <!--
+    📚 学习要点: 遮罩层（Backdrop）
+    半透明黑色遮罩覆盖在页面内容之上、抽屉面板之下。
+    点击遮罩关闭抽屉（tap-outside-to-close 模式）。
+    这是移动端模态组件的标准 UX 模式。
+  -->
+  <div class="mobile-nav-backdrop" data-mobile-nav-backdrop></div>
+
+  <!--
+    导航面板 — 包含所有导航项
+    从右侧滑入，宽度占满视口（全屏抽屉）。
+  -->
+  <div class="mobile-nav-panel">
+    <!-- 抽屉头部：Logo + 关闭按钮 -->
+    <div class="mobile-nav-header">
+      <a href={locale === 'zh' ? `${baseWithSlash}zh/` : baseWithSlash} class="nav-logo" aria-label="Arthas Home">
+        <img src={logoSvg.src} alt="Arthas" width="120" height="28" />
+      </a>
+
+      <!--
+        关闭按钮 — 44x44px 触摸目标
+        📚 学习要点: 关闭按钮的无障碍设计
+        使用 <button> 元素（非 <div> 或 <span>），确保：
+        - 键盘可聚焦（Tab 键）
+        - 可通过 Enter/Space 激活
+        - 屏幕阅读器正确识别为"按钮"角色
+      -->
+      <button
+        class="mobile-nav-close"
+        type="button"
+        aria-label={t('nav.menu.close', locale)}
+        data-mobile-nav-close
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+
+    <!--
+      导航链接列表 — 垂直排列
+      📚 学习要点: 移动端导航的触摸目标
+      每个链接使用 display: flex + min-height: 44px + padding，
+      确保可点击区域远超文字本身的大小，满足 WCAG 2.5.5。
+      大间距（gap）防止误触相邻链接。
+    -->
+    <nav class="mobile-nav-links" aria-label="Mobile navigation">
+      <a
+        href={locale === 'zh' ? `${baseWithSlash}zh/` : baseWithSlash}
+        class:list={['mobile-nav-link', { active: isHome }]}
+        aria-current={isHome ? 'page' : undefined}
+      >
+        {t('nav.home', locale)}
+      </a>
+      <a
+        href={locale === 'zh' ? `${baseWithSlash}zh/getting-started/` : `${baseWithSlash}getting-started/`}
+        class:list={['mobile-nav-link', { active: isDocs }]}
+        aria-current={isDocs ? 'page' : undefined}
+      >
+        {t('nav.docs', locale)}
+      </a>
+      <a
+        href={locale === 'zh' ? `${baseWithSlash}zh/download/` : `${baseWithSlash}download/`}
+        class:list={['mobile-nav-link', { active: isDownload }]}
+        aria-current={isDownload ? 'page' : undefined}
+      >
+        {t('nav.download', locale)}
+      </a>
+      <a
+        href={locale === 'zh' ? `${baseWithSlash}zh/roadmap/` : `${baseWithSlash}roadmap/`}
+        class:list={['mobile-nav-link', { active: isRoadmap }]}
+        aria-current={isRoadmap ? 'page' : undefined}
+      >
+        {t('nav.roadmap', locale)}
+      </a>
+      <a
+        href="https://github.com/punkcanyang/arthas"
+        class="mobile-nav-link"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {t('nav.github', locale)}
+      </a>
+    </nav>
+
+    <!-- 抽屉底部：语言切换 + GitHub Star -->
+    <div class="mobile-nav-footer">
+      <LanguageSwitcher />
+      <a
+        href="https://github.com/punkcanyang/arthas"
+        class="mobile-nav-star"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Star Arthas on GitHub"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/>
+        </svg>
+        <span>Star on GitHub</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+  /**
+   * 移动端导航抽屉 — 客户端交互逻辑
+   *
+   * 📚 学习要点: 最小化 JavaScript 策略
+   * 本脚本仅负责：
+   * 1. 切换 drawer 的 hidden 属性和 data-open 状态
+   * 2. 更新 aria-expanded 属性
+   * 3. 锁定/解锁 body 滚动
+   * 4. 管理焦点（打开时聚焦关闭按钮，关闭时返回汉堡按钮）
+   * 5. 监听 Escape 键关闭
+   *
+   * 所有视觉动画由 CSS transition 处理，JS 不操作任何样式属性。
+   * 这种分离使代码更易维护，且 CSS 动画性能优于 JS 动画。
+   */
+
+  function initMobileNav(): void {
+    const hamburgerBtn = document.querySelector('[data-hamburger-btn]') as HTMLButtonElement | null;
+    const drawer = document.querySelector('[data-mobile-nav-drawer]') as HTMLElement | null;
+    const closeBtn = document.querySelector('[data-mobile-nav-close]') as HTMLButtonElement | null;
+    const backdrop = document.querySelector('[data-mobile-nav-backdrop]') as HTMLElement | null;
+
+    if (!hamburgerBtn || !drawer || !closeBtn || !backdrop) return;
+
+    // 防止重复绑定（View Transitions 场景）
+    if (hamburgerBtn.dataset.bound) return;
+    hamburgerBtn.dataset.bound = 'true';
+
+    /**
+     * 打开导航抽屉
+     *
+     * 📚 学习要点: 模态对话框的打开流程
+     * 1. 移除 hidden 属性使元素进入 DOM 渲染
+     * 2. requestAnimationFrame 确保浏览器完成布局后再添加动画类
+     *    （否则 transition 不会触发，因为元素从 hidden → visible 是瞬间的）
+     * 3. 锁定 body 滚动防止背景内容滚动
+     * 4. 焦点移入抽屉内的关闭按钮（无障碍要求）
+     */
+    function openDrawer(): void {
+      drawer!.hidden = false;
+      // 📚 学习要点: 双 rAF 技巧
+      // 第一个 rAF 确保 hidden 移除后浏览器完成 layout，
+      // 第二个 rAF 确保在下一帧添加 data-open，触发 CSS transition。
+      // 单个 rAF 在某些浏览器中不够（layout 和 paint 可能合并）。
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          drawer!.setAttribute('data-open', '');
+        });
+      });
+      hamburgerBtn!.setAttribute('aria-expanded', 'true');
+      document.body.style.overflow = 'hidden';
+      closeBtn!.focus();
+    }
+
+    /**
+     * 关闭导航抽屉
+     *
+     * 📚 学习要点: 模态对话框的关闭流程
+     * 1. 移除 data-open 触发关闭动画（CSS transition）
+     * 2. 等待动画完成后再添加 hidden（否则动画会被截断）
+     * 3. 恢复 body 滚动
+     * 4. 焦点返回触发按钮（无障碍要求 — 焦点不应"消失"）
+     */
+    function closeDrawer(): void {
+      drawer!.removeAttribute('data-open');
+      hamburgerBtn!.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
+
+      // 等待 CSS transition 完成后隐藏元素
+      // 250ms 与 CSS 中的 transition-duration 匹配
+      setTimeout(() => {
+        drawer!.hidden = true;
+      }, 250);
+
+      hamburgerBtn!.focus();
+    }
+
+    // 事件绑定
+    hamburgerBtn.addEventListener('click', openDrawer);
+    closeBtn.addEventListener('click', closeDrawer);
+    backdrop.addEventListener('click', closeDrawer);
+
+    // 📚 学习要点: Escape 键关闭模态
+    // WCAG 要求模态对话框可通过 Escape 键关闭。
+    // 仅在抽屉打开时响应（检查 data-open 属性）。
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && drawer!.hasAttribute('data-open')) {
+        closeDrawer();
+      }
+    });
+
+    // 📚 学习要点: 导航链接点击后自动关闭抽屉
+    // 用户点击导航链接后，页面会跳转（或 View Transition），
+    // 提前关闭抽屉确保过渡动画流畅。
+    const navLinks = drawer!.querySelectorAll('.mobile-nav-link');
+    navLinks.forEach((link) => {
+      link.addEventListener('click', closeDrawer);
+    });
+  }
+
+  // 📚 学习要点: 统一初始化工具
+  // 使用 onReady 封装多场景事件绑定（首次加载 + View Transitions），
+  // 避免每个组件重复相同的 3 行样板代码。详见 src/scripts/onReady.ts。
+  import { onReady } from '../scripts/onReady';
+  onReady(initMobileNav);
+</script>
+
+<style>
+  /**
+   * Header 组件样式
+   *
+   * 📚 学习要点: Astro scoped styles
+   * <style> 标签中的样式默认是 scoped 的（只作用于当前组件）。
+   * Astro 通过添加唯一的 data-astro-cid-xxx 属性实现样式隔离，
+   * 避免全局样式污染。
+   *
+   * 📚 学习要点: 移动端导航的 CSS 架构
+   * 桌面端和移动端使用同一套 HTML 结构（导航链接在两处出现），
+   * 通过 media query 控制显示/隐藏。这种"重复 HTML"的方式
+   * 比用 JS 移动 DOM 节点更可靠，且对 SEO 无影响（搜索引擎理解 display:none）。
+   */
+
+  /* ===== 页面头部 — 固定在顶部，暗色半透明背景 ===== */
+  .site-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background-color: rgba(13, 13, 26, 0.9);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--color-hairline);
+  }
+
+  /* 导航栏 — 水平布局，居中约束最大宽度 */
+  .site-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0.75rem 1.5rem;
+  }
+
+  /*
+   * Logo 链接 — 品牌标识
+   * 📚 学习要点: 触摸目标尺寸
+   * WCAG 2.5.5 要求交互元素至少 44x44px 的触摸目标。
+   * 通过 min-height + padding 确保即使 logo 图片较小，
+   * 可点击区域仍满足无障碍要求。
+   */
+  .nav-logo {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    text-decoration: none;
+    padding: 0.25rem 0;
+  }
+
+  .nav-logo img {
+    height: 28px;
+    width: auto;
+  }
+
+  .nav-logo:hover {
+    opacity: 0.85;
+  }
+
+  /*
+   * 📚 学习要点: 导航链接容器
+   * 使用 flexbox + gap 实现等间距排列，比 margin 更语义化。
+   * align-items: center 确保不同高度的链接垂直居中对齐。
+   */
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  /*
+   * 导航链接 — 基础样式
+   * 使用 position: relative 为 active 状态的伪元素下划线提供定位上下文。
+   * transition 确保 hover/active 状态切换时有平滑的视觉过渡。
+   *
+   * 📚 学习要点: 44px 触摸目标
+   * min-height: 44px + display: inline-flex + align-items: center
+   * 确保链接的可点击区域满足 WCAG 2.5.5 的最小触摸目标要求，
+   * 即使文字本身高度不足 44px，点击区域也足够大。
+   */
+  .nav-link {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 0.5rem 0.25rem;
+    transition: color 200ms ease-out;
+  }
+
+  .nav-link:hover {
+    color: var(--color-text-primary);
+  }
+
+  /*
+   * 📚 学习要点: Active 导航项视觉区分
+   * 满足 Requirement 10.3 — 当前页面的导航项必须与其他项有明确的视觉区别。
+   * 使用三重信号确保无歧义：
+   * 1. 颜色变化（accent gold）— 最直观的视觉信号
+   * 2. 字重加粗（600）— 增加视觉重量
+   * 3. 底部下划线（::after 伪元素）— 额外的位置指示
+   * 这种多信号设计确保色盲用户也能识别 active 状态。
+   */
+  .nav-link.active {
+    color: var(--color-accent);
+    font-weight: 600;
+  }
+
+  .nav-link.active::after {
+    content: '';
+    position: absolute;
+    bottom: 6px;
+    left: 0.25rem;
+    right: 0.25rem;
+    height: 2px;
+    background-color: var(--color-accent);
+    border-radius: 1px;
+  }
+
+  /*
+   * GitHub Star 按钮 — 社交证明 CTA
+   * 使用 border + 圆角模拟按钮外观，但实际是链接。
+   * min-height: 44px 确保移动端的触摸目标满足 WCAG 2.5.5 要求。
+   */
+  .nav-github-star {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-accent);
+    border-radius: 6px;
+    color: var(--color-accent);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    min-height: 44px;
+    transition: background-color 200ms ease-out, color 200ms ease-out;
+  }
+
+  .nav-github-star:hover {
+    background-color: var(--color-accent);
+    color: var(--color-bg-primary);
+  }
+
+  .nav-github-star svg {
+    flex-shrink: 0;
+  }
+
+  /* ===== 汉堡菜单按钮 — 仅移动端可见 ===== */
+
+  /*
+   * 📚 学习要点: 汉堡按钮的默认隐藏
+   * 桌面端（≥ 768px）不需要汉堡按钮，因为水平导航已经可见。
+   * 使用 display: none 在桌面端完全隐藏（包括对屏幕阅读器）。
+   * 移动端通过 media query 覆盖为 display: inline-flex。
+   */
+  .nav-hamburger {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-primary, #e8e8e8);
+    cursor: pointer;
+    transition: background-color 200ms ease-out;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .nav-hamburger:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .nav-hamburger:focus-visible {
+    outline: 2px solid var(--color-accent, #ffd700);
+    outline-offset: 2px;
+  }
+
+  .hamburger-icon {
+    flex-shrink: 0;
+  }
+
+  /* ===== 全屏导航抽屉样式 ===== */
+
+  /*
+   * 📚 学习要点: 全屏导航抽屉的 CSS 架构
+   * 抽屉使用 fixed 定位覆盖整个视口，z-index 高于 header。
+   * 动画策略：
+   * - 默认状态：opacity: 0 + 面板 translateX(100%)（在右侧屏幕外）
+   * - 打开状态（[data-open]）：opacity: 1 + translateX(0)
+   * - transition 驱动平滑动画（250ms）
+   * - hidden 属性在动画完成后由 JS 添加/移除
+   *
+   * 为什么不用 display: none 控制显隐？
+   * 因为 display 属性不支持 transition，切换时无法产生动画效果。
+   * 使用 hidden + opacity + transform 的组合可以兼顾动画和无障碍。
+   */
+  .mobile-nav-drawer {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    opacity: 0;
+    transition: opacity 250ms ease-out;
+    pointer-events: none;
+  }
+
+  .mobile-nav-drawer[data-open] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* 遮罩层 — 半透明黑色背景 */
+  .mobile-nav-backdrop {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+  }
+
+  /*
+   * 导航面板 — 从右侧滑入的全屏面板
+   * 📚 学习要点: transform 动画性能
+   * 使用 transform: translateX() 而非 left/right 属性做动画，
+   * 因为 transform 不触发 layout reflow，只触发 composite，
+   * GPU 加速使动画在 60fps 下流畅运行。
+   */
+  .mobile-nav-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100vw;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--color-bg-primary, #0d0d1a);
+    transform: translateX(100%);
+    transition: transform 250ms ease-out;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-nav-drawer[data-open] .mobile-nav-panel {
+    transform: translateX(0);
+  }
+
+  /* 抽屉头部 — Logo + 关闭按钮 */
+  .mobile-nav-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--color-hairline, rgba(255, 255, 255, 0.1));
+  }
+
+  /*
+   * 关闭按钮 — 44x44px 触摸目标
+   * 📚 学习要点: 关闭按钮的视觉设计
+   * 使用 ✕ 图标（SVG），位于右上角，符合用户心智模型。
+   * 圆角背景在 hover 时出现，提供交互反馈。
+   */
+  .mobile-nav-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-primary, #e8e8e8);
+    cursor: pointer;
+    transition: background-color 200ms ease-out;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-nav-close:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .mobile-nav-close:focus-visible {
+    outline: 2px solid var(--color-accent, #ffd700);
+    outline-offset: 2px;
+  }
+
+  /* 导航链接列表 — 垂直排列，大间距 */
+  .mobile-nav-links {
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem 1rem;
+    gap: 0.5rem;
+    flex: 1;
+  }
+
+  /*
+   * 移动端导航链接
+   * 📚 学习要点: 移动端触摸目标的最佳实践
+   * - min-height: 48px（超过 WCAG 最低要求的 44px）
+   * - 大 padding 增加可点击区域
+   * - 大字号（1.125rem）提升可读性
+   * - 圆角背景在 hover/active 时出现，提供触摸反馈
+   */
+  .mobile-nav-link {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0.75rem 1rem;
+    color: var(--color-text-secondary, #a0a0b0);
+    text-decoration: none;
+    font-size: 1.125rem;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: color 200ms ease-out, background-color 200ms ease-out;
+  }
+
+  .mobile-nav-link:hover,
+  .mobile-nav-link:active {
+    color: var(--color-text-primary, #e8e8e8);
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .mobile-nav-link.active {
+    color: var(--color-accent, #ffd700);
+    font-weight: 600;
+    background-color: rgba(255, 215, 0, 0.05);
+  }
+
+  /* 抽屉底部 — 语言切换 + GitHub Star */
+  .mobile-nav-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1.5rem 1rem;
+    border-top: 1px solid var(--color-hairline, rgba(255, 255, 255, 0.1));
+  }
+
+  /* 移动端 GitHub Star 按钮 */
+  .mobile-nav-star {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--color-accent, #ffd700);
+    border-radius: 8px;
+    color: var(--color-accent, #ffd700);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: background-color 200ms ease-out, color 200ms ease-out;
+  }
+
+  .mobile-nav-star:hover {
+    background-color: var(--color-accent, #ffd700);
+    color: var(--color-bg-primary, #0d0d1a);
+  }
+
+  .mobile-nav-star svg {
+    flex-shrink: 0;
+  }
+
+  /* ===== 响应式断点 ===== */
+
+  /*
+   * 📚 学习要点: 移动端断点策略（< 768px）
+   * 768px 是平板竖屏的典型宽度，也是 Tailwind 的 md 断点。
+   * 低于此宽度时：
+   * - 隐藏桌面端水平导航和 GitHub Star 按钮
+   * - 显示汉堡菜单按钮
+   * - 导航通过全屏抽屉提供
+   */
+  @media (max-width: 767px) {
+    .site-nav {
+      padding: 0.5rem 1rem;
+    }
+
+    /* 隐藏桌面端导航元素 */
+    .nav-links {
+      display: none;
+    }
+
+    .nav-github-star {
+      display: none;
+    }
+
+    /* 显示汉堡菜单按钮 */
+    .nav-hamburger {
+      display: inline-flex;
+    }
+  }
+
+  /*
+   * 📚 学习要点: 桌面端隐藏移动端抽屉
+   * 在 ≥ 768px 时，即使 JS 出错导致 hidden 属性被移除，
+   * CSS 也确保抽屉不会意外显示。双重保险策略。
+   */
+  @media (min-width: 768px) {
+    .mobile-nav-drawer {
+      display: none !important;
+    }
+  }
+</style>

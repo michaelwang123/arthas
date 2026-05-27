@@ -1,0 +1,294 @@
+---
+/**
+ * HowItWorks — 使用流程步骤展示组件
+ *
+ * 本组件展示 Arthas 的核心使用流程：Create → Share → Chat → Gone，
+ * 以可视化的步骤序列帮助访客快速理解产品的使用方式和生命周期。
+ *
+ * 📚 学习要点: 渐进式信息架构
+ * "How It Works" 是 SaaS 营销页面的经典模式：
+ * - 将复杂产品简化为 3-5 个线性步骤
+ * - 每步配合图标降低认知负担（图形比文字处理速度快 60,000 倍）
+ * - 步骤间的连接线/箭头暗示流程的顺序性和因果关系
+ * - 最后一步（Gone）强化产品的核心差异化价值（临时性）
+ *
+ * 响应式策略：
+ * - 桌面端（≥768px）：水平排列 + 步骤间箭头连接器
+ * - 移动端（<768px）：垂直堆叠 + 步骤间竖线连接器
+ *
+ * 与其他模块的关系：
+ * - 被 src/pages/index.astro 和 src/pages/zh/index.astro 引用
+ * - 使用 src/i18n/utils.ts 的 t() 函数获取多语言文案
+ * - 引用 src/styles/global.css 中定义的 CSS 变量
+ */
+
+import { t, getLocaleFromUrl } from '../i18n/utils';
+import type { Locale } from '../i18n/utils';
+
+/**
+ * 📚 学习要点: Astro Props 类型定义
+ * Astro 组件通过 Props interface 声明接受的属性。
+ * 这里 locale 是可选的 — 如果父组件不传入，
+ * 组件会从 URL 自动推断语言（getLocaleFromUrl）。
+ * 这种"可选 prop + 自动检测"模式让组件既灵活又易用。
+ */
+interface Props {
+  /** 目标语言，不传则从 URL 自动检测 */
+  locale?: Locale;
+}
+
+const { locale: propLocale } = Astro.props;
+const locale = propLocale ?? getLocaleFromUrl(Astro.url);
+
+/**
+ * 📚 学习要点: 数据驱动的组件渲染
+ * 将步骤数据抽取为数组，而非在模板中硬编码 4 段重复 HTML。
+ * 优势：
+ * - 新增/删除步骤只需修改数组，无需改动模板结构
+ * - 每个步骤的 i18n key 遵循统一命名规则（howitworks.stepN.xxx）
+ * - icon 使用 emoji 作为初始方案，后续可替换为 SVG 图标
+ */
+const steps = [
+  { icon: '🔑', labelKey: 'howitworks.step1.label', descKey: 'howitworks.step1.description' },
+  { icon: '🔗', labelKey: 'howitworks.step2.label', descKey: 'howitworks.step2.description' },
+  { icon: '💬', labelKey: 'howitworks.step3.label', descKey: 'howitworks.step3.description' },
+  { icon: '💨', labelKey: 'howitworks.step4.label', descKey: 'howitworks.step4.description' },
+];
+---
+
+<section class="how-it-works" aria-labelledby="howitworks-heading">
+  <h2 id="howitworks-heading" class="section-title">
+    {t('howitworks.title', locale)}
+  </h2>
+
+  <div class="steps-container" role="list">
+    {steps.map((step, index) => (
+      <div class="step-wrapper" role="listitem">
+        {/* 步骤卡片 */}
+        <div class="step-card">
+          <span class="step-icon" aria-hidden="true">{step.icon}</span>
+          <span class="step-number" aria-label={`Step ${index + 1}`}>{index + 1}</span>
+          <h3 class="step-label">{t(step.labelKey, locale)}</h3>
+          <p class="step-description">{t(step.descKey, locale)}</p>
+        </div>
+
+        {/* 步骤间连接器（最后一步不显示） */}
+        {index < steps.length - 1 && (
+          <div class="step-connector" aria-hidden="true">
+            <span class="connector-arrow">→</span>
+            <span class="connector-line"></span>
+          </div>
+        )}
+      </div>
+    ))}
+  </div>
+</section>
+
+<style>
+  /* ==========================================================================
+     HowItWorks 组件样式
+     ========================================================================== */
+
+  .how-it-works {
+    padding: 4rem 1.5rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .section-title {
+    text-align: center;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: 3rem;
+  }
+
+  /* --------------------------------------------------------------------------
+     步骤容器 — 桌面端水平排列
+     -------------------------------------------------------------------------- */
+
+  .steps-container {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0;
+  }
+
+  /* --------------------------------------------------------------------------
+     步骤包装器 — 包含卡片 + 连接器
+     -------------------------------------------------------------------------- */
+
+  .step-wrapper {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    max-width: 280px;
+  }
+
+  /* --------------------------------------------------------------------------
+     步骤卡片
+     -------------------------------------------------------------------------- */
+
+  .step-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 1.5rem 1rem;
+    border-radius: 12px;
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-hairline);
+    flex: 1;
+    min-width: 0;
+    transition: transform 250ms ease-out, box-shadow 250ms ease-out;
+  }
+
+  .step-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(255, 215, 0, 0.08);
+  }
+
+  .step-icon {
+    font-size: 2.5rem;
+    line-height: 1;
+    margin-bottom: 0.75rem;
+  }
+
+  /**
+   * 📚 学习要点: 步骤编号的视觉设计
+   * 使用品牌强调色（dawn gold）的低透明度背景 + 高对比度文字，
+   * 既突出步骤序号又不抢夺图标的视觉焦点。
+   * 圆形设计暗示"流程节点"的语义。
+   */
+  .step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(255, 215, 0, 0.15);
+    color: var(--color-accent);
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+
+  .step-label {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0 0 0.5rem 0;
+  }
+
+  .step-description {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  /* --------------------------------------------------------------------------
+     步骤连接器 — 桌面端水平箭头
+     -------------------------------------------------------------------------- */
+
+  /**
+   * 📚 学习要点: 连接器的双重实现
+   * 桌面端显示水平箭头（→），移动端显示垂直线条。
+   * 使用 CSS 媒体查询切换显示，而非 JS 条件渲染，
+   * 确保 SSG 输出的 HTML 包含两种结构，由 CSS 控制可见性。
+   * 这避免了 hydration mismatch 和布局闪烁。
+   */
+  .step-connector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.5rem;
+    flex-shrink: 0;
+  }
+
+  .connector-arrow {
+    color: var(--color-accent);
+    font-size: 1.5rem;
+    font-weight: 700;
+    opacity: 0.7;
+  }
+
+  .connector-line {
+    display: none;
+  }
+
+  /* --------------------------------------------------------------------------
+     响应式 — 移动端垂直堆叠
+     -------------------------------------------------------------------------- */
+
+  @media (max-width: 767px) {
+    .how-it-works {
+      padding: 3rem 1rem;
+    }
+
+    .section-title {
+      font-size: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .steps-container {
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+
+    .step-wrapper {
+      flex-direction: column;
+      align-items: center;
+      max-width: 100%;
+      width: 100%;
+    }
+
+    .step-card {
+      width: 100%;
+      max-width: 320px;
+    }
+
+    /* 📚 学习要点: 移动端最小字体 16px (Req 4.3)
+       步骤描述文本在移动端提升至 1rem (16px)，确保可读性。 */
+    .step-description {
+      font-size: 1rem;
+    }
+
+    /* 移动端：隐藏水平箭头，显示垂直连接线 */
+    .connector-arrow {
+      display: none;
+    }
+
+    .connector-line {
+      display: block;
+      width: 2px;
+      height: 24px;
+      background: linear-gradient(
+        to bottom,
+        var(--color-accent),
+        transparent
+      );
+      border-radius: 1px;
+    }
+
+    .step-connector {
+      padding: 0.25rem 0;
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+     大屏优化 — 增加间距
+     -------------------------------------------------------------------------- */
+
+  @media (min-width: 1024px) {
+    .step-wrapper {
+      max-width: 300px;
+    }
+
+    .step-connector {
+      padding: 0 1rem;
+    }
+  }
+</style>

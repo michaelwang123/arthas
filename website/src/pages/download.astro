@@ -1,0 +1,30 @@
+---
+/**
+ * 下载页面（英文版） — Arthas 二进制下载与自托管指南
+ *
+ * 📚 学习要点: 组件提取后的页面文件职责
+ * 页面文件只负责两件事：
+ * 1. 提供 SEO meta 信息（title、description）给 Layout
+ * 2. 传入 locale prop 给共享内容组件
+ * 所有展示逻辑、样式和交互都封装在 DownloadContent 组件中。
+ *
+ * 路由映射：
+ * - 文件路径: src/pages/download.astro
+ * - 生成 URL: /arthas/download
+ *
+ * @see src/components/DownloadContent.astro — 共享内容组件
+ * @see src/pages/zh/download.astro — 对应的中文版本
+ */
+
+import Landing from '../layouts/Landing.astro';
+import Footer from '../components/Footer.astro';
+import DownloadContent from '../components/DownloadContent.astro';
+---
+
+<Landing
+  title="Download Arthas"
+  description="Download Arthas binaries for your platform or self-host with Docker. End-to-end encrypted chat and file sharing."
+>
+  <DownloadContent locale="en" />
+  <Footer slot="footer" />
+</Landing>

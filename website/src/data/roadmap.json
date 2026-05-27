@@ -1,0 +1,154 @@
+{
+  "phases": [
+    {
+      "id": 1,
+      "name": "技术选型 & 项目骨架",
+      "nameEn": "Tech Stack & Project Scaffold",
+      "status": "completed",
+      "percentage": 100,
+      "features": [
+        { "name": "技术选型 & 架构设计", "nameEn": "Tech Stack & Architecture Design", "done": true },
+        { "name": "前后端项目骨架", "nameEn": "Frontend & Backend Project Scaffold", "done": true }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "实时通信",
+      "nameEn": "Real-time Communication",
+      "status": "completed",
+      "percentage": 100,
+      "features": [
+        { "name": "WebSocket 连接 + 心跳", "nameEn": "WebSocket + Heartbeat", "done": true },
+        { "name": "房间系统 (CRUD + 自动销毁)", "nameEn": "Room System (CRUD + Auto-destroy)", "done": true }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "端到端加密",
+      "nameEn": "End-to-End Encryption",
+      "status": "completed",
+      "percentage": 100,
+      "features": [
+        { "name": "E2EE 加密层 (AES-256-GCM)", "nameEn": "E2EE Layer (AES-256-GCM)", "done": true },
+        { "name": "实时聊天 UI (完整功能)", "nameEn": "Real-time Chat UI (Full Features)", "done": true }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "上线验证",
+      "nameEn": "Launch Validation",
+      "status": "completed",
+      "percentage": 100,
+      "features": [
+        { "name": "健康检查端点", "nameEn": "Health Check Endpoint", "done": true },
+        { "name": "Vercel 部署前端", "nameEn": "Vercel Frontend Deployment", "done": true },
+        { "name": "HF Spaces 部署后端", "nameEn": "HF Spaces Backend Deployment", "done": true },
+        { "name": "WSS (TLS 1.3) 端到端验证", "nameEn": "WSS (TLS 1.3) E2E Verification", "done": true },
+        { "name": "生产级服务器配置", "nameEn": "Production Server Configuration", "done": true },
+        { "name": "Docker 镜像优化 (< 30MB)", "nameEn": "Docker Image Optimization (< 30MB)", "done": true }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "体验打磨",
+      "nameEn": "UX Polish",
+      "status": "completed",
+      "percentage": 100,
+      "features": [
+        { "name": "连接状态横幅", "nameEn": "Connection Status Banner", "done": true },
+        { "name": "响应式/移动端适配", "nameEn": "Responsive / Mobile Adaptation", "done": true },
+        { "name": "消息通知", "nameEn": "Message Notifications", "done": true },
+        { "name": "PWA 支持", "nameEn": "PWA Support", "done": true },
+        { "name": "Emoji 选择器", "nameEn": "Emoji Picker", "done": true },
+        { "name": "链接自动识别", "nameEn": "Auto Link Detection", "done": true },
+        { "name": "复制消息", "nameEn": "Copy Message", "done": true },
+        { "name": "消息时间分组", "nameEn": "Message Time Grouping", "done": true },
+        { "name": "发送消息动画", "nameEn": "Send Message Animation", "done": true },
+        { "name": "加入/离开音效", "nameEn": "Join / Leave Sound Effects", "done": true }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "差异化功能",
+      "nameEn": "Differentiating Features",
+      "status": "completed",
+      "percentage": 100,
+      "features": [
+        { "name": "消息回复/引用", "nameEn": "Message Reply / Quote", "done": true },
+        { "name": "消息反应 (Reactions)", "nameEn": "Message Reactions", "done": true },
+        { "name": "加密文件分享", "nameEn": "Encrypted File Sharing", "done": true },
+        { "name": "房间密码保护", "nameEn": "Room Password Protection", "done": true },
+        { "name": "阅后即焚增强模式", "nameEn": "Enhanced Ephemeral Mode", "done": true }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "平台扩展",
+      "nameEn": "Platform Expansion",
+      "status": "in-progress",
+      "percentage": 80,
+      "features": [
+        { "name": "自托管一键脚本", "nameEn": "Self-hosted One-click Script", "done": true },
+        { "name": "CLI 客户端", "nameEn": "CLI Client", "done": true },
+        { "name": "国际化 (i18n)", "nameEn": "Internationalization (i18n)", "done": true },
+        { "name": "嵌入式 SDK", "nameEn": "Embeddable SDK", "done": false },
+        { "name": "浏览器扩展", "nameEn": "Browser Extension", "done": false }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "安全升级",
+      "nameEn": "Security Upgrade",
+      "status": "completed",
+      "percentage": 100,
+      "features": [
+        { "name": "加密 Typing 状态", "nameEn": "Encrypted Typing Status", "done": true },
+        { "name": "Ed25519 消息签名", "nameEn": "Ed25519 Message Signing", "done": true },
+        { "name": "Canonical JSON 序列化", "nameEn": "Canonical JSON Serialization", "done": true },
+        { "name": "公钥广播与 TOFU 信任", "nameEn": "Public Key Broadcast & TOFU Trust", "done": true },
+        { "name": "签名验证 UI", "nameEn": "Signature Verification UI", "done": true },
+        { "name": "CLI 签名集成", "nameEn": "CLI Signing Integration", "done": true },
+        { "name": "跨客户端互操作测试", "nameEn": "Cross-client Interop Tests", "done": true }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "加密语音消息",
+      "nameEn": "Encrypted Voice Messages",
+      "status": "completed",
+      "percentage": 100,
+      "features": [
+        { "name": "Push-to-Talk 录音", "nameEn": "Push-to-Talk Recording", "done": true },
+        { "name": "Opus 编码", "nameEn": "Opus Encoding", "done": true },
+        { "name": "整体加密传输", "nameEn": "Full Blob Encryption", "done": true },
+        { "name": "语音气泡 UI", "nameEn": "Voice Bubble UI", "done": true },
+        { "name": "LRU 缓存", "nameEn": "LRU Cache", "done": true }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "分享体验增强",
+      "nameEn": "Share Experience Enhancement",
+      "status": "completed",
+      "percentage": 100,
+      "features": [
+        { "name": "QR 码分享", "nameEn": "QR Code Sharing", "done": true },
+        { "name": "房间链接过期", "nameEn": "Room Link Expiry", "done": true },
+        { "name": "过期倒计时", "nameEn": "Expiry Countdown", "done": true },
+        { "name": "服务器预警", "nameEn": "Server Pre-expiry Warning", "done": true },
+        { "name": "CLI 同步支持", "nameEn": "CLI Sync Support", "done": true }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "开源生态 & AI 集成",
+      "nameEn": "Open Source Ecosystem & AI Integration",
+      "status": "planned",
+      "percentage": 0,
+      "features": [
+        { "name": "项目官网 (GitHub Pages)", "nameEn": "Project Website (GitHub Pages)", "done": false },
+        { "name": "OpenClaw Channel Plugin", "nameEn": "OpenClaw Channel Plugin", "done": false }
+      ]
+    }
+  ]
+}

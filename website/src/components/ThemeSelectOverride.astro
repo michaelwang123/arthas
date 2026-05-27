@@ -1,0 +1,20 @@
+---
+/**
+ * ThemeSelectOverride — 空组件，隐藏 Starlight 主题切换按钮
+ *
+ * 📚 学习要点: Starlight 组件覆盖机制
+ * Starlight 允许通过 `components` 配置项替换内置组件。
+ * 将 ThemeSelect 指向这个空组件，Starlight 就不会渲染主题切换按钮。
+ * 配合 global.css 中将 light/dark 变量都设为暗色值，实现强制暗色模式。
+ *
+ * 为什么不直接删除 ThemeSelect？
+ * - Starlight 内部会尝试渲染 ThemeSelect 组件
+ * - 如果组件不存在会导致构建错误
+ * - 提供空组件是官方推荐的"禁用"方式
+ *
+ * 与其他模块的关系：
+ * - 在 astro.config.mjs 中通过 components.ThemeSelect 引用
+ * - 与 src/styles/global.css 配合实现完整的强制暗色策略
+ */
+---
+<!-- 空组件 — 不输出任何 HTML，隐藏主题切换按钮 -->

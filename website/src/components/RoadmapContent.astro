@@ -1,0 +1,438 @@
+---
+/**
+ * RoadmapContent 共享组件 — 路线图页面的完整内容（含逻辑、HTML、CSS）
+ *
+ * 本组件封装了路线图页面的所有展示逻辑，通过 locale prop 支持中英文切换。
+ * EN 和 ZH 路线图页面只需导入此组件并传入对应 locale，消除 CSS 重复。
+ *
+ * 📚 学习要点: 数据驱动的静态页面 + 类型安全
+ * - Astro 在 build-time 读取 JSON 数据并生成静态 HTML（零 JS 开销）
+ * - 使用 TypeScript 接口（RoadmapPhase/RoadmapFeature）替代 any 类型
+ * - 状态到视觉的映射通过 statusConfig 对象实现，易于扩展新状态
+ *
+ * @see src/pages/roadmap.astro — 英文路线图页（使用本组件）
+ * @see src/pages/zh/roadmap.astro — 中文路线图页（使用本组件）
+ * @see src/types/roadmap.ts — 数据类型定义
+ * @see src/data/roadmap.json — 路线图数据源
+ */
+
+import { t } from '../i18n/utils';
+import type { Locale } from '../i18n/utils';
+import type { RoadmapPhase, RoadmapFeature } from '../types/roadmap';
+
+interface Props {
+  /** 当前语言标识符 */
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+
+// 📚 学习要点: 安全的数据导入与错误处理
+let phases: RoadmapPhase[] = [];
+let loadError = false;
+
+try {
+  const roadmapData = await import('../data/roadmap.json');
+  if (roadmapData?.phases && Array.isArray(roadmapData.phases)) {
+    phases = roadmapData.phases as RoadmapPhase[];
+  } else {
+    loadError = true;
+  }
+} catch (e) {
+  loadError = true;
+}
+
+/**
+ * 📚 学习要点: 状态到视觉映射
+ * 使用颜色和图标双重编码，确保色盲用户也能区分状态（WCAG 1.4.1）。
+ */
+const statusConfig: Record<string, { icon: string; colorClass: string }> = {
+  'completed': { icon: '✅', colorClass: 'status-completed' },
+  'in-progress': { icon: '⏳', colorClass: 'status-in-progress' },
+  'planned': { icon: '📋', colorClass: 'status-planned' },
+};
+
+function getStatusConfig(status: string) {
+  return statusConfig[status] || statusConfig['planned'];
+}
+
+/** 获取阶段显示名称（根据 locale 选择中文或英文字段） */
+function getPhaseName(phase: RoadmapPhase): string {
+  if (locale === 'zh') {
+    return phase.name || phase.nameEn || `阶段 ${phase.id}`;
+  }
+  return phase.nameEn || phase.name || `Phase ${phase.id}`;
+}
+
+/** 获取功能显示名称（根据 locale 选择中文或英文字段） */
+function getFeatureName(feature: RoadmapFeature): string {
+  if (locale === 'zh') {
+    return feature.name || feature.nameEn || '未命名功能';
+  }
+  return feature.nameEn || feature.name || 'Unnamed feature';
+}
+
+// 本地化文案
+const phasePrefix = locale === 'zh' ? '阶段' : 'Phase';
+const statusPrefix = locale === 'zh' ? '状态' : 'Status';
+const completedText = locale === 'zh' ? '（已完成）' : '(completed)';
+const pendingText = locale === 'zh' ? '（未完成）' : '(not completed)';
+---
+
+<section class="roadmap-page" aria-labelledby="roadmap-heading">
+  <div class="roadmap-container">
+
+    <header class="roadmap-header">
+      <h1 id="roadmap-heading">{t('roadmap.title', locale)}</h1>
+      <p class="roadmap-description">{t('roadmap.description', locale)}</p>
+    </header>
+
+    {loadError && (
+      <div class="error-notice" role="alert">
+        <h2>{t('roadmap.error.title', locale)}</h2>
+        <p>{t('roadmap.error.message', locale)}</p>
+      </div>
+    )}
+
+    {!loadError && (
+      <div class="phases-list">
+        {phases.map((phase) => {
+          const config = getStatusConfig(phase.status);
+          const phaseName = getPhaseName(phase);
+          const percentage = typeof phase.percentage === 'number' ? phase.percentage : 0;
+          const statusLabel = t(`roadmap.status.${phase.status}`, locale);
+          const progressLabel = t('roadmap.progress.label', locale)
+            .replace('{name}', phaseName)
+            .replace('{percentage}', String(percentage));
+
+          return (
+            <article class={`phase-card ${config.colorClass}`} aria-label={`${phasePrefix} ${phase.id}: ${phaseName}`}>
+              <div class="phase-header">
+                <div class="phase-title-row">
+                  <span class="phase-number">{phasePrefix} {phase.id}</span>
+                  <h2 class="phase-name">{phaseName}</h2>
+                </div>
+                <div class="phase-status" aria-label={`${statusPrefix}: ${statusLabel}`}>
+                  <span class="status-icon" aria-hidden="true">{config.icon}</span>
+                  <span class="status-label">{statusLabel}</span>
+                </div>
+              </div>
+
+              <div class="progress-wrapper">
+                <div
+                  class="progress-bar"
+                  role="progressbar"
+                  aria-valuenow={percentage}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={progressLabel}
+                >
+                  <div class="progress-fill" style={`width: ${percentage}%`}></div>
+                </div>
+                <span class="progress-text" aria-hidden="true">{percentage}%</span>
+              </div>
+
+              {phase.features && phase.features.length > 0 && (
+                <ul class="features-list" aria-label={locale === 'zh' ? `${phaseName} 的功能列表` : `Features for ${phaseName}`}>
+                  {phase.features.slice(0, 10).map((feature: RoadmapFeature) => (
+                    <li class={feature.done ? 'feature-done' : 'feature-pending'}>
+                      <span class="feature-indicator" aria-hidden="true">
+                        {feature.done ? '✓' : '○'}
+                      </span>
+                      <span class="feature-name">{getFeatureName(feature)}</span>
+                      <span class="sr-only">
+                        {feature.done ? completedText : pendingText}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    )}
+
+  </div>
+</section>
+
+<style>
+  .roadmap-page {
+    padding: 3rem 1.5rem;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .roadmap-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  .roadmap-header {
+    text-align: center;
+  }
+
+  .roadmap-header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: 0.75rem;
+  }
+
+  .roadmap-description {
+    color: var(--color-text-secondary);
+    font-size: 1.1rem;
+    max-width: 650px;
+    margin: 0 auto;
+  }
+
+  .error-notice {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 0.75rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  .error-notice h2 {
+    color: #ef4444;
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .error-notice p {
+    color: var(--color-text-secondary);
+  }
+
+  .phases-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .phase-card {
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-hairline);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
+  }
+
+  .phase-card:hover {
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.03);
+  }
+
+  .phase-card.status-completed {
+    border-left: 4px solid #22c55e;
+  }
+
+  .phase-card.status-in-progress {
+    border-left: 4px solid #f59e0b;
+  }
+
+  .phase-card.status-planned {
+    border-left: 4px solid #6b7280;
+  }
+
+  .phase-card.status-completed:hover {
+    border-color: rgba(34, 197, 94, 0.4);
+  }
+
+  .phase-card.status-in-progress:hover {
+    border-color: rgba(245, 158, 11, 0.4);
+  }
+
+  .phase-card.status-planned:hover {
+    border-color: rgba(107, 114, 128, 0.4);
+  }
+
+  .phase-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .phase-title-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .phase-number {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-secondary);
+  }
+
+  .phase-name {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin: 0;
+  }
+
+  .phase-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .status-completed .phase-status {
+    background: rgba(34, 197, 94, 0.1);
+    color: #22c55e;
+  }
+
+  .status-in-progress .phase-status {
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+  }
+
+  .status-planned .phase-status {
+    background: rgba(107, 114, 128, 0.1);
+    color: #9ca3af;
+  }
+
+  .status-icon {
+    font-size: 0.9rem;
+  }
+
+  .progress-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .progress-bar {
+    flex: 1;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 400ms ease-out;
+  }
+
+  .status-completed .progress-fill {
+    background: linear-gradient(90deg, #22c55e, #4ade80);
+  }
+
+  .status-in-progress .progress-fill {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  }
+
+  .status-planned .progress-fill {
+    background: #6b7280;
+  }
+
+  .progress-text {
+    font-size: 0.85rem;
+    font-weight: 700;
+    min-width: 3rem;
+    text-align: right;
+    color: var(--color-text-secondary);
+  }
+
+  .status-completed .progress-text {
+    color: #22c55e;
+  }
+
+  .status-in-progress .progress-text {
+    color: #f59e0b;
+  }
+
+  .features-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .features-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+
+  .feature-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .feature-done .feature-indicator {
+    color: #22c55e;
+  }
+
+  .feature-pending .feature-indicator {
+    color: #6b7280;
+  }
+
+  .feature-done .feature-name {
+    color: var(--color-text-primary);
+  }
+
+  .feature-pending .feature-name {
+    color: var(--color-text-secondary);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  @media (max-width: 767px) {
+    .roadmap-page {
+      padding: 2rem 1rem;
+    }
+
+    .roadmap-header h1 {
+      font-size: 2rem;
+    }
+
+    .phase-header {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .phase-name {
+      font-size: 1.1rem;
+    }
+
+    .features-list {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

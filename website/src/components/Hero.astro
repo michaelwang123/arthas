@@ -1,0 +1,602 @@
+---
+/**
+ * Hero — 首页顶部大型视觉展示区域
+ *
+ * 本组件是访客进入 Arthas 官网后看到的第一个内容区域，
+ * 负责在 3 秒内传达产品核心价值并引导用户行动。
+ *
+ * 📚 学习要点: Hero Section 设计原则
+ * Hero 是营销页面最重要的区域（"above the fold"）：
+ * - 标题传达"是什么"（Arthas）
+ * - 副标题传达"为什么用"（加密版 AirDrop + 临时聊天）
+ * - CTA 按钮传达"怎么用"（Launch App）
+ * - 动画增加视觉吸引力但不干扰信息传达
+ *
+ * 与其他模块的关系：
+ * - 被 src/pages/index.astro 和 src/pages/zh/index.astro 引用
+ * - 使用 src/i18n/utils.ts 的 t() 函数获取多语言文案
+ * - 引用 src/styles/global.css 中定义的 CSS 变量
+ * - Logo 从 src/assets/logo.svg 导入（Astro 自动处理 base path 和 hash）
+ */
+
+import { t, getLocaleFromUrl } from '../i18n/utils';
+import type { Locale } from '../i18n/utils';
+
+/**
+ * 组件 Props 接口
+ * @property locale - 可选的语言标识符，若未提供则从 URL 自动检测
+ */
+interface Props {
+  locale?: Locale;
+}
+
+const { locale: propLocale } = Astro.props;
+const locale = propLocale ?? getLocaleFromUrl(Astro.url);
+---
+
+<section class="hero" aria-label="Product introduction">
+  <div class="hero-content">
+    {/* 📚 学习要点: 品牌标识层次
+        Logo emoji + 产品名构成视觉锚点，
+        tagline 紧随其后提供价值主张，
+        CTA 按钮是唯一的行动引导。 */}
+    <span class="hero-logo" aria-hidden="true">🔒</span>
+    <h1 class="hero-title">{t('hero.title', locale)}</h1>
+    <p class="hero-tagline">{t('hero.tagline', locale)}</p>
+
+    {/* 📚 学习要点: CTA 按钮安全属性
+        target="_blank" 在新标签页打开，避免用户离开官网。
+        rel="noopener" 阻止新页面通过 window.opener 访问原页面，
+        防止 tabnabbing 攻击。
+        最小触摸目标 44x44px 确保移动端可用性（WCAG 2.5.5）。 */}
+    <a
+      href="https://arthas-blush.vercel.app"
+      target="_blank"
+      rel="noopener"
+      class="hero-cta"
+    >
+      {t('hero.launch', locale)} →
+    </a>
+  </div>
+
+  {/* 📚 学习要点: CSS-only 加密粒子动画（Phase B 增强版）
+      使用多层视觉元素模拟加密数据流的效果：
+      - 圆形粒子（.particle）代表加密数据包在网络中流动
+      - 字符粒子（.cipher-char）显示十六进制字符，暗示加密过程
+      - 连接线（.connection-line）模拟节点间的加密通道
+      - 脉冲环（.pulse-ring）模拟加密握手/密钥交换的脉冲信号
+      - 所有动画使用 GPU 加速属性（transform, opacity）避免重排
+      - animation-delay 分布确保首个动画在 <1s 内开始播放
+      aria-hidden="true" 确保屏幕阅读器跳过纯装饰内容 */}
+  <div class="hero-animation" aria-hidden="true">
+    {/* 圆形粒子 — 模拟加密数据包 */}
+    <span class="particle particle-1"></span>
+    <span class="particle particle-2"></span>
+    <span class="particle particle-3"></span>
+    <span class="particle particle-4"></span>
+    <span class="particle particle-5"></span>
+    <span class="particle particle-6"></span>
+    <span class="particle particle-7"></span>
+    <span class="particle particle-8"></span>
+    {/* 字符粒子 — 十六进制/二进制字符暗示加密 */}
+    <span class="cipher-char cipher-char-1">0x</span>
+    <span class="cipher-char cipher-char-2">FF</span>
+    <span class="cipher-char cipher-char-3">01</span>
+    <span class="cipher-char cipher-char-4">A7</span>
+    <span class="cipher-char cipher-char-5">E2</span>
+    <span class="cipher-char cipher-char-6">9B</span>
+    {/* 连接线 — 模拟加密通道 */}
+    <span class="connection-line connection-line-1"></span>
+    <span class="connection-line connection-line-2"></span>
+    <span class="connection-line connection-line-3"></span>
+    {/* 脉冲环 — 模拟加密握手信号 */}
+    <span class="pulse-ring pulse-ring-1"></span>
+    <span class="pulse-ring pulse-ring-2"></span>
+    <span class="pulse-ring pulse-ring-3"></span>
+  </div>
+</section>
+
+<style>
+  /* ==========================================================================
+     Hero 组件样式
+     ========================================================================== */
+
+  .hero {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 70vh;
+    padding: 4rem 1.5rem;
+    overflow: hidden;
+    text-align: center;
+  }
+
+  .hero-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    max-width: 700px;
+  }
+
+  /* Logo emoji — 大尺寸品牌标识 */
+  .hero-logo {
+    font-size: 4rem;
+    line-height: 1;
+  }
+
+  /* 产品名 — 最大标题 */
+  .hero-title {
+    font-size: 3.5rem;
+    font-weight: 800;
+    color: var(--color-text-primary);
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+
+  /* 副标题 — 价值主张 */
+  .hero-tagline {
+    font-size: 1.25rem;
+    color: var(--color-text-secondary);
+    margin: 0;
+    line-height: 1.6;
+    max-width: 560px;
+  }
+
+  /**
+   * 📚 学习要点: CTA 按钮设计
+   * - 使用品牌强调色（dawn gold）确保视觉突出
+   * - min-height/min-width 确保 44x44px 最小触摸目标
+   * - padding 提供舒适的点击区域
+   * - transition 提供交互反馈
+   */
+  .hero-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.875rem 2rem;
+    margin-top: 0.5rem;
+    background-color: var(--color-accent);
+    color: #0d0d1a;
+    font-size: 1.1rem;
+    font-weight: 700;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: transform 200ms ease-out, box-shadow 200ms ease-out;
+  }
+
+  .hero-cta:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(255, 215, 0, 0.3);
+  }
+
+  .hero-cta:focus-visible {
+    outline: 2px solid var(--color-text-primary);
+    outline-offset: 3px;
+  }
+
+  /* --------------------------------------------------------------------------
+     CSS-only 加密粒子动画（Phase B 增强版）
+     -------------------------------------------------------------------------- */
+
+  /**
+   * 📚 学习要点: CSS-only 动画性能策略
+   * 使用纯 CSS keyframes 而非 JS 动画库的原因：
+   * - 零 JS 开销，不增加 bundle size
+   * - 仅使用 transform 和 opacity（合成层属性），由 GPU 加速
+   * - 不触发 layout/paint，即使粒子数量较多也不影响主线程
+   * - 通过 prefers-reduced-motion 媒体查询尊重用户偏好
+   *
+   * Phase B 增强设计：
+   * - 新增连接线（connection-line）模拟加密通道/节点间通信
+   * - 新增脉冲环（pulse-ring）模拟加密握手/密钥交换信号
+   * - 增加粒子数量（6→8）和字符粒子（4→6）提升视觉丰富度
+   * - animation-delay: 0s 确保首个粒子在页面加载后立即开始动画（<1s）
+   * - 多层动画使用不同的 duration 和 delay 创造深度感和自然随机感
+   */
+  .hero-animation {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  /* --- 圆形粒子：模拟加密数据包在网络中流动 --- */
+
+  .particle {
+    position: absolute;
+    border-radius: 50%;
+    background: var(--color-accent, #ffd700);
+    opacity: 0;
+    animation: particle-float ease-in-out infinite;
+  }
+
+  .particle-1 {
+    top: 18%;
+    left: 12%;
+    width: 5px;
+    height: 5px;
+    animation-duration: 7s;
+    animation-delay: 0s;
+  }
+
+  .particle-2 {
+    top: 55%;
+    right: 15%;
+    width: 4px;
+    height: 4px;
+    animation-duration: 9s;
+    animation-delay: 0.5s;
+  }
+
+  .particle-3 {
+    bottom: 30%;
+    left: 35%;
+    width: 7px;
+    height: 7px;
+    animation-duration: 8s;
+    animation-delay: 0.8s;
+  }
+
+  .particle-4 {
+    top: 35%;
+    right: 30%;
+    width: 3px;
+    height: 3px;
+    animation-duration: 10s;
+    animation-delay: 0.3s;
+  }
+
+  .particle-5 {
+    bottom: 15%;
+    right: 10%;
+    width: 6px;
+    height: 6px;
+    animation-duration: 11s;
+    animation-delay: 0.6s;
+  }
+
+  .particle-6 {
+    top: 75%;
+    left: 20%;
+    width: 4px;
+    height: 4px;
+    animation-duration: 8.5s;
+    animation-delay: 0.2s;
+  }
+
+  .particle-7 {
+    top: 10%;
+    right: 22%;
+    width: 3px;
+    height: 3px;
+    animation-duration: 9.5s;
+    animation-delay: 0.4s;
+  }
+
+  .particle-8 {
+    bottom: 40%;
+    left: 8%;
+    width: 5px;
+    height: 5px;
+    animation-duration: 7.5s;
+    animation-delay: 0.7s;
+  }
+
+  /**
+   * 📚 学习要点: 粒子浮动动画曲线
+   * 使用非对称的 keyframe 百分比（30%, 70%）而非简单的 50%，
+   * 让运动轨迹更自然，避免机械感。
+   * translateX 和 translateY 组合产生椭圆轨迹而非直线。
+   * box-shadow 在峰值时添加微弱光晕，增强"发光数据包"的视觉隐喻。
+   */
+  @keyframes particle-float {
+    0% {
+      transform: translate(0, 0) scale(1);
+      opacity: 0.15;
+      box-shadow: 0 0 2px rgba(255, 215, 0, 0.2);
+    }
+    30% {
+      transform: translate(8px, -18px) scale(1.2);
+      opacity: 0.4;
+      box-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+    }
+    70% {
+      transform: translate(-5px, -30px) scale(0.9);
+      opacity: 0.25;
+      box-shadow: 0 0 3px rgba(255, 215, 0, 0.2);
+    }
+    100% {
+      transform: translate(0, 0) scale(1);
+      opacity: 0.15;
+      box-shadow: 0 0 2px rgba(255, 215, 0, 0.2);
+    }
+  }
+
+  /* --- 字符粒子：十六进制文本暗示加密过程 --- */
+
+  .cipher-char {
+    position: absolute;
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--color-accent, #ffd700);
+    opacity: 0;
+    animation: cipher-drift linear infinite;
+    user-select: none;
+  }
+
+  .cipher-char-1 {
+    top: 25%;
+    left: 8%;
+    animation-duration: 12s;
+    animation-delay: 0s;
+  }
+
+  .cipher-char-2 {
+    top: 45%;
+    right: 8%;
+    animation-duration: 14s;
+    animation-delay: 0.6s;
+  }
+
+  .cipher-char-3 {
+    bottom: 20%;
+    left: 55%;
+    animation-duration: 11s;
+    animation-delay: 0.4s;
+  }
+
+  .cipher-char-4 {
+    top: 70%;
+    right: 35%;
+    animation-duration: 13s;
+    animation-delay: 0.9s;
+  }
+
+  .cipher-char-5 {
+    top: 15%;
+    left: 45%;
+    animation-duration: 10s;
+    animation-delay: 0.2s;
+  }
+
+  .cipher-char-6 {
+    bottom: 35%;
+    right: 20%;
+    animation-duration: 15s;
+    animation-delay: 0.7s;
+  }
+
+  /**
+   * 📚 学习要点: 字符粒子漂移动画
+   * 字符粒子使用更慢的动画周期（10-15s）和更大的位移，
+   * 与圆形粒子形成视觉层次差异（parallax 效果）。
+   * opacity 峰值仅 0.25，确保不干扰主内容的可读性。
+   * text-shadow 在可见时添加微弱光晕，增强"加密数据"的科技感。
+   */
+  @keyframes cipher-drift {
+    0% {
+      transform: translate(0, 0) rotate(0deg);
+      opacity: 0;
+    }
+    15% {
+      opacity: 0.25;
+      text-shadow: 0 0 4px rgba(255, 215, 0, 0.3);
+    }
+    50% {
+      transform: translate(-12px, -40px) rotate(5deg);
+      opacity: 0.15;
+      text-shadow: 0 0 2px rgba(255, 215, 0, 0.2);
+    }
+    85% {
+      opacity: 0.25;
+      text-shadow: 0 0 4px rgba(255, 215, 0, 0.3);
+    }
+    100% {
+      transform: translate(6px, -80px) rotate(-3deg);
+      opacity: 0;
+    }
+  }
+
+  /* --- 连接线：模拟加密通道/节点间通信 --- */
+
+  /**
+   * 📚 学习要点: 连接线动画设计
+   * 细长的线条元素模拟加密节点之间的通信通道。
+   * 使用 scaleX 动画让线条从无到有"生长"，暗示连接建立过程。
+   * 不同角度（rotate）的线条交叉形成网络拓扑的视觉暗示。
+   * 低 opacity（峰值 0.15）确保不干扰主内容。
+   */
+  .connection-line {
+    position: absolute;
+    width: 80px;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 215, 0, 0.4),
+      transparent
+    );
+    opacity: 0;
+    transform-origin: left center;
+    animation: line-pulse ease-in-out infinite;
+  }
+
+  .connection-line-1 {
+    top: 30%;
+    left: 15%;
+    transform: rotate(25deg);
+    animation-duration: 6s;
+    animation-delay: 0.3s;
+  }
+
+  .connection-line-2 {
+    top: 60%;
+    right: 20%;
+    transform: rotate(-15deg);
+    width: 100px;
+    animation-duration: 8s;
+    animation-delay: 0.8s;
+  }
+
+  .connection-line-3 {
+    bottom: 25%;
+    left: 40%;
+    transform: rotate(40deg);
+    width: 60px;
+    animation-duration: 7s;
+    animation-delay: 0.5s;
+  }
+
+  @keyframes line-pulse {
+    0% {
+      opacity: 0;
+      transform: rotate(var(--line-rotate, 0deg)) scaleX(0);
+    }
+    20% {
+      opacity: 0.15;
+      transform: rotate(var(--line-rotate, 0deg)) scaleX(1);
+    }
+    80% {
+      opacity: 0.15;
+      transform: rotate(var(--line-rotate, 0deg)) scaleX(1);
+    }
+    100% {
+      opacity: 0;
+      transform: rotate(var(--line-rotate, 0deg)) scaleX(0);
+    }
+  }
+
+  /* 📚 学习要点: CSS 自定义属性用于保持 rotate 角度
+     line-pulse 动画中需要保持每条线的初始旋转角度，
+     但 @keyframes 中的 transform 会覆盖元素的 transform。
+     解决方案：在 keyframes 中使用固定的 rotate 值，
+     通过不同的 animation-name 或直接在 keyframes 中处理。
+     这里简化为让 line-pulse 只控制 opacity 和 scaleX，
+     rotate 通过元素自身的 transform 设置（被 animation 覆盖时需要在 keyframes 中重复）。 */
+
+  .connection-line-1 {
+    --line-rotate: 25deg;
+  }
+
+  .connection-line-2 {
+    --line-rotate: -15deg;
+  }
+
+  .connection-line-3 {
+    --line-rotate: 40deg;
+  }
+
+  /* --- 脉冲环：模拟加密握手/密钥交换信号 --- */
+
+  /**
+   * 📚 学习要点: 脉冲环动画设计
+   * 圆环从中心向外扩散并逐渐消失，模拟加密握手的"广播"效果：
+   * - 类似雷达扫描或信号发射的视觉隐喻
+   * - scale(0) → scale(1) 的扩散暗示密钥交换的"传播"过程
+   * - 使用 border 而非 background，保持中心透明
+   * - 多个脉冲环使用不同的延迟形成连续脉冲效果
+   */
+  .pulse-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 215, 0, 0.3);
+    opacity: 0;
+    animation: pulse-expand ease-out infinite;
+  }
+
+  .pulse-ring-1 {
+    top: 20%;
+    left: 25%;
+    width: 40px;
+    height: 40px;
+    animation-duration: 5s;
+    animation-delay: 0s;
+  }
+
+  .pulse-ring-2 {
+    bottom: 30%;
+    right: 25%;
+    width: 50px;
+    height: 50px;
+    animation-duration: 6s;
+    animation-delay: 0.8s;
+  }
+
+  .pulse-ring-3 {
+    top: 50%;
+    left: 60%;
+    width: 35px;
+    height: 35px;
+    animation-duration: 5.5s;
+    animation-delay: 0.4s;
+  }
+
+  @keyframes pulse-expand {
+    0% {
+      transform: scale(0);
+      opacity: 0.3;
+    }
+    50% {
+      opacity: 0.15;
+    }
+    100% {
+      transform: scale(2.5);
+      opacity: 0;
+    }
+  }
+
+  /* --- 减少动画偏好：完全暂停所有动画 --- */
+
+  /**
+   * 📚 学习要点: prefers-reduced-motion 无障碍支持
+   * 当用户在操作系统中启用"减少动画"设置时，
+   * 此媒体查询将所有动画元素暂停（animation-play-state: paused）。
+   * 使用 paused 而非 none 保留元素的初始位置，避免布局跳动。
+   * 同时将 opacity 设为静态低值，让元素作为静态装饰存在。
+   * 这满足 WCAG 2.1 SC 2.3.3（动画来自交互）的精神：
+   * 用户明确表示不想看到动画时，我们尊重这一偏好。
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .particle,
+    .cipher-char,
+    .connection-line,
+    .pulse-ring {
+      animation-play-state: paused;
+      opacity: 0.1;
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+     响应式 — 移动端
+     -------------------------------------------------------------------------- */
+
+  @media (max-width: 767px) {
+    .hero {
+      min-height: 60vh;
+      padding: 3rem 1rem;
+    }
+
+    .hero-logo {
+      font-size: 3rem;
+    }
+
+    .hero-title {
+      font-size: 2.5rem;
+    }
+
+    .hero-tagline {
+      font-size: 1.1rem;
+    }
+
+    .hero-cta {
+      font-size: 1rem;
+      padding: 0.75rem 1.75rem;
+    }
+  }
+</style>

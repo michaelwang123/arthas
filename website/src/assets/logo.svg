@@ -1,0 +1,59 @@
+<!--
+  Arthas Brand Logo — Lock Icon + "Arthas" Text
+  
+  📚 学习要点: SVG Logo 设计策略
+  为什么将图标和文字组合在一个 SVG 中？
+  - 单文件引用，减少 HTTP 请求
+  - 图标与文字的相对位置和比例固定，不会因布局变化而错位
+  - 可通过 CSS 控制整体大小，保持比例一致
+  - Astro 的 import 机制会自动处理 base path 和 content hash
+  
+  品牌色彩：
+  - 金色 (#ffd700) — 主色调，代表安全与价值（"dawn gold"）
+  - 深色背景 (#0d0d1a) — 与应用暗色主题一致
+  - 浅色文字 (#e8e8e8) — 高对比度，确保可读性
+  
+  布局：左侧锁图标 + 右侧 "Arthas" 文字，水平排列
+  适用场景：网站 header、404 页面、文档侧边栏顶部
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 40" width="180" height="40">
+  <!-- 锁图标区域（左侧 40x40） -->
+  <g transform="translate(4, 4)">
+    <!-- 锁环（shackle） -->
+    <path
+      d="M11 16V12a5 5 0 0 1 10 0v4"
+      fill="none"
+      stroke="#ffd700"
+      stroke-width="2.5"
+      stroke-linecap="round"
+    />
+    
+    <!-- 锁体（body） -->
+    <rect x="8" y="16" width="16" height="13" rx="2.5" ry="2.5" fill="#ffd700"/>
+    
+    <!-- 锁孔（keyhole） -->
+    <circle cx="16" cy="21" r="2" fill="#0d0d1a"/>
+    <path d="M15 22.5 L16 26 L17 22.5 Z" fill="#0d0d1a"/>
+  </g>
+  
+  <!-- "Arthas" 文字（右侧） -->
+  <!-- 
+    📚 学习要点: SVG 文字与 Web 字体
+    使用 SVG <text> 而非 <path> 的权衡：
+    - <text> 依赖系统字体，但文件体积小且可被搜索引擎索引
+    - <path> 保证跨平台一致性，但文件体积大且不可选中
+    - 这里选择 <text>，因为 logo 主要在网站内使用，字体栈可控
+  -->
+  <text
+    x="48"
+    y="27"
+    font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+    font-size="22"
+    font-weight="700"
+    fill="#e8e8e8"
+    letter-spacing="0.5"
+  >Arthas</text>
+  
+  <!-- 金色下划线装饰 — 呼应品牌色，增加视觉层次 -->
+  <rect x="48" y="31" width="40" height="2" rx="1" fill="#ffd700" opacity="0.6"/>
+</svg>

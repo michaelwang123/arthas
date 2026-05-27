@@ -1,0 +1,28 @@
+---
+/**
+ * 路线图页面（中文版） — Arthas 项目开发进度可视化
+ *
+ * 📚 学习要点: 多语言页面的组件复用
+ * 中英文路线图页面共享同一个 RoadmapContent 组件，
+ * 仅通过 locale prop 切换语言，消除了 ~250 行重复 CSS。
+ *
+ * 路由映射：
+ * - 文件路径: src/pages/zh/roadmap.astro
+ * - 生成 URL: /arthas/zh/roadmap
+ *
+ * @see src/components/RoadmapContent.astro — 共享内容组件
+ * @see src/pages/roadmap.astro — 对应的英文版本
+ */
+
+import Landing from '../../layouts/Landing.astro';
+import Footer from '../../components/Footer.astro';
+import RoadmapContent from '../../components/RoadmapContent.astro';
+---
+
+<Landing
+  title="开发路线图"
+  description="追踪 Arthas 各阶段的开发进度 — 从初始骨架到未来功能。"
+>
+  <RoadmapContent locale="zh" />
+  <Footer slot="footer" />
+</Landing>

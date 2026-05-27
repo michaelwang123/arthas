@@ -1,0 +1,92 @@
+---
+/**
+ * 英文首页 — Arthas 官网默认入口页面
+ *
+ * 本文件是访客进入 Arthas 官网时看到的第一个页面（英文版）。
+ * 它使用 Landing 布局作为 HTML 骨架，组合所有首页组件形成完整的营销页面。
+ *
+ * 📚 学习要点: Astro 页面组合模式
+ * Astro 的页面文件（src/pages/*.astro）负责"组装"：
+ * - 选择布局（Landing.astro 提供 HTML 骨架 + SEO meta）
+ * - 引入组件（Hero、FeatureCards 等提供具体内容区域）
+ * - 传递 props（title/description 给布局，locale 给组件）
+ *
+ * 页面本身不包含复杂逻辑或样式 — 它是一个"胶水层"，
+ * 将独立开发和测试的组件按正确顺序组合在一起。
+ *
+ * 路由映射：
+ * - 文件路径: src/pages/index.astro
+ * - 生成 URL: /arthas/ （英文默认首页，无语言前缀）
+ *
+ * 与其他模块的关系：
+ * - 使用 src/layouts/Landing.astro 作为页面布局
+ * - 组合 Hero、FeatureCards、HowItWorks、TrustSection、Footer 组件
+ * - 所有组件默认从 URL 检测语言为 'en'（因为路径不含 /zh/）
+ *
+ * @see src/pages/zh/index.astro — 对应的中文版本
+ */
+
+import Landing from '../layouts/Landing.astro';
+import Hero from '../components/Hero.astro';
+import FeatureCards from '../components/FeatureCards.astro';
+import HowItWorks from '../components/HowItWorks.astro';
+import TrustSection from '../components/TrustSection.astro';
+import Footer from '../components/Footer.astro';
+---
+
+{/* 📚 学习要点: Layout 组件的 props 传递
+    title 和 description 传给 Landing 布局，用于生成 <title> 和 <meta description>。
+    这些值对 SEO 至关重要 — 搜索引擎在结果页展示这两个字段。
+    title: 30-60 字符最佳（超出会被截断）
+    description: 50-160 字符最佳（简洁描述页面内容） */}
+<Landing
+  title="Arthas — Encrypted Ephemeral Chat"
+  description="End-to-end encrypted temporary chat and file sharing. No signup, zero knowledge, self-destruct. Open source AGPL-3.0."
+>
+  {/* 📚 学习要点: JSON-LD 结构化数据（Schema.org）
+      JSON-LD（JavaScript Object Notation for Linked Data）是搜索引擎推荐的结构化数据格式。
+      通过 schema.org/SoftwareApplication 类型，告诉 Google/Bing 这是一个软件应用：
+      - @context: 声明使用 schema.org 词汇表
+      - @type: SoftwareApplication 表示这是一个软件产品
+      - applicationCategory: CommunicationApplication 帮助搜索引擎正确分类
+      - offers.price: "0" 表示免费，搜索结果可能展示"免费"标签
+      - license: 明确开源协议，增强可信度
+
+      为什么放在 head slot 而非 body？
+      Google 官方文档指出 JSON-LD 可放在 <head> 或 <body> 中，
+      但放在 <head> 是更常见的最佳实践，且不影响页面渲染性能。
+
+      注意：schema.org 是语言无关的，中英文页面使用相同的结构化数据。 */}
+  <script type="application/ld+json" slot="head" set:html={JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Arthas",
+    "description": "End-to-end encrypted temporary chat. No signup, zero knowledge, self-destruct.",
+    "url": "https://michaelwang123.github.io/arthas",
+    "applicationCategory": "CommunicationApplication",
+    "operatingSystem": "Web, Linux, macOS, Windows",
+    "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  })} />
+  {/* 📚 学习要点: 组件组合顺序
+      首页内容按信息架构的"倒金字塔"排列：
+      1. Hero — 最重要的信息（是什么 + CTA）
+      2. FeatureCards — 核心特性（为什么选择）
+      3. HowItWorks — 使用流程（怎么用）
+      4. TrustSection — 信任建设（为什么安全）
+      5. Footer — 辅助导航和法律信息
+
+      每个组件不传 locale prop — 它们会从 URL 自动检测为 'en'
+      （因为英文首页路径是 /arthas/，不含 /zh/ 前缀） */}
+  <Hero />
+  <FeatureCards />
+  <HowItWorks />
+  <TrustSection />
+
+  {/* Footer 通过 named slot 注入到 Landing 布局的 <footer> 区域 */}
+  <Footer slot="footer" />
+</Landing>

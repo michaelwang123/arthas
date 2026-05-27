@@ -1,0 +1,90 @@
+<!--
+  Arthas Open Graph 社交分享图 — SVG 格式 (1200×630)
+
+  📚 学习要点: Open Graph 图片规范
+  - 推荐尺寸：1200×630px（2:1.05 比例），适配 Facebook/Twitter/LinkedIn
+  - SVG 格式被大多数现代平台支持（Twitter、Slack、Discord）
+  - 部分平台（如 Facebook）可能需要 PNG/JPG，如需严格兼容可用工具转换
+  - viewBox 设为 1200×630 确保在任何渲染尺寸下比例正确
+
+  设计原则：
+  - 深色背景与网站暗色主题一致
+  - 品牌金色 (#ffd700) 作为视觉焦点
+  - 包含项目名称和核心价值主张
+  - 锁图标强化"端到端加密"的安全定位
+  - 文字足够大，在缩略图中仍可阅读
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <!-- 背景：深色渐变，与网站暗色主题一致 -->
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d0d1a"/>
+      <stop offset="100%" stop-color="#1a1a2e"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg-gradient)"/>
+
+  <!-- 装饰性网格线 — 增加科技感 -->
+  <g opacity="0.05" stroke="#ffd700" stroke-width="1">
+    <line x1="0" y1="100" x2="1200" y2="100"/>
+    <line x1="0" y1="200" x2="1200" y2="200"/>
+    <line x1="0" y1="300" x2="1200" y2="300"/>
+    <line x1="0" y1="400" x2="1200" y2="400"/>
+    <line x1="0" y1="500" x2="1200" y2="500"/>
+    <line x1="200" y1="0" x2="200" y2="630"/>
+    <line x1="400" y1="0" x2="400" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/>
+    <line x1="800" y1="0" x2="800" y2="630"/>
+    <line x1="1000" y1="0" x2="1000" y2="630"/>
+  </g>
+
+  <!-- 锁图标 — 放大版 favicon，居中偏上 -->
+  <g transform="translate(540, 140) scale(3.5)">
+    <!-- 锁环 -->
+    <path
+      d="M11 14V11a5 5 0 0 1 10 0v3"
+      fill="none"
+      stroke="#ffd700"
+      stroke-width="2.5"
+      stroke-linecap="round"
+    />
+    <!-- 锁体 -->
+    <rect x="9" y="14" width="14" height="11" rx="2" ry="2" fill="#ffd700"/>
+    <!-- 锁孔 -->
+    <circle cx="16" cy="18.5" r="2" fill="#0d0d1a"/>
+    <path d="M15 20 L16 23 L17 20 Z" fill="#0d0d1a"/>
+  </g>
+
+  <!-- 项目名称 -->
+  <text
+    x="600" y="380"
+    text-anchor="middle"
+    font-family="system-ui, -apple-system, sans-serif"
+    font-size="72"
+    font-weight="700"
+    fill="#ffffff"
+    letter-spacing="4"
+  >ARTHAS</text>
+
+  <!-- 副标题 — 核心价值主张 -->
+  <text
+    x="600" y="440"
+    text-anchor="middle"
+    font-family="system-ui, -apple-system, sans-serif"
+    font-size="28"
+    font-weight="400"
+    fill="#a0a0b0"
+  >End-to-End Encrypted Chat · Zero Knowledge · Self-Hosted</text>
+
+  <!-- 底部品牌标识线 -->
+  <rect x="500" y="520" width="200" height="3" rx="1.5" fill="#ffd700" opacity="0.6"/>
+
+  <!-- 底部 URL -->
+  <text
+    x="600" y="570"
+    text-anchor="middle"
+    font-family="system-ui, -apple-system, sans-serif"
+    font-size="20"
+    fill="#666680"
+  >github.com/michaelwang123/arthas</text>
+</svg>

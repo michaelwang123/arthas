@@ -1,0 +1,190 @@
+---
+/**
+ * LanguageSwitcher 组件 — 中英文语言切换按钮
+ *
+ * 本组件在页面头部提供一个可见的语言切换按钮，允许用户在中文和英文之间切换。
+ * 切换时会导航到对应语言的路由，并将选择持久化到 localStorage。
+ *
+ * 📚 学习要点: 静态站点的语言切换策略
+ * 由于 Astro 是静态站点生成器，每种语言版本是独立的 HTML 文件。
+ * 语言切换不是"动态替换文案"，而是"导航到另一个 URL"。
+ * 例如 /arthas/ → /arthas/zh/（英文切中文）。
+ * localStorage 用于记住用户偏好，下次访问时自动重定向到首选语言。
+ *
+ * 与其他模块的关系：
+ * - 使用 src/i18n/utils.ts 的 getLocaleFromUrl() 检测当前语言
+ * - 使用 src/i18n/en.json 和 zh.json 中的 lang.switch 文案
+ * - 被 src/layouts/Landing.astro 的 header 区域引用
+ * - 与 Landing.astro 中的语言检测脚本配合（读取同一个 localStorage key）
+ */
+
+import { getLocaleFromUrl, t, baseWithSlash } from '../i18n/utils';
+
+const locale = getLocaleFromUrl(Astro.url);
+
+// 📚 学习要点: 目标语言路由计算
+// 切换逻辑：当前是英文 → 目标是中文路由，反之亦然。
+// 路由结构：
+//   英文: /arthas/         (defaultLocale，无前缀)
+//   中文: /arthas/zh/
+// 对于子页面：
+//   英文: /arthas/download/  → 中文: /arthas/zh/download/
+//   中文: /arthas/zh/docs/   → 英文: /arthas/docs/
+const targetLocale = locale === 'en' ? 'zh' : 'en';
+
+// 📚 学习要点: 路径规范化与边界情况
+// Astro.url.pathname 在不同页面可能带或不带尾部斜杠：
+//   - 首页可能是 /arthas 或 /arthas/
+//   - 子页面通常是 /arthas/docs/foo/
+// 为确保 replace 操作可靠匹配，先将 pathname 规范化为带尾部斜杠的形式。
+const pathname = Astro.url.pathname.endsWith('/')
+  ? Astro.url.pathname
+  : `${Astro.url.pathname}/`;
+
+// 计算目标 URL：在当前路径和目标语言之间转换
+let targetPath: string;
+if (locale === 'zh') {
+  // 当前是中文，切换到英文：移除 /zh/ 前缀
+  // 例如: /arthas/zh/ → /arthas/  |  /arthas/zh/docs/foo/ → /arthas/docs/foo/
+  targetPath = pathname.replace(`${baseWithSlash}zh/`, baseWithSlash);
+} else {
+  // 当前是英文，切换到中文：在 base 后插入 zh/
+  // 例如: /arthas/ → /arthas/zh/  |  /arthas/docs/foo/ → /arthas/zh/docs/foo/
+  targetPath = pathname.replace(baseWithSlash, `${baseWithSlash}zh/`);
+}
+
+// 切换按钮显示的文案（显示目标语言的名称）
+const switchLabel = t('lang.switch', locale);
+---
+
+<!--
+  📚 学习要点: 客户端交互与 Astro
+  Astro 默认生成零 JS 的静态 HTML。但语言切换需要客户端行为：
+  1. 点击时写入 localStorage（持久化偏好）
+  2. 然后导航到目标 URL
+
+  使用 <script> 标签添加事件监听器。Astro 的 <script> 默认是模块化的，
+  会被打包和去重（即使组件在多个页面使用，脚本只加载一次）。
+  
+  data-target-path 属性将服务端计算的目标路径传递给客户端脚本，
+  避免在客户端重复计算路由逻辑。
+-->
+<button
+  class="lang-switcher"
+  data-target-path={targetPath}
+  data-target-locale={targetLocale}
+  aria-label={`Switch language to ${targetLocale === 'zh' ? 'Chinese' : 'English'}`}
+  type="button"
+>
+  <svg class="lang-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M2 12h20" />
+    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+  </svg>
+  <span class="lang-label">{switchLabel}</span>
+</button>
+
+<script>
+  /**
+   * 语言切换客户端逻辑
+   *
+   * 📚 学习要点: 事件委托与 data 属性
+   * 通过 data-* 属性将服务端计算结果传递给客户端，
+   * 避免在客户端重复实现路由计算逻辑（DRY 原则）。
+   * localStorage key 'arthas-locale' 与 Landing.astro 中的
+   * 语言检测脚本使用相同的 key，确保一致性。
+   */
+
+  /**
+   * 📚 学习要点: DRY 事件绑定
+   * 将事件绑定逻辑提取为独立函数，避免在多个事件监听器中重复代码。
+   * 使用 { once: false } 确保按钮可多次点击（虽然导航后页面会刷新）。
+   * 使用 data-bound 标记防止重复绑定（astro:page-load 和 DOMContentLoaded 可能都触发）。
+   */
+  function bindLanguageSwitcher(): void {
+    const switcher = document.querySelector('.lang-switcher') as HTMLButtonElement | null;
+    if (!switcher || switcher.dataset.bound) return;
+
+    // 标记已绑定，防止重复注册事件监听器
+    switcher.dataset.bound = 'true';
+
+    switcher.addEventListener('click', () => {
+      const targetPath = switcher.dataset.targetPath;
+      const targetLocale = switcher.dataset.targetLocale;
+
+      if (!targetPath || !targetLocale) return;
+
+      // 持久化语言偏好到 localStorage
+      localStorage.setItem('arthas-locale', targetLocale);
+
+      // 导航到目标语言路由
+      window.location.href = targetPath;
+    });
+  }
+
+  // 📚 学习要点: 统一初始化工具
+  // 使用 onReady 封装多场景事件绑定（首次加载 + View Transitions），
+  // 避免每个组件重复相同的 3 行样板代码。详见 src/scripts/onReady.ts。
+  import { onReady } from '../scripts/onReady';
+  onReady(bindLanguageSwitcher);
+</script>
+
+<style>
+  /**
+   * 语言切换按钮样式
+   *
+   * 📚 学习要点: 可访问的交互元素设计
+   * - 使用 <button> 而非 <a> 或 <div>，因为这是一个触发动作的控件
+   * - 最小触摸目标 44x44px（WCAG 2.5.5 Target Size）
+   * - hover/focus 状态使用品牌色（#ffd700）提供视觉反馈
+   * - focus-visible 仅在键盘导航时显示焦点环（不影响鼠标用户）
+   */
+  .lang-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    min-height: 44px;
+    min-width: 44px;
+    border: 1px solid var(--color-hairline, rgba(255, 255, 255, 0.1));
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-secondary, #a0a0b0);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 200ms ease-out, border-color 200ms ease-out, background-color 200ms ease-out;
+    white-space: nowrap;
+  }
+
+  .lang-switcher:hover {
+    color: var(--color-accent, #ffd700);
+    border-color: var(--color-accent, #ffd700);
+    background-color: rgba(255, 215, 0, 0.05);
+  }
+
+  .lang-switcher:focus-visible {
+    outline: 2px solid var(--color-accent, #ffd700);
+    outline-offset: 2px;
+  }
+
+  .lang-icon {
+    flex-shrink: 0;
+  }
+
+  .lang-label {
+    line-height: 1;
+  }
+
+  /* 移动端：保持可点击区域足够大 */
+  @media (max-width: 767px) {
+    .lang-switcher {
+      padding: 0.5rem;
+    }
+
+    .lang-label {
+      /* 移动端仍显示文字，因为图标+文字更清晰 */
+      font-size: 0.8125rem;
+    }
+  }
+</style>
