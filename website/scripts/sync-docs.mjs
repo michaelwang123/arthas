@@ -148,9 +148,14 @@ function extractDescription(content) {
  * - 同时设置 `sidebar.label` 确保侧边栏显示正确的标题
  * - description 字段让 Starlight 生成 <meta name="description">（SEO 优化）
  *
+ * 📚 学习要点: 为什么要移除原始 H1？
+ * - Starlight 会自动将 frontmatter title 渲染为页面 <h1>
+ * - 如果 Markdown 正文中保留原始 # 标题，页面会出现两个 h1（重复标题）
+ * - 同时移除紧跟 H1 后面与 description 重复的段落，避免内容冗余
+ *
  * @param {string} content - 原始 Markdown 内容
  * @param {string} filename - 文件名
- * @returns {string} 带有 frontmatter 的 Markdown 内容
+ * @returns {string} 带有 frontmatter 的 Markdown 内容（已移除原始 H1）
  */
 function injectFrontmatter(content, filename) {
   // 如果文件已有 frontmatter（以 --- 开头），不重复注入
@@ -159,15 +164,48 @@ function injectFrontmatter(content, filename) {
   }
 
   const title = extractTitle(content, filename);
+  const description = extractDescription(content);
+
+  // 移除原始 H1 标题行及其后紧跟的重复描述段落
+  // Starlight 会从 frontmatter title 自动生成 <h1>，保留原始 H1 会导致标题重复
+  let processedContent = content;
+  const h1Regex = /^#\s+.+\n*/m;
+  const h1Match = processedContent.match(h1Regex);
+  if (h1Match) {
+    // 移除 H1 行
+    processedContent = processedContent.replace(h1Regex, '');
+    // 如果 H1 后面紧跟的段落与 description 相同（或非常相似），也移除它
+    if (description) {
+      const lines = processedContent.split('\n');
+      // 跳过开头的空行，找到第一个非空行
+      let firstContentIdx = 0;
+      while (firstContentIdx < lines.length && lines[firstContentIdx].trim() === '') {
+        firstContentIdx++;
+      }
+      if (firstContentIdx < lines.length) {
+        const firstLine = lines[firstContentIdx].trim();
+        // 如果第一个非空行与 description 开头匹配（description 可能被截断了）
+        if (firstLine && description.startsWith(firstLine.slice(0, 50))) {
+          // 移除该行和后面的空行
+          lines.splice(firstContentIdx, 1);
+          // 移除多余的空行（最多保留一个）
+          while (firstContentIdx < lines.length && lines[firstContentIdx].trim() === '') {
+            lines.splice(firstContentIdx, 1);
+          }
+          processedContent = lines.join('\n');
+        }
+      }
+    }
+  }
+
   // 转义 YAML 中的特殊字符（引号、冒号等）
   const safeTitle = title.includes(':') || title.includes('"') || title.includes("'")
     ? `"${title.replace(/"/g, '\\"')}"`
     : `"${title}"`;
 
-  const description = extractDescription(content);
   const descLine = description ? `description: "${description.replace(/"/g, '\\"')}"\n` : '';
   const frontmatter = `---\ntitle: ${safeTitle}\n${descLine}---\n\n`;
-  return frontmatter + content;
+  return frontmatter + processedContent;
 }
 
 /**
