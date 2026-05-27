@@ -143,10 +143,10 @@
       "id": 11,
       "name": "开源生态 & AI 集成",
       "nameEn": "Open Source Ecosystem & AI Integration",
-      "status": "planned",
-      "percentage": 0,
+      "status": "in-progress",
+      "percentage": 50,
       "features": [
-        { "name": "项目官网 (GitHub Pages)", "nameEn": "Project Website (GitHub Pages)", "done": false },
+        { "name": "项目官网 (GitHub Pages)", "nameEn": "Project Website (GitHub Pages)", "done": true },
         { "name": "OpenClaw Channel Plugin", "nameEn": "OpenClaw Channel Plugin", "done": false }
       ]
     }

@@ -366,24 +366,26 @@ Arthas = "我需要和某人安全地交换一些信息，用完即走"
 
 ---
 
-## Phase 11：开源生态 & AI 集成（规划中）
+## Phase 11：开源生态 & AI 集成
 
 ```
 目标：扩大项目影响力，探索 AI 结合方向
 时间：2-3 个月
 优先级：🟡 中
-状态：规划中
+状态：官网已完成，OpenClaw 插件开发中
 ```
 
-### 11.1 项目官网（GitHub Pages）
+### 11.1 项目官网（GitHub Pages）✅ 已完成（2026-05-27）
 
-- [ ] 使用静态站点生成器（Astro / VitePress）构建项目官网
-- [ ] 部署到 GitHub Pages（`michaelwang123.github.io/arthas`）
-- [ ] 首页：产品介绍 + 核心特性展示 + 动画演示
-- [ ] 文档页：整合 `official_doc/` 中英文文档
-- [ ] 下载页：CLI 二进制 + Docker 部署指引
-- [ ] 路线图页：可视化展示项目进展
-- [ ] 暗色主题，响应式设计，SEO 优化
+- [x] 使用 Astro + @astrojs/starlight 构建项目官网
+- [x] 部署到 GitHub Pages（`michaelwang123.github.io/arthas`）
+- [x] 首页：Hero + 特性卡片 + 使用流程 + 信任区 + CSS 粒子动画
+- [x] 文档页：整合 `official_doc/` 中英文文档（Pagefind 全文搜索）
+- [x] 下载页：CLI 二进制 + Docker 部署指引（GitHub Release 集成）
+- [x] 路线图页：11 阶段可视化进度条 + 功能清单
+- [x] 暗色主题，响应式设计（320px-2560px），SEO 优化（JSON-LD + OG + hreflang）
+- [x] 中英文双语 + 语言自动检测 + 手动切换
+- [x] GitHub Actions CI/CD（自动构建 + 链接验证 + 部署）
 
 ### 11.2 OpenClaw Channel Plugin（AI 安全通道）
 
@@ -443,7 +445,7 @@ Phase 7    ████████████████░░░░  80%  �
 Phase 8    ████████████████████ 100%  ✅ 安全升级完成（加密typing+Ed25519签名）
 Phase 9    ████████████████████ 100%  ✅ 加密语音消息完成（Push-to-Talk）
 Phase 10   ████████████████████ 100%  ✅ 分享体验增强完成（QR码+房间过期）
-Phase 11   ░░░░░░░░░░░░░░░░░░░░   0%  ⏳ 开源生态 & AI 集成（规划中）
+Phase 11   ██████████░░░░░░░░░░  50%  ⏳ 官网完成，OpenClaw 插件开发中
 ```
 
 **预计时间线：**
@@ -457,7 +459,7 @@ Phase 11   ░░░░░░░░░░░░░░░░░░░░   0%  �
 | Phase 8 | 2026-05-20 ✅ | 安全升级完成 |
 | Phase 9 | 2026-05-22 ✅ | 加密语音消息完成 |
 | Phase 10 | 2026-05-25 ✅ | 分享体验增强完成（QR码+房间过期） |
-| Phase 11 | 2026 Q3 ⏳ | 官网 + OpenClaw AI 集成 |
+| Phase 11 | 2026 Q3 ⏳ | 官网 ✅ + OpenClaw AI 集成 |
 
 ---
 
