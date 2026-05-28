@@ -12,6 +12,17 @@ A minimalist end-to-end encrypted chat app. Create a temporary room, generate a 
 
 ---
 
+## Demo
+
+![Arthas Demo](docs/show/demo.gif)
+
+> Create a room, share the key, chat securely — everything disappears.
+
+- 🌐 **Live Demo:** [arthas-chat.vercel.app](https://arthas-chat.vercel.app)
+- 📖 **Project Website:** [michaelwang123.github.io/arthas](https://michaelwang123.github.io/arthas/)
+
+---
+
 ## Features
 
 - 🔒 **End-to-End Encryption** – AES-256-GCM + Ed25519 signatures, server has zero knowledge

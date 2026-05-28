@@ -23,6 +23,7 @@ I built this to learn Go concurrency (CSP model with channels), Web Crypto API, 
 - CLI client in Go: same E2EE protocol, interoperates with web client
 - Self-hosting: single binary with Go embed, or Docker Compose + Caddy auto-HTTPS
 - Property-based testing: fast-check (frontend) + rapid (Go) for crypto invariants
+- AI Agent Channel plugin (`@arthas-chat/openclaw-channel` on npm): E2EE for AI agent communication – the only encrypted channel for agent-to-agent or agent-to-human chat
 
 **What it does:**
 
@@ -36,6 +37,9 @@ Also: encrypted file sharing, voice messages, QR codes, self-destruct messages, 
 
 - GitHub: https://github.com/michaelwang123/arthas
 - Live demo: https://arthas-chat.vercel.app
+- Project website: https://michaelwang123.github.io/arthas/
+- AI Agent plugin: `npm install @arthas-chat/openclaw-channel`
+- Public demo server: wss://arthas100-arthas-server.hf.space/ws
 
 MIT licensed. PRs welcome – there's a CONTRIBUTING.md with setup instructions.
 
