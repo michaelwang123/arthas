@@ -7,7 +7,7 @@
 The fastest way to connect an AI agent to an Arthas encrypted room:
 
 ```typescript
-import { ArthasChannelAdapter } from '@arthas/openclaw-channel';
+import { ArthasChannelAdapter } from '@arthas-chat/openclaw-channel';
 const adapter = new ArthasChannelAdapter();
 adapter.onMessage(msg => console.log(`${msg.userName}: ${msg.text}`));
 await adapter.connect({ serverUrl: 'wss://arthas100-arthas-server.hf.space/ws', shareCode: 'roomId:key' });
@@ -20,7 +20,7 @@ await adapter.send({ text: 'Hello!', id: '1', channelId: 'arthas' });
 
 ## Introduction
 
-`@arthas/openclaw-channel` (v1.0.0) is an OpenClaw channel plugin that exposes Arthas end-to-end encrypted chat rooms as an AI agent communication channel.
+`@arthas-chat/openclaw-channel` (v1.0.0) is an OpenClaw channel plugin that exposes Arthas end-to-end encrypted chat rooms as an AI agent communication channel.
 
 **Why Arthas?** Most AI agent platforms transmit prompts and responses in plaintext — the platform operator can observe every conversation. Arthas is different:
 
@@ -34,15 +34,15 @@ This means your AI agent conversations are private by default — no one except 
 
 ## Installation
 
-### From npm (when published)
+### From npm
 
 ```bash
-npm install @arthas/openclaw-channel
+npm install @arthas-chat/openclaw-channel
 ```
 
-### From source (recommended for now)
+### From source (alternative)
 
-The package is not yet published to npm. Install from the monorepo:
+You can also install from the monorepo source:
 
 ```bash
 # Clone the repository
@@ -60,7 +60,7 @@ npm link
 Then in your project:
 
 ```bash
-npm link @arthas/openclaw-channel
+npm link @arthas-chat/openclaw-channel
 ```
 
 ### Requirements
@@ -116,7 +116,7 @@ ARTHAS_SIGNING_ENABLED=true
 ### Basic Adapter Setup
 
 ```typescript
-import { ArthasChannelAdapter } from '@arthas/openclaw-channel';
+import { ArthasChannelAdapter } from '@arthas-chat/openclaw-channel';
 
 // 📚 学习要点: Why use a callback instead of EventEmitter?
 // The OpenClaw Gateway ChannelAdapter interface specifies the callback pattern,
@@ -140,8 +140,8 @@ await adapter.connect({
 ### Message Handling Callback
 
 ```typescript
-import { ArthasChannelAdapter } from '@arthas/openclaw-channel';
-import type { IncomingMessage } from '@arthas/openclaw-channel';
+import { ArthasChannelAdapter } from '@arthas-chat/openclaw-channel';
+import type { IncomingMessage } from '@arthas-chat/openclaw-channel';
 
 const adapter = new ArthasChannelAdapter();
 
@@ -172,7 +172,7 @@ await adapter.connect({
 ### File Transfer Receiving
 
 ```typescript
-import { ArthasChannelAdapter } from '@arthas/openclaw-channel';
+import { ArthasChannelAdapter } from '@arthas-chat/openclaw-channel';
 
 const adapter = new ArthasChannelAdapter();
 
@@ -197,7 +197,7 @@ await adapter.connect({
 ### Connection Status Monitoring
 
 ```typescript
-import { ArthasChannelAdapter } from '@arthas/openclaw-channel';
+import { ArthasChannelAdapter } from '@arthas-chat/openclaw-channel';
 
 const adapter = new ArthasChannelAdapter();
 
@@ -345,7 +345,7 @@ When `ARTHAS_SIGNING_ENABLED=true`:
 Implements the `ChannelAdapter` interface. Main entry point for the plugin.
 
 ```typescript
-import { ArthasChannelAdapter } from '@arthas/openclaw-channel';
+import { ArthasChannelAdapter } from '@arthas-chat/openclaw-channel';
 ```
 
 | Method | Signature | Description |
@@ -363,10 +363,10 @@ import { ArthasChannelAdapter } from '@arthas/openclaw-channel';
 Factory function for registering the plugin with OpenClaw Gateway.
 
 ```typescript
-import { definePlugin } from '@arthas/openclaw-channel';
+import { definePlugin } from '@arthas-chat/openclaw-channel';
 
 export default definePlugin({
-  name: '@arthas/openclaw-channel',
+  name: '@arthas-chat/openclaw-channel',
   version: '1.0.0',
   channels: [{
     id: 'arthas',
@@ -425,7 +425,7 @@ User (Web/CLI)
 Arthas Server (blind relay, forwards ciphertext only)
     │ forwards ciphertext
     ▼
-@arthas/openclaw-channel (decrypt → plaintext)
+@arthas-chat/openclaw-channel (decrypt → plaintext)
     │ IncomingMessage
     ▼
 OpenClaw Gateway (routing + context management)
@@ -437,7 +437,7 @@ AI Agent (LLM inference)
 OpenClaw Gateway
     │ OutgoingMessage
     ▼
-@arthas/openclaw-channel (encrypt → ciphertext)
+@arthas-chat/openclaw-channel (encrypt → ciphertext)
     │ encrypted message
     ▼
 Arthas Server (blind relay)

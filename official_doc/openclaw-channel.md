@@ -5,7 +5,7 @@
 ## 快速开始
 
 ```typescript
-import { ArthasChannelAdapter } from '@arthas/openclaw-channel';
+import { ArthasChannelAdapter } from '@arthas-chat/openclaw-channel';
 const adapter = new ArthasChannelAdapter();
 adapter.onMessage(msg => console.log(`${msg.userName}: ${msg.text}`));
 await adapter.connect({ serverUrl: 'wss://arthas100-arthas-server.hf.space/ws', shareCode: 'roomId:base64Key' });
@@ -18,7 +18,7 @@ await adapter.send({ text: 'Hello from AI!', id: '1', channelId: 'arthas' });
 
 ## 简介
 
-`@arthas/openclaw-channel`（v1.0.0）是 Arthas 项目的 OpenClaw 通道插件，将 Arthas 端到端加密聊天室暴露为 AI Agent 通信通道。
+`@arthas-chat/openclaw-channel`（v1.0.0）是 Arthas 项目的 OpenClaw 通道插件，将 Arthas 端到端加密聊天室暴露为 AI Agent 通信通道。
 
 **核心价值：** Arthas 是目前唯一提供端到端加密（E2EE）的 AI Agent 通信通道。服务器仅作为密文中转站（blind relay），无法观察用户的提示词（prompts）或 AI 的回复内容（responses）。你的对话数据从发送端加密，到接收端解密，中间任何节点都无法窥探明文。
 
@@ -31,9 +31,11 @@ await adapter.send({ text: 'Hello from AI!', id: '1', channelId: 'arthas' });
 
 ## 安装
 
-> ⚠️ `@arthas/openclaw-channel` 尚未发布到 npm。当前请使用本地链接方式安装。
+```bash
+npm install @arthas-chat/openclaw-channel
+```
 
-### 本地安装（推荐）
+### 从源码安装（可选）
 
 ```bash
 # 1. 克隆 Arthas 仓库
@@ -48,7 +50,7 @@ npm run build
 # 3. 在你的项目中链接
 npm link
 cd /path/to/your-project
-npm link @arthas/openclaw-channel
+npm link @arthas-chat/openclaw-channel
 ```
 
 ### 系统要求
@@ -104,7 +106,7 @@ roomId:base64Key[:ephemeral:expiresAt]
 ### 基本 Adapter 设置
 
 ```typescript
-import { ArthasChannelAdapter } from '@arthas/openclaw-channel';
+import { ArthasChannelAdapter } from '@arthas-chat/openclaw-channel';
 
 // 📚 学习要点: 延迟初始化模式
 // 构造函数不执行任何 I/O 操作（不连接 WebSocket、不读取配置）。
@@ -347,7 +349,7 @@ User (Web/CLI)
 Arthas Server (blind relay, 只转发密文)
     │ 转发密文
     ▼
-@arthas/openclaw-channel (解密 → 明文)
+@arthas-chat/openclaw-channel (解密 → 明文)
     │ IncomingMessage
     ▼
 OpenClaw Gateway (路由 + 上下文管理)
@@ -359,7 +361,7 @@ AI Agent (LLM 推理)
 OpenClaw Gateway
     │ OutgoingMessage
     ▼
-@arthas/openclaw-channel (加密 → 密文)
+@arthas-chat/openclaw-channel (加密 → 密文)
     │ 加密消息
     ▼
 Arthas Server (blind relay)
