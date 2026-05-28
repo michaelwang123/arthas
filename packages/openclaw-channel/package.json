@@ -32,13 +32,14 @@
     "aes-256-gcm"
   ],
   "author": "Arthas Contributors",
-  "license": "MIT",
+  "license": "AGPL-3.0",
   "dependencies": {
     "@msgpack/msgpack": "^3.0.0-beta2",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/ws": "^8.5.13",
+    "@vitest/coverage-v8": "^4.1.7",
     "fast-check": "^4.8.0",
     "typescript": "^5.7.2",
     "vitest": "^4.1.6"

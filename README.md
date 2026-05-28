@@ -25,6 +25,7 @@ A minimalist end-to-end encrypted chat app. Create a temporary room, generate a 
 - 💬 **Reply & Reactions** – Quote replies + emoji reactions, all encrypted
 - 🔐 **Room Password** – Optional password protection against unauthorized access
 - ✍️ **Ed25519 Signatures** – Tamper detection, receiver can verify sender identity
+- 🤖 **AI Agent Channel** – OpenClaw plugin for E2EE AI conversations, server sees nothing
 - 🖥️ **CLI Client** – Standalone Go binary, create/join encrypted rooms from terminal
 - 🌐 **i18n** – English / Chinese / Japanese, auto-detects browser language
 - 🚫 **No Signup** – No accounts, open and use immediately
@@ -151,6 +152,7 @@ arthas/
 ├── arthas-client/          # Web frontend (React + TypeScript)
 ├── arthas-server/          # Backend - pure relay (Go)
 ├── arthas-cli/             # CLI client (standalone Go binary)
+├── packages/openclaw-channel/  # OpenClaw AI agent channel plugin (TypeScript)
 ├── deploy/                 # Self-hosting infrastructure
 └── official_doc/           # User documentation
 ```
@@ -163,6 +165,7 @@ arthas/
 - [Roadmap](docs/roadmap.md)
 - [Self-Hosting Guide](official_doc/self-hosting.md)
 - [CLI Client Guide](official_doc/cli-guide.md)
+- [OpenClaw Channel Plugin](official_doc/openclaw-channel.en.md)
 
 ---
 
@@ -178,4 +181,4 @@ See [Roadmap](docs/roadmap.md) for details.
 
 ## License
 
-[MIT](LICENSE)
+[AGPL-3.0](LICENSE)

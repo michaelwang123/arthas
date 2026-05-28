@@ -15,6 +15,8 @@
   "features.voice.description": "Record and send encrypted voice messages with push-to-talk. Crystal clear, fully private.",
   "features.cli.title": "CLI Client",
   "features.cli.description": "Chat from your terminal. Full encryption support, lightweight Go binary for Linux, macOS, and Windows.",
+  "features.openclaw.title": "AI Agent Channel",
+  "features.openclaw.description": "Connect AI agents to encrypted rooms. Zero-knowledge conversations — the server cannot observe prompts or responses.",
 
   "trust.title": "Built on Trust",
   "trust.opensource.title": "Open Source",
