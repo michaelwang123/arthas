@@ -8,7 +8,7 @@
 import { ArthasChannelAdapter } from '@arthas/openclaw-channel';
 const adapter = new ArthasChannelAdapter();
 adapter.onMessage(msg => console.log(`${msg.userName}: ${msg.text}`));
-await adapter.connect({ serverUrl: 'wss://your-server.com/ws', shareCode: 'roomId:base64Key' });
+await adapter.connect({ serverUrl: 'wss://arthas100-arthas-server.hf.space/ws', shareCode: 'roomId:base64Key' });
 await adapter.send({ text: 'Hello from AI!', id: '1', channelId: 'arthas' });
 ```
 
@@ -74,12 +74,15 @@ npm link @arthas/openclaw-channel
 
 ```ini
 # .env 文件示例
-ARTHAS_SERVER_URL=wss://arthas-chat.onrender.com/ws
+ARTHAS_SERVER_URL=wss://arthas100-arthas-server.hf.space/ws
 ARTHAS_SHARE_CODE=X2-KtJ6oRzdxbguxl5DAR:AMVGFZBTFLeed7tVncI1oKoFUdNIv6goGz64x0cuU1M
 ARTHAS_DISPLAY_NAME=Code Assistant
 ARTHAS_SIGNING_ENABLED=true
 ARTHAS_ROOM_PASSWORD=my-secret-password
 ```
+
+> 📡 **公共演示服务器：** `wss://arthas100-arthas-server.hf.space/ws`
+> 此服务器仅供体验和测试，生产环境请[自托管部署](self-hosting.md)。
 
 ### 分享码格式
 
