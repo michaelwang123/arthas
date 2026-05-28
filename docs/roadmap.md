@@ -47,7 +47,7 @@ Arthas = "我需要和某人安全地交换一些信息，用完即走"
 | **加密语音消息 (Push-to-Talk)**　 | ✅ 完成　　　| 2026-05-22 |
 | **分享体验增强 (QR码+房间过期)**　| ✅ 完成　　　| 2026-05-25 |
 | **项目官网 (GitHub Pages)**　　　 | ✅ 完成　　　| 2026-05-27 |
-| **OpenClaw Channel Plugin**　　　 | 🔧 代码完成 | 待发布　　 |
+| **OpenClaw Channel Plugin**　　　 | ✅ 完成　　　| 2026-05-28 |
 | **OpenClaw 插件文档**　　　　　　 | ✅ 完成　　　| 2026-05-28 |
 
 ---
@@ -390,12 +390,12 @@ Arthas = "我需要和某人安全地交换一些信息，用完即走"
 - [x] 中英文双语 + 语言自动检测 + 手动切换
 - [x] GitHub Actions CI/CD（自动构建 + 链接验证 + 部署）
 
-### 11.2 OpenClaw Channel Plugin（AI 安全通道）🔧 代码完成，待 npm 发布
+### 11.2 OpenClaw Channel Plugin（AI 安全通道）✅ 已完成（2026-05-28）
 
 ```
 定位：让 Arthas 成为 OpenClaw 的 E2EE 通信通道
 卖点："唯一一个连 AI Agent 通信都是零知识的通道"
-状态：代码开发完成 + 12 个 issue 已修复 + 官方文档已发布，待 npm publish
+npm 包：@arthas-chat/openclaw-channel v1.0.0
 ```
 
 - [x] 实现 OpenClaw channel plugin 接口
@@ -406,7 +406,7 @@ Arthas = "我需要和某人安全地交换一些信息，用完即走"
 - [x] 插件文档（中英双语，集成到项目官网）
 - [x] 配置示例 + 故障排除 + API 参考
 - [x] 验证脚本（scripts/validate-openclaw-docs.sh）
-- [ ] 发布到 npm（`npm publish --access public`）
+- [x] 发布到 npm（`@arthas-chat/openclaw-channel` v1.0.0）
 - [ ] 发布到 OpenClaw 插件市场
 
 **技术价值：**
@@ -449,23 +449,28 @@ Arthas = "我需要和某人安全地交换一些信息，用完即走"
 
 | # | 任务 | 预估 | 状态 |
 |---|------|------|------|
-| 1 | **npm publish @arthas/openclaw-channel** — `cd packages/openclaw-channel && npm run build && npm publish --access public` | 30min | ⬜ 待执行 |
+| 1 | **社区推广 Launch** — 执行 docs/show/ 中的推广计划（HN, Reddit, awesome-selfhosted） | 1-2 天 | ⬜ 待执行 |
 | 2 | **修复技术债务** — 文件传输 60s 离线超时 + 队列桥接 sender 逻辑 | 2-3h | ⬜ 待执行 |
 
 ### 🟡 中优先级
 
 | # | 任务 | 预估 | 状态 |
 |---|------|------|------|
-| 3 | **社区推广 Launch** — 执行 docs/show/ 中的推广计划（HN, Reddit, awesome-selfhosted） | 1-2 天 | ⬜ 待执行 |
-| 4 | **浏览器扩展** (Phase 7 剩余) — 右键创建聊天室 + 工具栏快速访问 | 1-2 周 | ⬜ 待评估 |
+| 3 | **OpenClaw Gateway 集成示例** — 提供完整的 AI Agent 项目模板（含 LLM 调用） | 1-2 天 | ⬜ 待评估 |
+| 4 | **多房间管理** — 一个 Agent 同时服务多个房间（连接池 + 路由） | 1 周 | ⬜ 待评估 |
+| 5 | **浏览器扩展** (Phase 7 剩余) — 右键创建聊天室 + 工具栏快速访问 | 1-2 周 | ⬜ 待评估 |
 
 ### 🟢 低优先级 / 后续迭代
 
 | # | 任务 | 备注 |
 |---|------|------|
-| 5 | 嵌入式 SDK (`<arthas-chat>` Web Component) | 等用户量证明 ROI |
-| 6 | 安全增强：SAS 验证 + 密钥轮换 | Phase 8 后续 |
-| 7 | 语音增强：实时流式对讲 + 波形可视化 | Phase 9B |
+| 6 | **Streaming 回复** — AI Agent 流式输出（逐 token 加密发送，类似 ChatGPT 打字效果） | 需要新协议消息类型 |
+| 7 | **Agent 市场** — 用户可以邀请公共 AI Agent 加入房间（类似 Slack App Directory） | 需要 Agent 注册/发现机制 |
+| 8 | **对话上下文持久化** — Agent 侧可选保存对话历史（加密存储，用户可删除） | 与"阅后即焚"定位需平衡 |
+| 9 | 嵌入式 SDK (`<arthas-chat>` Web Component) | 等用户量证明 ROI |
+| 10 | 安全增强：SAS 验证 + 密钥轮换 | Phase 8 后续 |
+| 11 | 语音增强：实时流式对讲 + 波形可视化 | Phase 9B |
+| 12 | **Webhook 通知** — 房间事件推送到外部 URL（新消息、成员变动） | 适合集成到工作流 |
 
 ---
 
@@ -480,7 +485,7 @@ Phase 7    ████████████████░░░░  80%  �
 Phase 8    ████████████████████ 100%  ✅ 安全升级完成（加密typing+Ed25519签名）
 Phase 9    ████████████████████ 100%  ✅ 加密语音消息完成（Push-to-Talk）
 Phase 10   ████████████████████ 100%  ✅ 分享体验增强完成（QR码+房间过期）
-Phase 11   ████████████████░░░░  80%  ⏳ 官网 ✅ + OpenClaw 插件代码完成，待发布
+Phase 11   ████████████████████ 100%  ✅ 官网 + OpenClaw 插件 + npm 发布 全部完成
 ```
 
 **预计时间线：**
@@ -494,7 +499,7 @@ Phase 11   ████████████████░░░░  80%  �
 | Phase 8 | 2026-05-20 ✅ | 安全升级完成 |
 | Phase 9 | 2026-05-22 ✅ | 加密语音消息完成 |
 | Phase 10 | 2026-05-25 ✅ | 分享体验增强完成（QR码+房间过期） |
-| Phase 11 | 2026-05-28 ⏳ | 官网 ✅ + OpenClaw 插件待发布 |
+| Phase 11 | 2026-05-28 ✅ | 官网 + OpenClaw 插件 + npm 发布 |
 | **Launch** | **2026-06** | **社区推广 + 用户获取** |
 
 ---
