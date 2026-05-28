@@ -67,6 +67,13 @@ export default defineConfig({
             { slug: 'cli-guide' },
           ],
         },
+        {
+          label: 'Integrations',
+          translations: { 'zh-CN': '集成' },
+          items: [
+            { slug: 'openclaw-channel' },
+          ],
+        },
       ],
       // 📚 学习要点: Starlight head 注入
       // head 数组允许向所有 Starlight 文档页面注入自定义 <meta> 标签。
