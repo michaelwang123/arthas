@@ -1,58 +1,58 @@
-# @arthas/openclaw-channel
+# @arthas-chat/openclaw-channel
 
 📖 Full documentation: [中文](../../official_doc/openclaw-channel.md) | [English](../../official_doc/openclaw-channel.en.md)
 
 ---
 
-OpenClaw Channel Plugin for [Arthas](https://github.com/michaelwang123/arthas) — enables AI agents to communicate with users through end-to-end encrypted chat rooms.
+OpenClaw Channel Plugin for [Arthas](https://github.com/michaelwang123/arthas) �?enables AI agents to communicate with users through end-to-end encrypted chat rooms.
 
-This plugin bridges the Arthas E2EE messaging protocol with the OpenClaw AI Agent framework, allowing agents to receive and respond to user messages without any server being able to observe the conversation content. The server acts as a blind relay — it forwards encrypted binary frames but cannot decrypt them.
+This plugin bridges the Arthas E2EE messaging protocol with the OpenClaw AI Agent framework, allowing agents to receive and respond to user messages without any server being able to observe the conversation content. The server acts as a blind relay �?it forwards encrypted binary frames but cannot decrypt them.
 
 ## Why This Exists
 
 Every other AI agent channel (Telegram, Slack, Discord) transmits messages in plaintext. Arthas is the only option that provides true end-to-end encryption for AI interactions. With this plugin:
 
-- **Zero-knowledge AI conversations** — the server cannot see your prompts or the AI's responses
-- **Self-hostable** — run both Arthas server and OpenClaw Gateway on your own infrastructure
-- **No server modifications needed** — the AI agent joins as a regular room participant
+- **Zero-knowledge AI conversations** �?the server cannot see your prompts or the AI's responses
+- **Self-hostable** �?run both Arthas server and OpenClaw Gateway on your own infrastructure
+- **No server modifications needed** �?the AI agent joins as a regular room participant
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     OpenClaw Gateway                              │
-│                                                                   │
-│  ┌──────────────┐    ┌──────────────────────────────────────┐   │
-│  │  AI Agent    │    │  @arthas/openclaw-channel             │   │
-│  │  (LLM)       │◄──►│                                      │   │
-│  │              │    │  ┌────────────┐  ┌────────────────┐  │   │
-│  └──────────────┘    │  │ Adapter    │  │ Crypto Engine  │  │   │
-│                      │  │ (msg flow) │  │ (AES-256-GCM)  │  │   │
-│                      │  └─────┬──────┘  └───────┬────────┘  │   │
-│                      │        │                  │            │   │
-│                      │  ┌─────┴──────────────────┴────────┐  │   │
-│                      │  │  WebSocket Client + msgpack      │  │   │
-│                      │  └─────────────────┬───────────────┘  │   │
-│                      └────────────────────┼──────────────────┘   │
-└───────────────────────────────────────────┼───────────────────────┘
-                                │ WSS (encrypted binary frames)
-                                ▼
-                    ┌───────────────────────┐
-                    │   Arthas Server       │
-                    │   (blind relay)       │
-                    └───────────┬───────────┘
-                                │
-                                ▼
-                    ┌───────────────────────┐
-                    │   User (Web/CLI)      │
-                    │   (end-to-end encrypted)│
-                    └───────────────────────┘
+┌─────────────────────────────────────────────────────────────────�?
+�?                    OpenClaw Gateway                              �?
+�?                                                                  �?
+�? ┌──────────────�?   ┌──────────────────────────────────────�?  �?
+�? �? AI Agent    �?   �? @arthas-chat/openclaw-channel             �?  �?
+�? �? (LLM)       │◄──►│                                      �?  �?
+�? �?             �?   �? ┌────────────�? ┌────────────────�? �?  �?
+�? └──────────────�?   �? �?Adapter    �? �?Crypto Engine  �? �?  �?
+�?                     �? �?(msg flow) �? �?(AES-256-GCM)  �? �?  �?
+�?                     �? └─────┬──────�? └───────┬────────�? �?  �?
+�?                     �?       �?                 �?           �?  �?
+�?                     �? ┌─────┴──────────────────┴────────�? �?  �?
+�?                     �? �? WebSocket Client + msgpack      �? �?  �?
+�?                     �? └─────────────────┬───────────────�? �?  �?
+�?                     └────────────────────┼──────────────────�?  �?
+└───────────────────────────────────────────┼───────────────────────�?
+                                �?WSS (encrypted binary frames)
+                                �?
+                    ┌───────────────────────�?
+                    �?  Arthas Server       �?
+                    �?  (blind relay)       �?
+                    └───────────┬───────────�?
+                                �?
+                                �?
+                    ┌───────────────────────�?
+                    �?  User (Web/CLI)      �?
+                    �?  (end-to-end encrypted)�?
+                    └───────────────────────�?
 ```
 
 ## Quick Start
 
 ```typescript
-import { ArthasChannelAdapter } from '@arthas/openclaw-channel';
+import { ArthasChannelAdapter } from '@arthas-chat/openclaw-channel';
 const adapter = new ArthasChannelAdapter();
 adapter.onMessage(msg => console.log(`${msg.userName}: ${msg.text}`));
 await adapter.connect({ serverUrl: 'wss://your-server.com/ws', shareCode: 'roomId:key' });
@@ -62,7 +62,7 @@ await adapter.send({ text: 'Hello!', id: '1', channelId: 'arthas' });
 ## Installation
 
 ```bash
-npm install @arthas/openclaw-channel
+npm install @arthas-chat/openclaw-channel
 ```
 
 Requires Node.js >= 18.0.0 (uses built-in `crypto` module for AES-256-GCM).
@@ -71,11 +71,11 @@ Requires Node.js >= 18.0.0 (uses built-in `crypto` module for AES-256-GCM).
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ARTHAS_SERVER_URL` | Yes | — | Arthas server WebSocket URL (`wss://` or `ws://`) |
-| `ARTHAS_SHARE_CODE` | Yes | — | Room share code (roomId + encryption key) |
+| `ARTHAS_SERVER_URL` | Yes | �?| Arthas server WebSocket URL (`wss://` or `ws://`) |
+| `ARTHAS_SHARE_CODE` | Yes | �?| Room share code (roomId + encryption key) |
 | `ARTHAS_DISPLAY_NAME` | No | `AI Assistant` | Agent's display name in the room |
 | `ARTHAS_SIGNING_ENABLED` | No | `false` | Enable Ed25519 message signing |
-| `ARTHAS_ROOM_PASSWORD` | No | — | Password for password-protected rooms |
+| `ARTHAS_ROOM_PASSWORD` | No | �?| Password for password-protected rooms |
 
 > For detailed configuration options (share code format, package.json config, priority rules), see the [full documentation](../../official_doc/openclaw-channel.en.md).
 
@@ -105,7 +105,7 @@ import type {
   MessageType,         // 'text' | 'typing' | 'file'
   Plugin,              // Plugin instance type
   PluginDefinition,    // Plugin metadata
-} from '@arthas/openclaw-channel';
+} from '@arthas-chat/openclaw-channel';
 ```
 
 > For programmatic integration examples, file transfer usage, security model details, troubleshooting, and share code format, see the [full documentation](../../official_doc/openclaw-channel.en.md).
@@ -144,20 +144,20 @@ packages/openclaw-channel/
 ├── tsconfig.json         # TypeScript config (strict, ESM output)
 ├── vitest.config.ts      # Test framework configuration
 ├── src/
-│   ├── index.ts          # Plugin entry — registers channel with OpenClaw
-│   ├── adapter.ts        # ChannelAdapter implementation (core integration)
-│   ├── client.ts         # Arthas WebSocket client (connect, join, send)
-│   ├── crypto.ts         # AES-256-GCM encrypt/decrypt (Node.js crypto)
-│   ├── signing.ts        # Ed25519 message signing (optional)
-│   ├── protocol.ts       # msgpack encode/decode + message type constants
-│   ├── config.ts         # Configuration loading and validation
-│   ├── reconnect.ts      # Exponential backoff reconnection manager
-│   ├── file-transfer.ts  # Chunked file transfer (receive + send)
-│   └── types.ts          # TypeScript type definitions (OpenClaw SDK types)
+�?  ├── index.ts          # Plugin entry �?registers channel with OpenClaw
+�?  ├── adapter.ts        # ChannelAdapter implementation (core integration)
+�?  ├── client.ts         # Arthas WebSocket client (connect, join, send)
+�?  ├── crypto.ts         # AES-256-GCM encrypt/decrypt (Node.js crypto)
+�?  ├── signing.ts        # Ed25519 message signing (optional)
+�?  ├── protocol.ts       # msgpack encode/decode + message type constants
+�?  ├── config.ts         # Configuration loading and validation
+�?  ├── reconnect.ts      # Exponential backoff reconnection manager
+�?  ├── file-transfer.ts  # Chunked file transfer (receive + send)
+�?  └── types.ts          # TypeScript type definitions (OpenClaw SDK types)
 ├── tests/
-│   ├── crypto.test.ts    # Encryption compatibility tests
-│   ├── protocol.test.ts  # Protocol encode/decode tests
-│   └── adapter.test.ts   # Adapter integration tests
+�?  ├── crypto.test.ts    # Encryption compatibility tests
+�?  ├── protocol.test.ts  # Protocol encode/decode tests
+�?  └── adapter.test.ts   # Adapter integration tests
 └── README.md             # This file
 ```
 
@@ -184,4 +184,4 @@ npx vitest run tests/crypto.test.ts
 
 ## License
 
-AGPL-3.0 — see [LICENSE](../../LICENSE) for details.
+AGPL-3.0 �?see [LICENSE](../../LICENSE) for details.
