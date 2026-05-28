@@ -1,5 +1,5 @@
 {
-  "name": "@arthas/openclaw-channel",
+  "name": "@arthas-chat/openclaw-channel",
   "version": "1.0.0",
   "description": "OpenClaw Channel Plugin for Arthas E2EE Chat — 将 Arthas 端到端加密聊天暴露为 AI Agent 通信通道",
   "type": "module",

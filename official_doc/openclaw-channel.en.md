@@ -10,7 +10,7 @@ The fastest way to connect an AI agent to an Arthas encrypted room:
 import { ArthasChannelAdapter } from '@arthas/openclaw-channel';
 const adapter = new ArthasChannelAdapter();
 adapter.onMessage(msg => console.log(`${msg.userName}: ${msg.text}`));
-await adapter.connect({ serverUrl: 'wss://your-server.com/ws', shareCode: 'roomId:key' });
+await adapter.connect({ serverUrl: 'wss://arthas100-arthas-server.hf.space/ws', shareCode: 'roomId:key' });
 await adapter.send({ text: 'Hello!', id: '1', channelId: 'arthas' });
 ```
 
@@ -100,11 +100,14 @@ Minimum 2 segments required (roomId + key). Obtain the share code from the Artha
 ### Example `.env` file
 
 ```ini
-ARTHAS_SERVER_URL=wss://arthas-chat.onrender.com/ws
+ARTHAS_SERVER_URL=wss://arthas100-arthas-server.hf.space/ws
 ARTHAS_SHARE_CODE=X2-KtJ6oRzdxbguxl5DAR:AMVGFZBTFLeed7tVncI1oKoFUdNIv6goGz64x0cuU1M
 ARTHAS_DISPLAY_NAME=Code Assistant
 ARTHAS_SIGNING_ENABLED=true
 ```
+
+> 📡 **Public demo server:** `wss://arthas100-arthas-server.hf.space/ws`
+> This server is for testing only. For production use, [self-host your own](self-hosting.en.md).
 
 ---
 

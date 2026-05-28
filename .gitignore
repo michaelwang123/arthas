@@ -48,6 +48,9 @@ arthas-cli/arthas-cli
 /scripts/*
 !/scripts/validate-openclaw-docs.sh
 
+# Coverage reports
+packages/openclaw-channel/coverage/
+
 # Demo recording raw video (too large for git)
 docs/show/demo-full.mp4
 
