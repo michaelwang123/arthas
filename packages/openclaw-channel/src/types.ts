@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file types.ts — OpenClaw SDK 类型定义（本地定义）
  *
  * 本文件定义了 OpenClaw Plugin SDK 的核心类型接口。
@@ -440,7 +440,7 @@ export type MessageType =
  * ```typescript
  * // src/index.ts
  * import { definePlugin } from '@openclaw/sdk';
- * import { ArthasChannelAdapter } from './adapter';
+ * import { ArthasChannelAdapter } from './adapter.js';
  *
  * export default definePlugin({
  *   name: '@arthas/openclaw-channel',

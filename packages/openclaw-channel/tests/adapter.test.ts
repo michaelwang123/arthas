@@ -36,7 +36,7 @@ import { WebSocketServer, WebSocket as WsWebSocket } from 'ws';
 import { randomBytes } from 'node:crypto';
 
 import { ArthasChannelAdapter } from '../src/adapter';
-import { encrypt, decrypt, toBase64Url, fromBase64Url, deriveKey } from '../src/crypto';
+import { encrypt, decrypt, toBase64Url, fromBase64Url, deriveKey, encryptBuffer } from '../src/crypto';
 import {
   encodeMessage,
   decodeMessage,
@@ -349,9 +349,8 @@ class MockArthasServer {
       const end = Math.min(start + CHUNK_SIZE, fileData.length);
       const chunk = fileData.subarray(start, end);
 
-      // 使用 latin1 编码将二进制数据转为字符串（与 FileSender 一致）
-      const plaintext = chunk.toString('latin1');
-      const { ciphertext: chunkCipher, iv: chunkIv } = encrypt(plaintext, key);
+      // 使用 encryptBuffer 直接加密二进制数据（与 FileSender/FileReceiver 一致）
+      const { ciphertext: chunkCipher, iv: chunkIv } = encryptBuffer(chunk, key);
 
       const chunkMsg = encodeMessage(MSG_RELAY_FILE_CHUNK, {
         senderId,

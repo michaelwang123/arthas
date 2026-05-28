@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file client.ts - Arthas WebSocket 客户端
  *
  * 本文件实现与 Arthas 服务器的 WebSocket 通信层。
@@ -42,7 +42,7 @@ import {
   MSG_PONG,
   MSG_PING,
   MSG_ROOM_JOINED,
-} from './protocol';
+} from './protocol.js';
 
 import type {
   Message,
@@ -53,9 +53,9 @@ import type {
   PongData,
   PingData,
   RoomJoinedData,
-} from './protocol';
+} from './protocol.js';
 
-import type { ConnectionStatus } from './types';
+import type { ConnectionStatus } from './types.js';
 
 
 // ============================================================================

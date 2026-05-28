@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file adapter.ts — OpenClaw Channel Adapter 实现
  *
  * 本文件实现 OpenClaw ChannelAdapter 接口，是插件的核心集成模块。
@@ -43,19 +43,19 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 
-import { loadConfig } from './config';
-import { deriveKey, encrypt, decrypt, toBase64Url, fromBase64Url } from './crypto';
+import { loadConfig } from './config.js';
+import { deriveKey, encrypt, decrypt, toBase64Url, fromBase64Url } from './crypto.js';
 import {
   generateSigningKeyPair,
   formatPublicKeyMessage,
   parsePublicKeyMessage,
   zeroKeyPair,
-} from './signing';
-import type { SigningKeyPair } from './signing';
-import { ArthasClient } from './client';
-import { ReconnectManager } from './reconnect';
-import { FileReceiver, FileSender } from './file-transfer';
-import { encodeMessage } from './protocol';
+} from './signing.js';
+import type { SigningKeyPair } from './signing.js';
+import { ArthasClient } from './client.js';
+import { ReconnectManager } from './reconnect.js';
+import { FileReceiver, FileSender } from './file-transfer.js';
+import { encodeMessage } from './protocol.js';
 import {
   MSG_RELAY_MESSAGE,
   MSG_MEMBER_JOINED,
@@ -64,7 +64,7 @@ import {
   MSG_RELAY_FILE_CHUNK,
   MSG_RELAY_FILE_COMPLETE,
   MSG_RELAY_FILE_CANCEL,
-} from './protocol';
+} from './protocol.js';
 import type {
   Message,
   RelayMessageData,
@@ -72,7 +72,7 @@ import type {
   RelayFileChunkData,
   RelayFileCompleteData,
   RelayFileCancelData,
-} from './protocol';
+} from './protocol.js';
 import type {
   ChannelAdapter,
   ChannelConfig,
@@ -81,7 +81,7 @@ import type {
   OutgoingMessage,
   ConnectionStatus,
   MessageAttachment,
-} from './types';
+} from './types.js';
 
 
 // ============================================================================

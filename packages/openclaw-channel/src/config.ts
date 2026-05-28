@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file config.ts — 配置验证与加载
  *
  * 本文件实现插件配置的加载、验证和错误报告。
@@ -32,7 +32,7 @@
  * @see requirements.md — Requirement 3: 配置与部署
  */
 
-import type { ArthasChannelConfig, ChannelConfig } from './types';
+import type { ArthasChannelConfig, ChannelConfig } from './types.js';
 
 // ============================================================================
 // 环境变量名称常量

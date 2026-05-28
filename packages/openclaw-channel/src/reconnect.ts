@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file reconnect.ts — 自动重连管理器
  *
  * 本文件实现 WebSocket 连接的自动重连逻辑，包装 ArthasClient 提供：
@@ -25,8 +25,8 @@
  * @see requirements.md — Requirement 6.3, 6.4: 重连与错误处理
  */
 
-import { ArthasClient } from './client';
-import type { ConnectionStatus } from './types';
+import { ArthasClient } from './client.js';
+import type { ConnectionStatus } from './types.js';
 
 // ============================================================================
 // 常量定义

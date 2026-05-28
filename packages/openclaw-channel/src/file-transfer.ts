@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file file-transfer.ts — 文件传输协议适配（Node.js 版本）
  *
  * 本文件实现 Arthas 分片文件传输协议的 Node.js 适配层，
@@ -34,7 +34,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { encrypt, decrypt, toBase64Url, fromBase64Url, encryptBuffer, decryptBuffer } from './crypto';
+import { encrypt, decrypt, toBase64Url, fromBase64Url, encryptBuffer, decryptBuffer } from './crypto.js';
 import type {
   SendFileMetaData,
   SendFileChunkData,
@@ -43,12 +43,12 @@ import type {
   RelayFileChunkData,
   RelayFileCompleteData,
   RelayFileCancelData,
-} from './protocol';
+} from './protocol.js';
 import {
   MSG_SEND_FILE_META,
   MSG_SEND_FILE_CHUNK,
   MSG_SEND_FILE_COMPLETE,
-} from './protocol';
+} from './protocol.js';
 
 // ============================================================================
 // 常量定义

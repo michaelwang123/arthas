@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file index.ts — OpenClaw Channel Plugin 入口文件
  *
  * 本文件是插件的主入口点（package.json "main" 指向编译后的 dist/index.js）。
@@ -29,8 +29,8 @@
  * @see requirements.md — Requirement 1.1: Channel Adapter 注册
  */
 
-import { definePlugin } from './types';
-import { ArthasChannelAdapter } from './adapter';
+import { definePlugin } from './types.js';
+import { ArthasChannelAdapter } from './adapter.js';
 
 // ============================================================================
 // 插件定义与注册
@@ -107,7 +107,7 @@ export default plugin;
  * - 在测试中直接实例化 adapter（不通过 Gateway）
  * - 在自定义集成场景中使用（如嵌入到其他框架）
  */
-export { ArthasChannelAdapter } from './adapter';
+export { ArthasChannelAdapter } from './adapter.js';
 
 /**
  * 导出核心类型定义，供 TypeScript 消费者引用。
@@ -136,7 +136,7 @@ export type {
   MessageType,
   /** 插件实例 */
   Plugin,
-} from './types';
+} from './types.js';
 
 /** 导出 definePlugin 函数，供需要创建自定义插件的场景使用 */
-export { definePlugin } from './types';
+export { definePlugin } from './types.js';
