@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    /* 📚 学习要点: ESM + Strict TypeScript 配置
+     * 本项目作为独立 npm 包发布，使用 ESM 模块系统。
+     * strict: true 启用所有严格类型检查，确保类型安全。
+     * 输出到 dist/ 目录，源码在 src/ 目录。
+     */
+
+    /* 模块系统配置 */
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+
+    /* 严格类型检查 */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* 输出配置 */
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    /* 其他 */
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "tests"]
+}

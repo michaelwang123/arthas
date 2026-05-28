@@ -1,0 +1,32 @@
+# 📚 学习要点: .npmignore 控制 npm publish 时哪些文件被排除
+# 与 .gitignore 不同，.npmignore 专门用于 npm 发布场景。
+# package.json 的 "files" 字段是白名单（只包含 dist/ 和 README.md），
+# .npmignore 作为额外保险，确保源码和开发文件不会意外发布。
+
+# 源码（只发布编译后的 dist/）
+src/
+
+# 测试文件
+tests/
+**/*.test.ts
+**/*.spec.ts
+
+# 构建配置
+tsconfig.json
+vitest.config.ts
+
+# 开发工具
+.gitkeep
+.eslintrc*
+.prettierrc*
+
+# 依赖
+node_modules/
+
+# 编辑器和系统文件
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

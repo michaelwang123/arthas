@@ -59,6 +59,91 @@ packages/openclaw-channel/
 └── README.md                 # 使用文档
 ```
 
+## SDK API 调研结论
+
+> **调研日期：** Task 0.1 完成
+> **结论：** `@openclaw/sdk` 尚未发布到 npm（假设中的包），因此我们在本地定义 SDK 类型。
+
+### 类型定义位置
+
+所有 OpenClaw SDK 类型定义在 `packages/openclaw-channel/src/types.ts` 中本地维护。
+当真正的 `@openclaw/sdk` 发布后，只需将 import 路径替换为 `'@openclaw/sdk'`。
+
+### definePlugin() 函数签名
+
+```typescript
+type DefinePluginFn = (definition: PluginDefinition) => Plugin;
+
+interface PluginDefinition {
+  name: string;           // npm 包名格式
+  version: string;        // semver
+  channels: ChannelRegistration[];
+}
+
+interface Plugin {
+  definition: PluginDefinition;
+  onInit?(): Promise<void>;
+  onDestroy?(): Promise<void>;
+}
+```
+
+### ChannelAdapter 接口方法
+
+```typescript
+interface ChannelAdapter {
+  connect(config: ChannelConfig): Promise<void>;
+  disconnect(): Promise<void>;
+  send(message: OutgoingMessage): Promise<void>;
+  onMessage(callback: (message: IncomingMessage) => void): void;
+  onStatusChange?(callback: (status: ConnectionStatus) => void): void;
+}
+```
+
+### 消息格式
+
+```typescript
+// 用户 → Agent（解密后的标准化格式）
+interface IncomingMessage {
+  id: string;
+  channelId: string;
+  userId: string;
+  userName: string;
+  text: string;
+  timestamp: Date;
+  attachments?: MessageAttachment[];
+  metadata?: Record<string, unknown>;
+}
+
+// Agent → 用户（加密前的标准化格式）
+interface OutgoingMessage {
+  id: string;
+  channelId: string;
+  text: string;
+  attachments?: MessageAttachment[];
+  replyTo?: string;
+  type?: MessageType;
+}
+
+interface MessageAttachment {
+  fileName: string;
+  mimeType: string;
+  size: number;
+  data: Buffer | Uint8Array;
+}
+```
+
+### 与 design.md 原始假设的差异
+
+| 项目 | 原始假设 | 最终定义 | 原因 |
+|------|----------|----------|------|
+| `ChannelAdapter.connect()` 参数 | `ArthasConfig` | `ChannelConfig`（通用） | Gateway 传递通用配置，adapter 内部解析为强类型 |
+| 消息 ID | 无 | `IncomingMessage.id` / `OutgoingMessage.id` | Gateway 需要消息去重和引用 |
+| 连接状态回调 | 无 | `onStatusChange?()` | 支持健康检查和可观测性（Requirement 6.2） |
+| 消息类型 | 无 | `OutgoingMessage.type?: MessageType` | 支持 typing indicator（Requirement 4.6） |
+| 附件格式 | `File[]` | `MessageAttachment[]` | Node.js 环境无 File API，使用 Buffer |
+
+---
+
 ## Design Decisions
 
 ### D1: Monorepo 内独立 npm 包
@@ -84,9 +169,11 @@ packages/openclaw-channel/
 
 ### D3: OpenClaw Plugin API 集成
 
+> **注意：** 由于 `@openclaw/sdk` 尚未发布，所有类型从本地 `./types` 导入。
+
 ```typescript
 // src/index.ts — Plugin 入口
-import { definePlugin } from '@openclaw/sdk';
+import { definePlugin } from './types';
 import { ArthasChannelAdapter } from './adapter';
 
 export default definePlugin({
@@ -105,16 +192,23 @@ export default definePlugin({
 
 ```typescript
 // src/adapter.ts — Channel Adapter
-import type { ChannelAdapter, IncomingMessage, OutgoingMessage } from '@openclaw/sdk';
+import type {
+  ChannelAdapter,
+  ChannelConfig,
+  IncomingMessage,
+  OutgoingMessage,
+  ConnectionStatus,
+} from './types';
 
 export class ArthasChannelAdapter implements ChannelAdapter {
   private client: ArthasClient;
   private cryptoEngine: CryptoEngine;
 
-  async connect(config: ArthasConfig): Promise<void> { ... }
+  async connect(config: ChannelConfig): Promise<void> { ... }
   async disconnect(): Promise<void> { ... }
   async send(message: OutgoingMessage): Promise<void> { ... }
   onMessage(callback: (msg: IncomingMessage) => void): void { ... }
+  onStatusChange(callback: (status: ConnectionStatus) => void): void { ... }
 }
 ```
 
@@ -146,7 +240,7 @@ interface OpenClawMessage {
   userName: string;     // Arthas senderName
   text: string;         // 解密后的明文
   timestamp: Date;
-  attachments?: File[]; // 解密后的文件
+  attachments?: MessageAttachment[]; // 解密后的文件（Buffer）
 }
 ```
 
