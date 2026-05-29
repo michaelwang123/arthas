@@ -142,15 +142,24 @@ Arthas supports full self-hosting, giving you complete control over your data an
 | Tier | Use Case | Description |
 |------|----------|-------------|
 | **Tier 1 – Single Binary** | Local/intranet/dev | Zero dependencies, download and run, Go embeds frontend |
-| **Tier 2 – Docker Compose** | Public production | Caddy auto-HTTPS + Go backend, one-click deploy |
+| **Tier 2 – Docker (Single Container)** | Quick deploy / testing | One command, frontend embedded in server |
+| **Tier 3 – Docker Compose** | Public production | Caddy auto-HTTPS + Go backend, one-click deploy |
 
 ```bash
 # Tier 1: Single binary
 ./arthas-server --port 8080
 
-# Tier 2: Docker Compose (auto HTTPS)
+# Tier 2: Docker (build from source, frontend + backend in one image)
+docker build -f deploy/Dockerfile -t arthas-server .
+docker run -d -p 8080:8080 arthas-server
+
+# Tier 3: Docker Compose (auto HTTPS)
 cd deploy && ./deploy.sh
 ```
+
+> **Important:** The project has two Dockerfiles for different purposes:
+> - `deploy/Dockerfile` — Full build (frontend + backend embedded), for self-hosting
+> - `arthas-server/Dockerfile` — Backend only (no frontend), for HF Spaces relay deployment
 
 Full guide: [Self-Hosting Documentation](official_doc/self-hosting.md)
 
