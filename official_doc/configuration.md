@@ -6,11 +6,22 @@
 
 ## 后端配置
 
+### 命令行参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--port` | `8080`（或 `$PORT` 环境变量） | HTTP 监听端口 |
+| `--allowed-origins` | `*`（允许所有来源） | WebSocket CORS 白名单，多个用逗号分隔 |
+| `--version` | — | 打印版本号并退出 |
+
+配置优先级：`--port` flag > `PORT` 环境变量 > 默认值 `8080`
+
 ### 环境变量
 
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
 | `PORT` | `8080` | HTTP/WebSocket 服务器监听端口 |
+| `ALLOWED_ORIGINS` | 空（允许所有来源） | WebSocket CORS 白名单，多个用逗号分隔。设置后仅允许指定 Origin 的连接 |
 
 ### 内置常量
 
@@ -22,7 +33,7 @@
 | `writeWait`　　　　 | 10s　　　　| `internal/network/client.go` | WebSocket 写超时　　　|
 | `pongWait`　　　　　| 40s　　　　| `internal/network/client.go` | 读超时（心跳 1.5 倍） |
 | `sendBufferSize`　　| 256　　　　| `internal/network/client.go` | 发送缓冲区大小　　　　|
-| `maxMessageSize`　　| 4096 bytes | `internal/network/client.go` | 单条消息最大字节数　　|
+| `maxMessageSize`　　| 102400 bytes | `internal/network/client.go` | 单条消息最大字节数（含文件分片）|
 | `rateLimitWindow`　 | 10s　　　　| `internal/network/client.go` | 频率限制滑动窗口　　　|
 | `rateLimitMaxCount` | 10　　　　 | `internal/network/client.go` | 窗口内最大消息数　　　|
 | Ping 间隔　　　　　 | 25s　　　　| `internal/network/client.go` | 心跳发送间隔　　　　　|
@@ -130,14 +141,68 @@ export default defineConfig({
 
 ## Docker 配置
 
-文件：`arthas-server/Dockerfile`
+项目包含两个 Dockerfile，服务不同的部署场景：
+
+### deploy/Dockerfile（自托管部署，推荐）
+
+三阶段构建：前端构建 → Go 编译（嵌入前端）→ 最小化运行环境。
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| 基础镜像 | `golang:1.22-alpine` | 构建阶段 |
-| 运行镜像 | `alpine:latest` | 最小化运行环境 |
-| 暴露端口 | 7860 | Docker 默认端口 |
+| 前端构建镜像 | `node:20-alpine` | 构建 React 前端 |
+| Go 构建镜像 | `golang:1.23-alpine` | 编译后端 + 嵌入前端 |
+| 运行镜像 | `alpine:3.23` | 最小化运行环境 |
+| 暴露端口 | 8080 | 自托管默认端口 |
+| `PORT` 环境变量 | 8080 | 服务器监听端口 |
+| `ALLOWED_ORIGINS` | 空（允许所有） | WebSocket CORS 白名单 |
+| `VERSION` build-arg | `latest` | 编译时注入版本号 |
+| `TARGETARCH` build-arg | 自动检测 | 目标 CPU 架构（amd64/arm64） |
+
+**构建命令（从项目根目录执行）：**
+
+```bash
+# 构建完整镜像（前端 + 后端）
+docker build -f deploy/Dockerfile -t arthas-server .
+
+# 指定版本号
+docker build -f deploy/Dockerfile --build-arg VERSION=v1.2.3 -t arthas-server:v1.2.3 .
+
+# 运行
+docker run -d -p 8080:8080 arthas-server
+
+# 自定义端口和 CORS
+docker run -d -p 3000:3000 -e PORT=3000 -e ALLOWED_ORIGINS=https://example.com arthas-server
+```
+
+**访问方式：**
+
+| 路径 | 功能 |
+|------|------|
+| `http://localhost:8080/` | 前端 SPA 页面 |
+| `http://localhost:8080/assets/*` | 前端静态资源（JS/CSS，带内容哈希缓存） |
+| `ws://localhost:8080/ws` | WebSocket 连接端点 |
+| `http://localhost:8080/ping` | 健康检查（返回 `pong`） |
+
+### arthas-server/Dockerfile（HF Spaces 部署）
+
+仅编译后端，不包含前端。用于 Hugging Face Spaces 等纯后端中继场景。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| 构建镜像 | `golang:1.23-alpine` | 编译后端 |
+| 运行镜像 | `alpine:3.23` | 最小化运行环境 |
+| 暴露端口 | 7860 | HF Spaces 默认端口 |
 | `PORT` 环境变量 | 7860 | 服务器监听端口 |
+| `VERSION` build-arg | `1.0.0` | 编译时注入版本号 |
+
+**构建命令（从 arthas-server 目录执行）：**
+
+```bash
+cd arthas-server
+docker build -t arthas-server .
+```
+
+> **注意：** 此镜像不包含前端页面，访问根路径只会返回 placeholder HTML。前端需单独部署到 Vercel 等平台。
 
 ---
 

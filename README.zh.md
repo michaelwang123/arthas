@@ -203,7 +203,24 @@ git push
 | 方案 | 适用场景 | 说明 |
 |------|----------|------|
 | **Tier 1 — 单二进制** | 本地/内网/开发 | 零依赖，下载即运行，Go embed 内嵌前端 |
-| **Tier 2 — Docker Compose** | 公网生产环境 | Caddy 自动 HTTPS + Go 后端，一键部署 |
+| **Tier 2 — Docker 单容器** | 快速部署/测试 | 一条命令，前端内嵌在服务器中 |
+| **Tier 3 — Docker Compose** | 公网生产环境 | Caddy 自动 HTTPS + Go 后端，一键部署 |
+
+```bash
+# Tier 1: 单二进制
+./arthas-server --port 8080
+
+# Tier 2: Docker（从源码构建，前端+后端一体）
+docker build -f deploy/Dockerfile -t arthas-server .
+docker run -d -p 8080:8080 arthas-server
+
+# Tier 3: Docker Compose（自动 HTTPS）
+cd deploy && ./deploy.sh
+```
+
+> ⚠️ **注意：** 项目有两个 Dockerfile，用途不同：
+> - `deploy/Dockerfile` — 完整构建（前端+后端嵌入），用于自托管
+> - `arthas-server/Dockerfile` — 仅后端（无前端），用于 HF Spaces 中继部署
 
 👉 完整指南：[自托管部署文档](official_doc/self-hosting.md)
 
