@@ -19,6 +19,7 @@ I built Arthas, an end-to-end encrypted ephemeral chat app. The idea is simple: 
 
 Live demo: https://arthas-chat.vercel.app
 GitHub: https://github.com/michaelwang123/arthas
+Project website: https://michaelwang123.github.io/arthas/
 
 Why I built this:
 
@@ -35,6 +36,8 @@ Technical highlights:
 - One-command self-hosting: single binary or Docker Compose + auto HTTPS via Caddy
 
 Also includes: encrypted file sharing (chunked, 64KB per chunk), encrypted voice messages (Push-to-Talk, Opus), QR code room sharing, self-destruct messages, room passwords, and room expiry timers.
+
+New: AI Agent Channel plugin (`@arthas-chat/openclaw-channel` on npm) – makes Arthas the only E2EE channel for AI agent communication. Your AI agents can talk through Arthas with the same encryption guarantees as human users. Public demo server: wss://arthas100-arthas-server.hf.space/ws
 
 What it's NOT:
 
