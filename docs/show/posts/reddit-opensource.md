@@ -36,7 +36,7 @@ Also: encrypted file sharing, voice messages, QR codes, self-destruct messages, 
 **Links:**
 
 - GitHub: https://github.com/michaelwang123/arthas
-- Live demo: https://arthas-chat.vercel.app
+- Live demo: https://arthas-blush.vercel.app/
 - Project website: https://michaelwang123.github.io/arthas/
 - AI Agent plugin: `npm install @arthas-chat/openclaw-channel`
 - Public demo server: wss://arthas100-arthas-server.hf.space/ws

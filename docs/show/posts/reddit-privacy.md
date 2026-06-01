@@ -39,7 +39,7 @@ I built Arthas, a web-based end-to-end encrypted chat app designed around the pr
 3. Chat with E2EE – server only sees ciphertext
 4. Everyone leaves → room destroyed, ciphertext gone
 
-Live demo: https://arthas-chat.vercel.app
+Live demo: https://arthas-blush.vercel.app/
 GitHub: https://github.com/michaelwang123/arthas
 Project website: https://michaelwang123.github.io/arthas/
 AI Agent plugin: `npm install @arthas-chat/openclaw-channel` (public demo server: wss://arthas100-arthas-server.hf.space/ws)

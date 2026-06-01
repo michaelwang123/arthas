@@ -187,6 +187,13 @@ declare module 'astro:content' {
   collection: "docs";
   data: InferEntrySchema<"docs">
 } & { render(): Render[".md"] };
+"openclaw-channel.md": {
+	id: "openclaw-channel.md";
+  slug: "openclaw-channel";
+  body: string;
+  collection: "docs";
+  data: InferEntrySchema<"docs">
+} & { render(): Render[".md"] };
 "protocol.md": {
 	id: "protocol.md";
   slug: "protocol";
@@ -253,6 +260,13 @@ declare module 'astro:content' {
 "zh/getting-started.md": {
 	id: "zh/getting-started.md";
   slug: "zh/getting-started";
+  body: string;
+  collection: "docs";
+  data: InferEntrySchema<"docs">
+} & { render(): Render[".md"] };
+"zh/openclaw-channel.md": {
+	id: "zh/openclaw-channel.md";
+  slug: "zh/openclaw-channel";
   body: string;
   collection: "docs";
   data: InferEntrySchema<"docs">

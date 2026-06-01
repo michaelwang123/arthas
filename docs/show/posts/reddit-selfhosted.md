@@ -51,7 +51,7 @@ The server is a pure relay (~500 lines of Go). It receives encrypted blobs via W
 **Links:**
 
 - GitHub: https://github.com/michaelwang123/arthas
-- Live demo: https://arthas-chat.vercel.app
+- Live demo: https://arthas-blush.vercel.app/
 - Project website: https://michaelwang123.github.io/arthas/
 - Self-hosting docs: https://github.com/michaelwang123/arthas/blob/main/official_doc/self-hosting.md
 - AI Agent plugin: `npm install @arthas-chat/openclaw-channel`
