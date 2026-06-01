@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    width: 400px;
+    height: 600px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  html {
+    @apply bg-gray-900 text-gray-100;
+  }
+
+  body {
+    @apply bg-gray-900 text-gray-100 antialiased;
+  }
+
+  /* Dark theme scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-800 rounded;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-600 rounded;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500;
+  }
+}

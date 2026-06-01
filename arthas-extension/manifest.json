@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Arthas - E2EE Chat",
+  "version": "0.1.0",
+  "description": "End-to-end encrypted chat in your browser toolbar",
+  "permissions": ["storage"],
+  "host_permissions": ["ws://*/*", "wss://*/*"],
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_icon": {
+      "16": "public/icons/icon-16.png",
+      "48": "public/icons/icon-48.png",
+      "128": "public/icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.ts",
+    "type": "module"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "icons": {
+    "16": "public/icons/icon-16.png",
+    "48": "public/icons/icon-48.png",
+    "128": "public/icons/icon-128.png"
+  }
+}
