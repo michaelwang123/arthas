@@ -450,7 +450,7 @@ Building this project taught me several things:
 
 ## Try It Out
 
-- **Live Demo**: [arthas-chat.vercel.app](https://arthas-chat.vercel.app)
+- **Live Demo**: [arthas-blush.vercel.app](https://arthas-blush.vercel.app/)
 - **GitHub**: [github.com/michaelwang123/arthas](https://github.com/michaelwang123/arthas)
 - **Self-Hosting Guide**: [official_doc/self-hosting.md](https://github.com/michaelwang123/arthas/blob/main/official_doc/self-hosting.md)
 

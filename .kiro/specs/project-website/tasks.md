@@ -39,7 +39,7 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     - Add `website/node_modules/`, `website/dist/`, `website/src/content/docs/` (symlink targets) to `.gitignore`
     - _Requirements: 11.1_
 
-- [ ] 2. Phase A — Landing Page Layout & Homepage Components (~4h)
+- [x] 2. Phase A — Landing Page Layout & Homepage Components (~4h)
   - [x] 2.1 Create Landing layout (HTML skeleton)
     - Create `src/layouts/Landing.astro` with full HTML structure: `<head>` with slot for per-page meta, hreflang generation logic, canonical URL computation, favicon link
     - Include language detection inline script in `<head>` (redirect to `/arthas/zh/` if `navigator.language` starts with "zh")
@@ -47,31 +47,31 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     - **Scope boundary:** This task creates the layout skeleton with meta tag _slots_. Actual per-page meta content (titles, descriptions) is filled in task 5.1.
     - _Requirements: 5.2, 9.5, 9.6, 9.7_
 
-  - [-] 2.2 Implement Hero component
+  - [x] 2.2 Implement Hero component
     - Create `src/components/Hero.astro` with product name, tagline, and Launch App button (44x44px min tap target)
     - Launch App button links to `https://arthas-blush.vercel.app` with `target="_blank" rel="noopener"`
     - Use `import.meta.env.BASE_URL` for all internal links (never hardcode `/arthas/`)
     - Include CSS-only placeholder animation with `@media (prefers-reduced-motion: reduce)` support
     - _Requirements: 2.1, 2.2_
 
-  - [-] 2.3 Implement FeatureCards component
+  - [x] 2.3 Implement FeatureCards component
     - Create `src/components/FeatureCards.astro` with 6 feature cards (E2EE, No Signup, Self-Destruct, File Sharing, Voice Messages, CLI Client)
     - Each card: icon + title (≤30 chars) + description (≤120 chars)
     - CSS Grid layout: 3 columns desktop, 2 columns tablet, 1 column mobile
     - _Requirements: 2.3, 4.1_
 
-  - [-] 2.4 Implement HowItWorks component
+  - [x] 2.4 Implement HowItWorks component
     - Create `src/components/HowItWorks.astro` with 4-5 sequential steps (Create → Share → Chat → Gone)
     - Each step: icon + descriptive label
     - Responsive horizontal layout (desktop) / vertical stack (mobile)
     - _Requirements: 2.6_
 
-  - [-] 2.5 Implement TrustSection component
+  - [x] 2.5 Implement TrustSection component
     - Create `src/components/TrustSection.astro` with 4 trust indicators
     - Open-source badge (GitHub stars link), zero-knowledge architecture SVG diagram, AGPL-3.0 badge, "server sees nothing" explanation
     - _Requirements: 2.7_
 
-  - [-] 2.6 Implement Footer component
+  - [x] 2.6 Implement Footer component
     - Create `src/components/Footer.astro` with links to GitHub repo, License (AGPL-3.0), and Launch App button
     - Ensure Launch App opens in new tab
     - _Requirements: 10.2, 10.4_
@@ -81,7 +81,7 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     - Create `src/pages/zh/index.astro` as Chinese version using same components with locale='zh'
     - _Requirements: 2.1, 5.6_
 
-- [~] 3. Phase A — Navigation & 404 Page (~3h)
+- [x] 3. Phase A — Navigation & 404 Page (~3h)
   - [x] 3.1a Implement header structure and navigation links
     - Add fixed-position header with logo + navigation links (Home, Docs, GitHub) + GitHub star link
     - Visually distinguish active navigation item (color/underline/font-weight)
@@ -100,12 +100,12 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     - Ensure 44x44px min touch targets on all interactive elements
     - _Requirements: 4.2, 4.3, 4.4_
 
-  - [-] 3.2 Create 404 page
+  - [x] 3.2 Create 404 page
     - Create `src/pages/404.astro` with Arthas logo, friendly error message, and link back to homepage
     - Use `import.meta.env.BASE_URL` for home link
     - _Requirements: 1.9_
 
-- [ ] 4. Phase A — Documentation Integration (~2h)
+- [x] 4. Phase A — Documentation Integration (~2h)
   - [x] 4.1 Create documentation sync script
     - Create `website/scripts/sync-docs.mjs` (Node.js for cross-platform compatibility) that copies `official_doc/` files into `src/content/docs/`
     - English docs (`.en.md`) → `src/content/docs/` (strip `.en` suffix)
@@ -113,7 +113,7 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     - Works on Windows (no bash/symlink dependency)
     - _Requirements: 6.1, 11.7_
 
-  - [-] 4.2 Configure Starlight documentation sidebar
+  - [x] 4.2 Configure Starlight documentation sidebar
     - Configure sidebar in `astro.config.mjs` using `autogenerate` mode from `docs/` directory
     - Ensure Starlight infers page titles from first H1 heading (no frontmatter modification needed)
     - Verify Pagefind search integration is enabled (built-in)
@@ -126,7 +126,7 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     - Handle missing/empty markdown files gracefully (Starlight default behavior)
     - _Requirements: 6.3, 6.4, 6.5, 6.6, 6.9_
 
-- [ ] 5. Phase A — SEO & Deployment (~2h)
+- [x] 5. Phase A — SEO & Deployment (~2h)
   - [x] 5.1 Fill per-page SEO meta content
     - Define unique meta title (30-60 chars) and description (50-160 chars) for each page via Landing layout props
     - Ensure canonical URL is generated correctly on every page
@@ -147,7 +147,7 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     - Include Windows-specific note: "sync-docs.mjs is cross-platform, no bash required"
     - _Requirements: 11.3_
 
-- [ ] 6. Phase A — Verification & Quality Assurance (~2h)
+- [x] 6. Phase A — Verification & Quality Assurance (~2h)
   - [x] 6.1 Ensure responsive layout across all components
     - Verify no layout overflow from 320px to 2560px viewport widths
     - Ensure vertical stacking and 16px min font on mobile (<768px)
@@ -188,7 +188,7 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     ```
   - Verify: all pages render correctly, navigation works, docs are accessible, 404 page displays properly, base path `/arthas/` resolves everywhere.
 
-- [ ] 8. Phase B — Download Page & GitHub Release Integration (~3h)
+- [x] 8. Phase B — Download Page & GitHub Release Integration (~3h)
   - [x] 8.1 Create GitHub Release fetch script
     - Create `website/scripts/fetch-release.mjs` that fetches latest release from GitHub API
     - Write result to `src/data/release.json` (version, assets with download URLs, publishedAt)
@@ -212,7 +212,7 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     - Test JSON output format
     - _Requirements: 7.2, 7.6_
 
-- [ ] 9. Phase B — Roadmap Visualization (~3h)
+- [x] 9. Phase B — Roadmap Visualization (~3h)
   - [x] 9.1 Create roadmap data file
     - Create `src/data/roadmap.json` with all 11 phases (name, nameEn, status, percentage, features array)
     - Each feature: name, nameEn, done boolean
@@ -226,7 +226,7 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     - Create `src/pages/zh/roadmap.astro` for Chinese version
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7_
 
-- [ ] 10. Phase B — Scroll Animations & Hero Enhancement (~2h)
+- [x] 10. Phase B — Scroll Animations & Hero Enhancement (~2h)
   - [x] 10.1 Implement scroll animations for Feature Cards
     - Add IntersectionObserver-based fade-and-translate entrance animation
     - Stagger delay of 100-150ms between consecutive cards
@@ -239,7 +239,7 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     - Pause animation when `prefers-reduced-motion: reduce` is active
     - _Requirements: 2.4_
 
-- [ ] 11. Phase B — Full i18n & Navigation Enhancements (~2h)
+- [x] 11. Phase B — Full i18n & Navigation Enhancements (~2h)
   - [x] 11.1 Implement full language switching for all pages
     - Ensure language switcher navigates between corresponding language routes for download and roadmap pages
     - Persist language preference in localStorage across visits
@@ -250,7 +250,7 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     - Implement "Back to top" button (appears after scrolling past first viewport height, smooth scroll to top)
     - _Requirements: 10.1, 10.6, 10.7_
 
-- [ ] 12. Phase B — Advanced SEO & Social Sharing (~1h)
+- [x] 12. Phase B — Advanced SEO & Social Sharing (~1h)
   - [x] 12.1 Add Open Graph image and Twitter Card meta
     - Create/add `public/og-image.png` (1200x630px) for social sharing
     - Add og:image and Twitter Card meta tags to all pages
@@ -261,7 +261,7 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     - Include name, description, url, applicationCategory, operatingSystem, license, offers
     - _Requirements: 9.4_
 
-- [~] 13. Checkpoint — Phase B Complete
+- [x] 13. Checkpoint — Phase B Complete
   - **Verification commands:**
     ```
     cd website
@@ -279,21 +279,21 @@ Build the Arthas project website using Astro + @astrojs/starlight, deployed on G
     # Manual: verify scroll animations respect prefers-reduced-motion
     ```
 
-- [ ] 14. Final Integration & Wiring (~1h)
-  - [~] 14.1 Wire all Phase B components into navigation and layout
+- [x] 14. Final Integration & Wiring (~1h)
+  - [x] 14.1 Wire all Phase B components into navigation and layout
     - Ensure all pages are linked from navigation and footer
     - Verify sitemap.xml includes all new pages (download, roadmap, zh variants)
     - Verify hreflang tags are correct on all pages
     - Verify all internal links resolve under `/arthas/` base path
     - _Requirements: 9.3, 9.7, 10.1_
 
-  - [~] 14.2 Write end-to-end build validation tests
+  - [x] 14.2 Write end-to-end build validation tests
     - Test full build pipeline (fetch-release → sync-docs → astro build) completes successfully
     - Validate all generated HTML pages have required meta tags
     - Validate sitemap.xml contains all expected URLs
     - _Requirements: 1.2, 9.3, 11.5_
 
-- [~] 15. Final Checkpoint — All Phases Complete
+- [x] 15. Final Checkpoint — All Phases Complete
   - **Verification commands:**
     ```
     cd website

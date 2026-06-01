@@ -115,7 +115,7 @@ func (h *Hub) handleSendMessage(client *Client, data interface{}) {
 ---
 
 **GitHub**: https://github.com/michaelwang123/arthas
-**Live Demo**: https://arthas-chat.vercel.app
+**Live Demo**: https://arthas-blush.vercel.app/
 ```
 
 ### Key Design Decisions

@@ -143,7 +143,7 @@ Hi HN,
 I built Arthas, an end-to-end encrypted ephemeral chat app. The idea is simple: 
 create a room, share the key, chat securely, and everything disappears when you leave.
 
-Live demo: https://arthas-chat.vercel.app
+Live demo: https://arthas-blush.vercel.app/
 GitHub: https://github.com/michaelwang123/arthas
 
 Why I built this:
@@ -230,7 +230,7 @@ that you can self-host with a single command.
 - Supports amd64 + arm64
 
 GitHub: https://github.com/michaelwang123/arthas
-Demo: https://arthas-chat.vercel.app
+Demo: https://arthas-blush.vercel.app/
 Self-hosting docs: https://github.com/michaelwang123/arthas/blob/main/official_doc/self-hosting.md
 
 Built with Go + React + WebSocket + MessagePack. 
@@ -264,7 +264,7 @@ Happy to answer any questions about the architecture or deployment!
 在 `Communication - Custom Communication Systems` 分类下，按字母顺序插入：
 
 ```markdown
-- [Arthas](https://github.com/michaelwang123/arthas) - End-to-end encrypted ephemeral chat with no registration. Features include file sharing, voice messages, self-destruct messages, and CLI client. ([Demo](https://arthas-chat.vercel.app)) `MIT` `Go/Docker`
+- [Arthas](https://github.com/michaelwang123/arthas) - End-to-end encrypted ephemeral chat with no registration. Features include file sharing, voice messages, self-destruct messages, and CLI client. ([Demo](https://arthas-blush.vercel.app/)) `MIT` `Go/Docker`
 ```
 
 ### 收录前置条件检查
@@ -288,7 +288,7 @@ Arthas is a self-hosted end-to-end encrypted ephemeral chat application.
 - Auto HTTPS via Caddy
 - MIT licensed
 
-Demo: https://arthas-chat.vercel.app
+Demo: https://arthas-blush.vercel.app/
 Docs: https://github.com/michaelwang123/arthas/blob/main/official_doc/self-hosting.md
 ```
 
@@ -309,7 +309,7 @@ websocket, go, react, typescript, end-to-end-encryption
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.23-00ADD8.svg)](https://go.dev)
 [![Docker](https://img.shields.io/badge/Docker-<30MB-2496ED.svg)](https://github.com/michaelwang123/arthas/pkgs/container/arthas)
-[![Demo](https://img.shields.io/badge/Demo-Live-green.svg)](https://arthas-chat.vercel.app)
+[![Demo](https://img.shields.io/badge/Demo-Live-green.svg)](https://arthas-blush.vercel.app/)
 ```
 
 > 注意：项目使用 GitHub Container Registry (ghcr.io)，不是 Docker Hub。

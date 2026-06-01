@@ -17,7 +17,7 @@ Hi HN,
 
 I built Arthas, an end-to-end encrypted ephemeral chat app. The idea is simple: create a room, share the key, chat securely, and everything disappears when everyone leaves.
 
-Live demo: https://arthas-chat.vercel.app
+Live demo: https://arthas-blush.vercel.app/
 GitHub: https://github.com/michaelwang123/arthas
 Project website: https://michaelwang123.github.io/arthas/
 
