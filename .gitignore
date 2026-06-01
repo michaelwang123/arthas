@@ -59,3 +59,7 @@ website/node_modules/
 website/dist/
 website/src/content/docs/
 website/src/data/release.json
+
+# Chrome Extension
+arthas-extension/node_modules/
+arthas-extension/dist/
