@@ -43,7 +43,7 @@ import {
   type Message,
   type SendFileCancelData,
 } from '../network/protocol';
-import { send } from '../network/websocket';
+import { send, isConnected } from '../network/websocket';
 import {
   type TransferState,
   type FileTransferState,
@@ -54,7 +54,7 @@ import {
   CHUNK_SIZE,
   generateTransferId,
 } from './types';
-import { storeFileRef, sendFile } from './sender';
+import { storeFileRef, sendFile, removeFileRef } from './sender';
 import {
   handleFileMeta,
   handleFileChunk,
@@ -805,6 +805,45 @@ function processQueue(): void {
 
   console.log('[FileTransfer] Queue processing: starting send for', nextTransferId);
 
+  /**
+   * 标记传输失败、清除活跃标记、推进队列的统一辅助函数。
+   * 减少 processQueue 内多个失败路径的代码重复。
+   */
+  function failAndAdvance(error: string): void {
+    useFileTransferStore.setState((state) => {
+      const newTransfers = new Map(state.transfers);
+      const t = newTransfers.get(nextTransferId);
+      if (t) {
+        newTransfers.set(nextTransferId, {
+          ...t,
+          status: 'failed' as TransferStatus,
+          error,
+        });
+      }
+      return { transfers: newTransfers, activeSendId: null };
+    });
+    processQueue();
+  }
+
+  // --- 预检守卫 1: WebSocket 连接检查 ---
+  // @see requirements.md — Requirement 2.2, 2.3
+  if (!isConnected()) {
+    console.warn('[FileTransfer] WebSocket 未连接，传输失败:', nextTransferId);
+    failAndAdvance('WebSocket 连接不可用，无法发送文件');
+    return;
+  }
+
+  // --- 预检守卫 2: 传输状态有效性检查 ---
+  // @see requirements.md — Requirement 2.4, 2.5
+  // 重新从 store 读取传输状态，防御 setState 与 sendFile 调用之间的竞态条件
+  const freshTransfer = useFileTransferStore.getState().transfers.get(nextTransferId);
+  if (!freshTransfer || freshTransfer.status !== 'sending') {
+    console.warn('[FileTransfer] 传输状态在发送前已失效，跳过:', nextTransferId);
+    useFileTransferStore.setState({ activeSendId: null });
+    processQueue();
+    return;
+  }
+
   // 获取房间密钥并触发发送
   // 📚 学习要点: 跨 Store 数据获取
   // processQueue 需要 roomKey（存储在 chatStore 中），但自身属于 fileTransferStore。
@@ -813,25 +852,37 @@ function processQueue(): void {
   const { roomKey } = useChatStore.getState();
   if (!roomKey) {
     // 没有房间密钥（可能已离开房间），标记传输失败
-    useFileTransferStore.setState((state) => {
-      const newTransfers = new Map(state.transfers);
-      const t = newTransfers.get(nextTransferId);
-      if (t) {
-        newTransfers.set(nextTransferId, {
-          ...t,
-          status: 'failed' as TransferStatus,
-          error: '房间密钥不可用，无法加密文件',
-        });
-      }
-      return { transfers: newTransfers, activeSendId: null };
-    });
-    processQueue(); // 尝试处理下一个
+    failAndAdvance('房间密钥不可用，无法加密文件');
     return;
   }
 
   // 异步执行发送（不阻塞 processQueue 返回）
   // sendFile 内部会在完成/失败后自动触发 processQueue 处理下一个
-  sendFile(nextTransferId, roomKey);
+  // --- .catch() 安全网：捕获 sendFile 未处理的 Promise 拒绝 ---
+  // @see requirements.md — Requirement 2.1
+  sendFile(nextTransferId, roomKey).catch((error: unknown) => {
+    const errorMessage = error instanceof Error ? error.message : '未知的 sendFile 错误';
+    console.error('[FileTransfer] sendFile 未处理的 Promise 拒绝:', errorMessage);
+
+    // 幂等保护：仅当该传输仍为活跃发送时才标记失败（防止与离线超时重复处理）
+    const currentState = useFileTransferStore.getState();
+    if (currentState.activeSendId === nextTransferId) {
+      useFileTransferStore.setState((state) => {
+        const newTransfers = new Map(state.transfers);
+        const t = newTransfers.get(nextTransferId);
+        if (t && t.status === 'sending') {
+          newTransfers.set(nextTransferId, {
+            ...t,
+            status: 'failed' as TransferStatus,
+            error: errorMessage,
+          });
+        }
+        return { transfers: newTransfers, activeSendId: null };
+      });
+      removeFileRef(nextTransferId);
+      processQueue();
+    }
+  });
 }
 
 // ============================================================================
