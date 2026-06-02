@@ -212,6 +212,15 @@ let isPaused = false;
 /** 离线检测是否已初始化（防止重复注册事件监听器） */
 let offlineDetectionInitialized = false;
 
+/** 离线超时定时器句柄（未激活时为 null） */
+let offlineTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+/** 浏览器进入离线状态的时间戳（在线时为 0） */
+let offlineStartTime = 0;
+
+/** 离线超时时长（毫秒）：60 秒无网络则失败传输 */
+export const OFFLINE_TIMEOUT_MS = 60_000;
+
 // ============================================================================
 // 流控公开 API
 // ============================================================================
@@ -308,6 +317,40 @@ export function setIsPaused(paused: boolean): void {
 }
 
 /**
+ * 重置离线检测状态（仅供测试使用）。
+ * 清除超时定时器、重置离线起始时间、重置初始化标志以允许重新 setup。
+ *
+ * @internal 仅供测试使用
+ */
+export function resetOfflineDetectionState(): void {
+  if (offlineTimeoutId !== null) {
+    clearTimeout(offlineTimeoutId);
+    offlineTimeoutId = null;
+  }
+  offlineStartTime = 0;
+  isPaused = false;
+  offlineDetectionInitialized = false;
+}
+
+/**
+ * 获取当前离线超时定时器句柄（用于测试断言）。
+ *
+ * @internal 仅供测试使用
+ */
+export function getOfflineTimeoutId(): ReturnType<typeof setTimeout> | null {
+  return offlineTimeoutId;
+}
+
+/**
+ * 获取离线起始时间戳（用于测试断言）。
+ *
+ * @internal 仅供测试使用
+ */
+export function getOfflineStartTime(): number {
+  return offlineStartTime;
+}
+
+/**
  * 初始化离线检测：监听 window 的 offline/online 事件。
  *
  * 📚 学习要点: navigator.onLine 与 offline 事件
@@ -336,7 +379,23 @@ export function setupOfflineDetection(): void {
   window.addEventListener('offline', () => {
     isPaused = true;
 
-    // 更新活跃传输的 UI 状态（如果有的话）
+    // Guard: do not start a duplicate timer if one is already running
+    if (offlineTimeoutId !== null) return;
+
+    offlineStartTime = Date.now();
+
+    offlineTimeoutId = setTimeout(() => {
+      offlineTimeoutId = null; // Timer has fired, clear handle
+
+      // If an active send exists, fail it with a timeout error
+      const { activeSendId } = useFileTransferStore.getState();
+      if (activeSendId) {
+        console.warn('[FileTransfer] Offline timeout: failing active send', activeSendId);
+        failTransfer(activeSendId, '网络离线超过 60 秒，传输超时失败', 'sending');
+      }
+      // If no active send, this is a no-op
+    }, OFFLINE_TIMEOUT_MS);
+
     const { activeSendId } = useFileTransferStore.getState();
     if (activeSendId) {
       console.warn('[FileTransfer] Network offline, pausing transfer:', activeSendId);
@@ -345,6 +404,13 @@ export function setupOfflineDetection(): void {
 
   window.addEventListener('online', () => {
     isPaused = false;
+
+    // Clear the offline timeout if active
+    if (offlineTimeoutId !== null) {
+      clearTimeout(offlineTimeoutId);
+      offlineTimeoutId = null;
+    }
+    offlineStartTime = 0;
 
     // 检查 WebSocket 是否仍然连接
     if (isConnected()) {
@@ -442,6 +508,9 @@ export function storeFileRef(transferId: string, file: File): void {
 /**
  * 移除文件引用，释放 File 对象。
  * 在传输完成、失败或取消后调用，防止内存泄漏。
+ *
+ * 此函数是幂等的：对同一 transferId 多次调用是安全的（Map.delete 对不存在的 key 为空操作）。
+ * 这一特性很重要，因为离线超时、.catch() 处理器、sendFile 的 finally 块都可能调用此函数。
  *
  * 📚 学习要点: File 对象的内存管理
  * 虽然 File 对象本身很小（只是磁盘文件的引用），
@@ -917,24 +986,30 @@ function completeTransfer(transferId: string): void {
 /**
  * 标记传输为失败状态，清理资源，触发队列处理下一个。
  *
+ * 此函数是离线超时和 sendFile 内部错误的统一失败处理入口。
+ * 通过可选的 `guardStatus` 参数支持幂等保护：
+ * - 不传 guardStatus：无条件标记失败（用于 sendFile 内部捕获的错误）
+ * - 传入 'sending'：仅当传输仍处于 'sending' 状态时标记失败（用于离线超时和 .catch 处理器，
+ *   防止对已完成或已失败的传输重复修改）
+ *
  * 📚 学习要点: 失败恢复策略
  * 单个传输失败不应阻塞整个队列。失败处理流程：
  * 1. 更新传输状态为 'failed'（UI 显示错误信息）
  * 2. 清除 activeSendId（允许下一个传输开始）
- * 3. 清理 File 引用（释放资源）
+ * 3. 清理 File 引用（释放资源，幂等操作）
  * 4. 触发 processQueue()（自动开始下一个排队的传输）
  *
- * 用户可以看到失败的传输气泡，了解发生了什么，
- * 并可以手动重新发送文件（当前版本不支持自动重试）。
- *
  * @param transferId - 传输 ID
- * @param error - 错误描述信息
+ * @param error - 错误描述信息（用户可见）
+ * @param guardStatus - 可选的状态守卫：仅当传输处于该状态时才标记失败
+ *
+ * @internal 导出仅供测试使用；内部由 setupOfflineDetection 超时回调和 sendFile 错误处理调用
  */
-function failTransfer(transferId: string, error: string): void {
+export function failTransfer(transferId: string, error: string, guardStatus?: TransferStatus): void {
   useFileTransferStore.setState((state) => {
     const transfers = new Map(state.transfers);
     const transfer = transfers.get(transferId);
-    if (transfer) {
+    if (transfer && (!guardStatus || transfer.status === guardStatus)) {
       transfers.set(transferId, {
         ...transfer,
         status: 'failed' as TransferStatus,
@@ -943,13 +1018,10 @@ function failTransfer(transferId: string, error: string): void {
     }
     return {
       transfers,
-      activeSendId: null,  // 清除活跃发送标记，允许下一个传输
+      activeSendId: null,
     };
   });
 
-  // 清理 File 引用
   removeFileRef(transferId);
-
-  // 触发队列处理下一个
   triggerProcessQueue();
 }

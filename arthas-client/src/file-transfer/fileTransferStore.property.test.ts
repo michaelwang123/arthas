@@ -18,8 +18,23 @@
  * @see Requirements 3.7, 4.9, 11.3, 11.4
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as fc from 'fast-check';
+
+// Mock WebSocket module — processQueue uses isConnected() pre-flight check
+vi.mock('../network/websocket', () => ({
+  send: vi.fn(),
+  isConnected: vi.fn(() => true),
+  getWs: vi.fn(() => ({ bufferedAmount: 0 })),
+}));
+
+// Mock sender module — prevent actual file sending during queue tests
+vi.mock('./sender', () => ({
+  storeFileRef: vi.fn(),
+  sendFile: vi.fn(async () => {}),
+  removeFileRef: vi.fn(),
+}));
+
 import { useFileTransferStore } from './fileTransferStore';
 import { useChatStore } from '../stores/chatStore';
 
