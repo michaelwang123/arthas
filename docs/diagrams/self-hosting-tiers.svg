@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 850 280" fill="none">
+  <rect width="850" height="280" rx="12" fill="#0d0d1a"/>
+  <text x="425" y="32" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#ffd700">Self-Hosting Deployment Tiers</text>
+
+  <!-- Tier 1 -->
+  <rect x="25" y="55" width="255" height="200" rx="10" fill="#1a1a2e" stroke="#22c55e" stroke-width="1.5"/>
+  <rect x="25" y="55" width="255" height="36" rx="10" fill="rgba(34,197,94,0.15)"/>
+  <rect x="25" y="79" width="255" height="12" fill="#1a1a2e"/>
+  <text x="152" y="78" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="700" fill="#22c55e">Tier 1 — Single Binary</text>
+  <text x="152" y="112" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#e8e8e8">Zero Dependencies</text>
+  <text x="152" y="135" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">./arthas-server-all --port 8080</text>
+  <rect x="45" y="150" width="215" height="24" rx="4" fill="#1e293b"/>
+  <text x="152" y="166" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">📦 Single file (~7MB)</text>
+  <rect x="45" y="180" width="215" height="24" rx="4" fill="#1e293b"/>
+  <text x="152" y="196" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">🌐 Frontend + Backend embedded</text>
+  <rect x="45" y="210" width="215" height="24" rx="4" fill="#1e293b"/>
+  <text x="152" y="226" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">⚡ HTTP only (local/intranet)</text>
+
+  <!-- Tier 2 -->
+  <rect x="298" y="55" width="255" height="200" rx="10" fill="#1a1a2e" stroke="#4a7fbf" stroke-width="1.5"/>
+  <rect x="298" y="55" width="255" height="36" rx="10" fill="rgba(74,127,191,0.15)"/>
+  <rect x="298" y="79" width="255" height="12" fill="#1a1a2e"/>
+  <text x="425" y="78" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="700" fill="#4a7fbf">Tier 2 — Docker</text>
+  <text x="425" y="112" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#e8e8e8">One Command Deploy</text>
+  <text x="425" y="135" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">docker run -p 8080:8080 ghcr.io/.../arthas</text>
+  <rect x="318" y="150" width="215" height="24" rx="4" fill="#1e293b"/>
+  <text x="425" y="166" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">🐳 Pre-built image (&lt;30MB)</text>
+  <rect x="318" y="180" width="215" height="24" rx="4" fill="#1e293b"/>
+  <text x="425" y="196" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">🏗️ Multi-arch (amd64 + arm64)</text>
+  <rect x="318" y="210" width="215" height="24" rx="4" fill="#1e293b"/>
+  <text x="425" y="226" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">⚡ HTTP only (quick test)</text>
+
+  <!-- Tier 3 -->
+  <rect x="571" y="55" width="255" height="200" rx="10" fill="#1a1a2e" stroke="#ffd700" stroke-width="1.5"/>
+  <rect x="571" y="55" width="255" height="36" rx="10" fill="rgba(255,215,0,0.12)"/>
+  <rect x="571" y="79" width="255" height="12" fill="#1a1a2e"/>
+  <text x="698" y="78" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="700" fill="#ffd700">Tier 3 — Docker Compose</text>
+  <text x="698" y="112" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#e8e8e8">Production Ready</text>
+  <text x="698" y="135" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">cd deploy && ./deploy.sh</text>
+  <rect x="591" y="150" width="215" height="24" rx="4" fill="#1e293b"/>
+  <text x="698" y="166" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">🔒 Auto HTTPS (Let's Encrypt)</text>
+  <rect x="591" y="180" width="215" height="24" rx="4" fill="#1e293b"/>
+  <text x="698" y="196" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">🌐 Caddy reverse proxy</text>
+  <rect x="591" y="210" width="215" height="24" rx="4" fill="#1e293b"/>
+  <text x="698" y="226" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">📡 Public internet ready</text>
+
+  <!-- Bottom note -->
+  <text x="425" y="270" text-anchor="middle" font-family="Inter, sans-serif" font-size="10" fill="#64748b">All tiers maintain zero-knowledge architecture — server never sees plaintext</text>
+</svg>
