@@ -121,38 +121,50 @@ chmod +x arthas-server
 
 ## 快速开始：Tier 2（Docker 单容器）
 
-适合快速部署、内网使用或测试。一条命令构建包含前端和后端的完整镜像。
+适合快速部署、内网使用或测试。预构建镜像已发布到 GitHub Container Registry，一条命令即可运行。
 
-### 1. 克隆仓库
+### 方式 A：使用预构建镜像（推荐）
+
+```bash
+# 直接拉取并运行（镜像 < 30MB，含完整前端 + 后端）
+docker run -d -p 8080:8080 --name arthas ghcr.io/michaelwang123/arthas:latest
+
+# 自定义端口
+docker run -d -p 3000:3000 -e PORT=3000 --name arthas ghcr.io/michaelwang123/arthas:latest
+
+# 限制 CORS 来源
+docker run -d -p 8080:8080 -e ALLOWED_ORIGINS=https://chat.example.com --name arthas ghcr.io/michaelwang123/arthas:latest
+```
+
+或使用 Docker Compose：
+
+```yaml
+# docker-compose.yml
+services:
+  arthas:
+    image: ghcr.io/michaelwang123/arthas:latest
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+```
+
+```bash
+docker compose up -d
+```
+
+### 方式 B：从源码构建
+
+如果你需要自定义修改：
 
 ```bash
 git clone https://github.com/michaelwang123/arthas.git
 cd arthas
-```
 
-### 2. 构建镜像
-
-```bash
 # 从项目根目录构建（必须使用 deploy/Dockerfile）
 docker build -f deploy/Dockerfile -t arthas-server .
-```
 
-构建过程约 1-2 分钟，三阶段流程：
-1. **Stage 1 (frontend):** Node.js 构建前端 React 应用 → 产出 `dist/`
-2. **Stage 2 (builder):** Go 编译器将 `dist/` 嵌入二进制 → 产出单一可执行文件
-3. **Stage 3 (runtime):** 最小化 Alpine 镜像 + 二进制 → 最终镜像 < 30MB
-
-### 3. 启动容器
-
-```bash
-# 基本启动
+# 启动
 docker run -d -p 8080:8080 --name arthas arthas-server
-
-# 自定义端口
-docker run -d -p 3000:3000 -e PORT=3000 --name arthas arthas-server
-
-# 限制 CORS 来源
-docker run -d -p 8080:8080 -e ALLOWED_ORIGINS=https://chat.example.com --name arthas arthas-server
 ```
 
 ### 4. 验证
@@ -194,7 +206,7 @@ docker stop arthas
 docker rm arthas
 
 # 删除镜像（可选）
-docker rmi arthas-server
+docker rmi ghcr.io/michaelwang123/arthas:latest
 ```
 
 ### Docker Compose 单容器模式
@@ -205,20 +217,12 @@ docker rmi arthas-server
 # docker-compose.yml
 services:
   arthas:
-    build:
-      context: .
-      dockerfile: deploy/Dockerfile
+    image: ghcr.io/michaelwang123/arthas:latest
     ports:
       - "8080:8080"
     environment:
-      - PORT=8080
       - ALLOWED_ORIGINS=*
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/ping"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
 ```
 
 ```bash
@@ -361,15 +365,10 @@ sed -i 's/ARTHAS_VERSION=.*/ARTHAS_VERSION=v1.2.0/' .env
 ### Tier 2（Docker 单容器）升级
 
 ```bash
-# 1. 拉取最新代码
-git pull
-
-# 2. 重新构建镜像
-docker build -f deploy/Dockerfile -t arthas-server .
-
-# 3. 替换容器
+# 拉取最新镜像并替换容器
+docker pull ghcr.io/michaelwang123/arthas:latest
 docker rm -f arthas
-docker run -d -p 8080:8080 --name arthas arthas-server
+docker run -d -p 8080:8080 --name arthas ghcr.io/michaelwang123/arthas:latest
 ```
 
 ### Tier 1（单二进制）升级
@@ -430,7 +429,10 @@ Tier 1 和 Tier 2 无状态，无需备份。二进制文件可随时重新下�
 # 错误 ❌（只构建后端，无前端）
 docker build -t arthas-server ./arthas-server
 
-# 正确 ✅（从项目根目录，使用 deploy/Dockerfile）
+# 正确 ✅（使用预构建镜像，含完整前端 + 后端）
+docker run -d -p 8080:8080 ghcr.io/michaelwang123/arthas:latest
+
+# 或从源码构建（使用 deploy/Dockerfile）
 docker build -f deploy/Dockerfile -t arthas-server .
 ```
 
@@ -597,7 +599,7 @@ Go 后端负责：
 
 如果你想从源码构建而非使用预构建镜像：
 
-### Docker 构建（推荐）
+### Docker 构建（自定义修改时使用）
 
 ```bash
 # 克隆仓库
@@ -613,6 +615,8 @@ docker build -f deploy/Dockerfile --build-arg VERSION=v1.2.3 -t arthas-server:v1
 # 运行
 docker run -d -p 8080:8080 --name arthas arthas-server
 ```
+
+> **注意：** 对于普通用户，建议直接使用预构建镜像 `ghcr.io/michaelwang123/arthas:latest`，无需克隆仓库和构建。
 
 ### 本地构建（需要 Go + Node.js）
 

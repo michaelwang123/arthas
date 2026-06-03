@@ -50,10 +50,9 @@ function getDownloadUrl(binary: string, os: string, arch: string): string {
 
 const githubReleasesUrl = 'https://github.com/michaelwang123/arthas/releases';
 
-const dockerComposeYml = `version: "3.8"
-services:
+const dockerComposeYml = `services:
   arthas:
-    image: ghcr.io/michaelwang123/arthas-server:latest
+    image: ghcr.io/michaelwang123/arthas:latest
     ports:
       - "8080:8080"
     restart: unless-stopped`;
@@ -96,6 +95,14 @@ const downloadAriaPrefix = locale === 'zh' ? '下载' : 'Download';
             <h3 class="platform-name">{platform.label}</h3>
             <div class="download-buttons">
               <a
+                href={getDownloadUrl('arthas-server-all', platform.os, platform.arch)}
+                class="download-btn download-btn--server-all"
+                download
+                aria-label={`${downloadAriaPrefix} arthas-server-all (${platform.label})`}
+              >
+                {t('download.serverAll', locale)}
+              </a>
+              <a
                 href={getDownloadUrl('arthas-server', platform.os, platform.arch)}
                 class="download-btn download-btn--server"
                 download
@@ -114,6 +121,22 @@ const downloadAriaPrefix = locale === 'zh' ? '下载' : 'Download';
             </div>
           </article>
         ))}
+      </div>
+    </section>
+
+    {/* ===== arthas-server-all 使用说明 ===== */}
+    <section class="server-all-section" aria-labelledby="server-all-heading">
+      <h2 id="server-all-heading">{t('download.serverAll.title', locale)}</h2>
+      <p class="section-description">{t('download.serverAll.description', locale)}</p>
+
+      <div class="quickstart-card">
+        <ol class="quickstart-steps">
+          <li>{t('download.serverAll.step1', locale)}</li>
+          <li><code>{t('download.serverAll.step2', locale)}</code></li>
+          <li><code>{t('download.serverAll.step3', locale)}</code></li>
+          <li>{t('download.serverAll.step4', locale)}</li>
+        </ol>
+        <p class="server-all-note">{t('download.serverAll.note', locale)}</p>
       </div>
     </section>
 
@@ -346,6 +369,17 @@ const downloadAriaPrefix = locale === 'zh' ? '下载' : 'Download';
     color: #0d0d1a;
   }
 
+  .download-btn--server-all {
+    background: linear-gradient(135deg, var(--color-accent), #ff9500);
+    color: #0d0d1a;
+    font-weight: 700;
+  }
+
+  .download-btn--server-all:hover {
+    background: linear-gradient(135deg, #ffe44d, #ffb340);
+    color: #0d0d1a;
+  }
+
   .download-btn--cli {
     background: rgba(255, 215, 0, 0.15);
     color: var(--color-accent);
@@ -501,6 +535,13 @@ const downloadAriaPrefix = locale === 'zh' ? '下载' : 'Download';
   .github-link:hover {
     background: rgba(255, 215, 0, 0.2);
     color: var(--color-accent);
+  }
+
+  .server-all-note {
+    margin-top: 1rem;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+    font-style: italic;
   }
 
   @media (max-width: 767px) {

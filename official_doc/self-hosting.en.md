@@ -123,38 +123,50 @@ Open your browser and navigate to `http://localhost:8080` (or the port you speci
 
 ## Quick Start: Tier 2 (Docker Single Container)
 
-Suitable for quick deployment, intranet use, or testing. One command builds a complete image containing both frontend and backend.
+Suitable for quick deployment, intranet use, or testing. Pre-built images are available on GitHub Container Registry — one command to run.
 
-### 1. Clone the Repository
+### Option A: Use Pre-built Image (Recommended)
+
+```bash
+# Pull and run directly (image < 30MB, includes full frontend + backend)
+docker run -d -p 8080:8080 --name arthas ghcr.io/michaelwang123/arthas:latest
+
+# Custom port
+docker run -d -p 3000:3000 -e PORT=3000 --name arthas ghcr.io/michaelwang123/arthas:latest
+
+# Restrict CORS origins
+docker run -d -p 8080:8080 -e ALLOWED_ORIGINS=https://chat.example.com --name arthas ghcr.io/michaelwang123/arthas:latest
+```
+
+Or use Docker Compose:
+
+```yaml
+# docker-compose.yml
+services:
+  arthas:
+    image: ghcr.io/michaelwang123/arthas:latest
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+```
+
+```bash
+docker compose up -d
+```
+
+### Option B: Build from Source
+
+If you need custom modifications:
 
 ```bash
 git clone https://github.com/michaelwang123/arthas.git
 cd arthas
-```
 
-### 2. Build the Image
-
-```bash
 # Build from project root (must use deploy/Dockerfile)
 docker build -f deploy/Dockerfile -t arthas-server .
-```
 
-The build takes about 1-2 minutes with a three-stage process:
-1. **Stage 1 (frontend):** Node.js builds the React frontend → produces `dist/`
-2. **Stage 2 (builder):** Go compiler embeds `dist/` into the binary → produces a single executable
-3. **Stage 3 (runtime):** Minimal Alpine image + binary → final image < 30MB
-
-### 3. Start the Container
-
-```bash
-# Basic start
+# Start
 docker run -d -p 8080:8080 --name arthas arthas-server
-
-# Custom port
-docker run -d -p 3000:3000 -e PORT=3000 --name arthas arthas-server
-
-# Restrict CORS origins
-docker run -d -p 8080:8080 -e ALLOWED_ORIGINS=https://chat.example.com --name arthas arthas-server
 ```
 
 ### 4. Verify
@@ -196,7 +208,7 @@ docker stop arthas
 docker rm arthas
 
 # Remove the image (optional)
-docker rmi arthas-server
+docker rmi ghcr.io/michaelwang123/arthas:latest
 ```
 
 ### Docker Compose Single Container Mode
@@ -207,20 +219,12 @@ If you prefer using Docker Compose for management:
 # docker-compose.yml
 services:
   arthas:
-    build:
-      context: .
-      dockerfile: deploy/Dockerfile
+    image: ghcr.io/michaelwang123/arthas:latest
     ports:
       - "8080:8080"
     environment:
-      - PORT=8080
       - ALLOWED_ORIGINS=*
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/ping"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
 ```
 
 ```bash
@@ -322,10 +326,10 @@ cd deploy
 ### Tier 2 (Docker Single Container) Upgrade
 
 ```bash
-git pull
-docker build -f deploy/Dockerfile -t arthas-server .
+# Pull latest image and replace container
+docker pull ghcr.io/michaelwang123/arthas:latest
 docker rm -f arthas
-docker run -d -p 8080:8080 --name arthas arthas-server
+docker run -d -p 8080:8080 --name arthas ghcr.io/michaelwang123/arthas:latest
 ```
 
 ### Tier 1 (Single Binary) Upgrade
@@ -355,7 +359,10 @@ chmod +x arthas-server
 # Wrong ❌ (backend only, no frontend)
 docker build -t arthas-server ./arthas-server
 
-# Correct ✅ (from project root, using deploy/Dockerfile)
+# Correct ✅ (use pre-built image with full frontend + backend)
+docker run -d -p 8080:8080 ghcr.io/michaelwang123/arthas:latest
+
+# Or build from source (using deploy/Dockerfile)
 docker build -f deploy/Dockerfile -t arthas-server .
 ```
 
@@ -449,7 +456,7 @@ Browser ──HTTPS──→ Caddy (port 443)
 
 ## Building from Source
 
-### Docker Build (Recommended)
+### Docker Build (For Custom Modifications)
 
 ```bash
 git clone https://github.com/michaelwang123/arthas.git
@@ -457,6 +464,8 @@ cd arthas
 docker build -f deploy/Dockerfile -t arthas-server .
 docker run -d -p 8080:8080 --name arthas arthas-server
 ```
+
+> **Note:** For most users, the pre-built image `ghcr.io/michaelwang123/arthas:latest` is recommended — no need to clone or build.
 
 ### Local Build (Requires Go + Node.js)
 

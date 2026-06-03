@@ -76,6 +76,32 @@ echo "[5/5] windows/amd64..."
 GOOS=windows GOARCH=amd64 go build -C "$SERVER_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "../$BUILD_DIR/arthas-server-windows-amd64.exe" ./cmd/server
 
 # ============================================================================
+# Build arthas-server-all (server + embedded frontend)
+# ============================================================================
+echo ""
+echo "--- arthas-server-all (with embedded frontend) ---"
+
+echo "[0] Building frontend..."
+(cd arthas-client && npm run build)
+rm -rf "$SERVER_DIR/internal/static/dist"
+cp -r arthas-client/dist "$SERVER_DIR/internal/static/dist"
+
+echo "[1/5] linux/amd64..."
+GOOS=linux GOARCH=amd64 go build -C "$SERVER_DIR" -ldflags "-s -w -X main.Version=$VERSION" -o "../$BUILD_DIR/arthas-server-all-linux-amd64" ./cmd/server
+
+echo "[2/5] linux/arm64..."
+GOOS=linux GOARCH=arm64 go build -C "$SERVER_DIR" -ldflags "-s -w -X main.Version=$VERSION" -o "../$BUILD_DIR/arthas-server-all-linux-arm64" ./cmd/server
+
+echo "[3/5] darwin/amd64..."
+GOOS=darwin GOARCH=amd64 go build -C "$SERVER_DIR" -ldflags "-s -w -X main.Version=$VERSION" -o "../$BUILD_DIR/arthas-server-all-darwin-amd64" ./cmd/server
+
+echo "[4/5] darwin/arm64..."
+GOOS=darwin GOARCH=arm64 go build -C "$SERVER_DIR" -ldflags "-s -w -X main.Version=$VERSION" -o "../$BUILD_DIR/arthas-server-all-darwin-arm64" ./cmd/server
+
+echo "[5/5] windows/amd64..."
+GOOS=windows GOARCH=amd64 go build -C "$SERVER_DIR" -ldflags "-s -w -X main.Version=$VERSION" -o "../$BUILD_DIR/arthas-server-all-windows-amd64.exe" ./cmd/server
+
+# ============================================================================
 # List artifacts
 # ============================================================================
 echo ""
@@ -100,29 +126,41 @@ gh release create "$VERSION" \
   "$BUILD_DIR/arthas-server-darwin-amd64" \
   "$BUILD_DIR/arthas-server-darwin-arm64" \
   "$BUILD_DIR/arthas-server-windows-amd64.exe" \
+  "$BUILD_DIR/arthas-server-all-linux-amd64" \
+  "$BUILD_DIR/arthas-server-all-linux-arm64" \
+  "$BUILD_DIR/arthas-server-all-darwin-amd64" \
+  "$BUILD_DIR/arthas-server-all-darwin-arm64" \
+  "$BUILD_DIR/arthas-server-all-windows-amd64.exe" \
   --title "$VERSION" \
   --notes "## Arthas $VERSION
 
 ### Downloads
 
-| Platform | arthas-cli | arthas-server |
-|----------|-----------|--------------|
-| Linux x86_64 | arthas-cli-linux-amd64 | arthas-server-linux-amd64 |
-| Linux ARM64 | arthas-cli-linux-arm64 | arthas-server-linux-arm64 |
-| macOS Intel | arthas-cli-darwin-amd64 | arthas-server-darwin-amd64 |
-| macOS Apple Silicon | arthas-cli-darwin-arm64 | arthas-server-darwin-arm64 |
-| Windows x86_64 | arthas-cli-windows-amd64.exe | arthas-server-windows-amd64.exe |
+| Platform | arthas-cli | arthas-server | arthas-server-all |
+|----------|-----------|--------------|-------------------|
+| Linux x86_64 | arthas-cli-linux-amd64 | arthas-server-linux-amd64 | arthas-server-all-linux-amd64 |
+| Linux ARM64 | arthas-cli-linux-arm64 | arthas-server-linux-arm64 | arthas-server-all-linux-arm64 |
+| macOS Intel | arthas-cli-darwin-amd64 | arthas-server-darwin-amd64 | arthas-server-all-darwin-amd64 |
+| macOS Apple Silicon | arthas-cli-darwin-arm64 | arthas-server-darwin-arm64 | arthas-server-all-darwin-arm64 |
+| Windows x86_64 | arthas-cli-windows-amd64.exe | arthas-server-windows-amd64.exe | arthas-server-all-windows-amd64.exe |
+
+### What's the difference?
+
+- **arthas-server** — WebSocket relay only (pair with your own frontend or Vite dev server)
+- **arthas-server-all** — WebSocket relay + embedded web frontend (single binary, zero config)
+- **arthas-cli** — Terminal chat client
 
 ### Quick install (Linux/macOS)
 
 \`\`\`bash
+# All-in-one (recommended for self-hosting)
+curl -L https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-all-linux-amd64 -o arthas-server-all
+chmod +x arthas-server-all
+./arthas-server-all  # opens on :8080
+
 # CLI client
 curl -L https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli -o arthas-cli
 chmod +x arthas-cli
-
-# Server
-curl -L https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-linux-amd64 -o arthas-server
-chmod +x arthas-server
 \`\`\`
 "
 

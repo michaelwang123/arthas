@@ -142,16 +142,15 @@ Arthas supports full self-hosting, giving you complete control over your data an
 | Tier | Use Case | Description |
 |------|----------|-------------|
 | **Tier 1 – Single Binary** | Local/intranet/dev | Zero dependencies, download and run, Go embeds frontend |
-| **Tier 2 – Docker (Single Container)** | Quick deploy / testing | One command, frontend embedded in server |
+| **Tier 2 – Docker (Single Container)** | Quick deploy / testing | One command, pre-built image from GHCR |
 | **Tier 3 – Docker Compose** | Public production | Caddy auto-HTTPS + Go backend, one-click deploy |
 
 ```bash
 # Tier 1: Single binary
 ./arthas-server --port 8080
 
-# Tier 2: Docker (build from source, frontend + backend in one image)
-docker build -f deploy/Dockerfile -t arthas-server .
-docker run -d -p 8080:8080 arthas-server
+# Tier 2: Docker (pre-built image from GHCR)
+docker run -d -p 8080:8080 ghcr.io/michaelwang123/arthas:latest
 
 # Tier 3: Docker Compose (auto HTTPS)
 cd deploy && ./deploy.sh
