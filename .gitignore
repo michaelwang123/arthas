@@ -55,6 +55,7 @@ packages/openclaw-channel/coverage/
 docs/show/demo-full.mp4
 
 # Website (Astro)
+website/.astro/
 website/node_modules/
 website/dist/
 website/src/content/docs/
