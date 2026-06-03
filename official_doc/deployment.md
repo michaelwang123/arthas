@@ -1,3 +1,10 @@
+> ⚠️ **本文档已废弃 (Deprecated)**
+>
+> 部署指南已迁移到 [自托管部署文档 (Self-Hosting Guide)](self-hosting.md)。
+> 请使用新文档获取最新的部署方案（单二进制 / Docker / Docker Compose）。
+>
+> This document is deprecated. Please refer to [Self-Hosting Guide](self-hosting.md).
+
 # 部署指南 (Deployment Guide)
 
 本文档介绍如何将 Arthas 部署到生产环境。

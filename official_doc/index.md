@@ -1,6 +1,6 @@
 # Arthas — 端到端加密实时聊天室
 
-> Create Group · Share Key · Encrypted Communication
+> 创建群组 · 分享密钥 · 加密通信
 
 ---
 
@@ -16,12 +16,21 @@ Arthas 是一个开源的端到端加密 (E2EE) 实时聊天应用。用户可�
 
 | 特性 | 说明 |
 |------|------|
-| 🔒 端到端加密 | AES-256-GCM，服务器零知识设计 |
+| 🔒 端到端加密 | AES-256-GCM + Ed25519 签名，服务器零知识设计 |
 | ⚡ 实时通信 | WebSocket 全双工，消息即时送达 |
+| 📎 加密文件传输 | 分片加密，图片缩略图，拖拽上传 |
+| 🎤 加密语音消息 | 按住即说，Opus 编码，全程加密 |
+| 📱 QR 码分享 | 扫码加入，无需手动输入 |
+| ⏰ 房间过期 | 设定有效期（1h/24h/7d），到期自动销毁 |
 | 🔑 密钥即邀请 | 一个字符串同时包含房间地址和解密密钥 |
 | 🗑️ 阅后即焚 | 无持久化，所有人离开房间自动销毁 |
+| 💬 回复与表情 | 引用回复 + Emoji 反应，全部加密 |
+| 🔐 房间密码 | 可选密码保护防止未授权访问 |
+| 🤖 AI Agent 通道 | OpenClaw 插件实现 E2EE AI 对话 |
+| 🖥️ CLI 客户端 | 独立 Go 二进制，终端加密聊天 |
+| 🌐 国际化 | 中/英/日三语，自动检测浏览器语言 |
 | 🚫 无需注册 | 无账号体系，打开即用 |
-| 📦 轻量部署 | Docker 一键部署，前后端分离 |
+| 🏠 自托管 | 单二进制零依赖，或 Docker Compose + 自动 HTTPS |
 
 ---
 
@@ -33,9 +42,9 @@ Arthas 是一个开源的端到端加密 (E2EE) 实时聊天应用。用户可�
 | 前端 | React 18 + TypeScript | 组件化 UI，类型安全 |
 | 状态 | Zustand | 极简状态管理 |
 | 样式 | Tailwind CSS | 原子化 CSS，暗色主题 |
-| 构建 | Vite 5 | ESBuild 预构建，亚秒级 HMR |
+| 构建 | Vite 6 | ESBuild 预构建，亚秒级 HMR |
 | 协议 | WebSocket + MessagePack | 全双工实时通信，二进制序列化 |
-| 后端 | Go 1.22 + gorilla/websocket | goroutine 高并发，纯消息中转 |
+| 后端 | Go 1.23 + gorilla/websocket | goroutine 高并发，纯消息中转 |
 | 部署 | Docker + Vercel | 前后端分离，零成本起步 |
 
 ---
@@ -46,7 +55,7 @@ Arthas 是一个开源的端到端加密 (E2EE) 实时聊天应用。用户可�
 |------|------|
 | [快速开始](getting-started.md) | 5 分钟本地运行项目 |
 | [系统架构](architecture.md) | 整体架构设计与模块划分 |
-| [部署指南](deployment.md) | 生产环境部署方案 |
+| [自托管部署](self-hosting.md) | 自托管部署方案（单二进制 / Docker / Docker Compose） |
 | [配置参考](configuration.md) | 所有可配置参数说明 |
 | [协议规范](protocol.md) | WebSocket 消息协议详细定义 |
 | [安全模型](security.md) | E2EE 安全设计与威胁分析 |
@@ -74,7 +83,7 @@ npm install
 npm run dev
 ```
 
-打开 `http://localhost:3000`，创建房间，分享密钥给朋友，开始加密聊天。
+打开 `http://localhost:5173`，创建房间，分享密钥给朋友，开始加密聊天。
 
 ---
 
@@ -100,7 +109,7 @@ npm run dev
 
 ## 许可证
 
-MIT License
+AGPL-3.0 License
 
 ---
 

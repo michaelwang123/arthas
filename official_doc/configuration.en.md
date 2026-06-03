@@ -24,7 +24,7 @@ The following parameters are defined in code and require recompilation to modify
 | `writeWait` | 10s | `internal/network/client.go` | WebSocket write timeout |
 | `pongWait` | 40s | `internal/network/client.go` | Read timeout (1.5× heartbeat) |
 | `sendBufferSize` | 256 | `internal/network/client.go` | Send buffer size |
-| `maxMessageSize` | 4096 bytes | `internal/network/client.go` | Maximum bytes per message |
+| `maxMessageSize` | 102400 bytes | `internal/network/client.go` | Maximum bytes per message (includes file chunks) |
 | `rateLimitWindow` | 10s | `internal/network/client.go` | Rate limit sliding window |
 | `rateLimitMaxCount` | 10 | `internal/network/client.go` | Maximum messages per window |
 | Ping interval | 25s | `internal/network/client.go` | Heartbeat send interval |
@@ -76,9 +76,6 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  server: {
-    port: 3000,        // Dev server port
-  },
 })
 ```
 
@@ -136,8 +133,8 @@ File: `arthas-server/Dockerfile`
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
-| Base image | `golang:1.22-alpine` | Build stage |
-| Runtime image | `alpine:latest` | Minimal runtime environment |
+| Base image | `golang:1.23-alpine` | Build stage |
+| Runtime image | `alpine:3.23` | Minimal runtime environment |
 | Exposed port | 7860 | Docker default port |
 | `PORT` environment variable | 7860 | Server listening port |
 
@@ -171,4 +168,4 @@ File: `arthas-server/Dockerfile`
 ## Next Steps
 
 - [Protocol Specification](protocol.md) — Detailed message format definitions
-- [Deployment Guide](deployment.md) — Production environment deployment
+- [Self-Hosting Guide](self-hosting.en.md) — Production environment deployment

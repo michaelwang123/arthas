@@ -70,37 +70,41 @@ docker compose version    # Docker Compose version v2.x.x
 
 ### 1. 下载二进制
 
-从 [GitHub Releases](https://github.com/michaelwang123/arthas/releases) 下载对应平台的二进制文件：
+从 [GitHub Releases](https://github.com/michaelwang123/arthas/releases) 下载对应平台的 **arthas-server-all** 二进制文件（内含前端 + 后端）：
 
 ```bash
 # Linux (x86_64)
-curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-linux-amd64
-chmod +x arthas-server
+curl -Lo arthas-server-all https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-all-linux-amd64
+chmod +x arthas-server-all
 
 # Linux (ARM64, 如树莓派)
-curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-linux-arm64
-chmod +x arthas-server
+curl -Lo arthas-server-all https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-all-linux-arm64
+chmod +x arthas-server-all
 
 # macOS (Apple Silicon)
-curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-darwin-arm64
-chmod +x arthas-server
+curl -Lo arthas-server-all https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-all-darwin-arm64
+chmod +x arthas-server-all
 
 # macOS (Intel)
-curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-darwin-amd64
-chmod +x arthas-server
+curl -Lo arthas-server-all https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-all-darwin-amd64
+chmod +x arthas-server-all
 ```
+
+> **二进制区别：**
+> - `arthas-server-all-*` — 内含前端 + 后端（推荐自托管使用，~7MB）
+> - `arthas-server-*` — 仅后端 WebSocket 中继（用于前后端分离部署）
 
 ### 2. 启动服务
 
 ```bash
 # 默认端口 8080
-./arthas-server
+./arthas-server-all
 
 # 自定义端口
-./arthas-server --port 3000
+./arthas-server-all --port 3000
 
 # 限制 WebSocket 来源（生产环境推荐）
-./arthas-server --port 443 --allowed-origins "https://chat.example.com"
+./arthas-server-all --port 443 --allowed-origins "https://chat.example.com"
 ```
 
 ### 3. 访问

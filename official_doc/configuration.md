@@ -85,9 +85,6 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  server: {
-    port: 3000,        // 开发服务器端口
-  },
 })
 ```
 
@@ -234,4 +231,4 @@ docker build -t arthas-server .
 ## 下一步
 
 - [协议规范](protocol.md) — 消息格式详细定义
-- [部署指南](deployment.md) — 生产环境部署
+- [自托管部署](self-hosting.md) — 生产环境部署

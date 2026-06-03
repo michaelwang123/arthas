@@ -101,7 +101,7 @@ go build -o server ./cmd/server
 go vet ./...
 ```
 
-> **开发模式 (`-tags dev`)：** 跳过 Go embed，后端不服务前端文件（访问 `/` 返回 501）。前端使用 Vite dev server（端口 3000）独立运行。这样后端和前端可以独立开发，互不依赖。
+> **开发模式 (`-tags dev`)：** 跳过 Go embed，后端不服务前端文件（访问 `/` 返回 501）。前端使用 Vite dev server（端口 5173）独立运行。这样后端和前端可以独立开发，互不依赖。
 
 ### 前端开发
 

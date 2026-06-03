@@ -1,4 +1,8 @@
+[中文](contributing.md) | [English](contributing.en.md)
+
 # 贡献指南 (Contributing Guide)
+
+> 🌐 [English version available](contributing.en.md)
 
 感谢你对 Arthas 项目的关注！本文档说明如何参与贡献。
 
