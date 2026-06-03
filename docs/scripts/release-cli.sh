@@ -1,10 +1,10 @@
 #!/bin/bash
-# Release script for arthas-cli
-# Builds cross-platform binaries and creates a GitHub Release with gh CLI.
+# Release script for Arthas binaries (arthas-cli + arthas-server)
+# Builds cross-platform binaries and creates/updates a GitHub Release.
 #
 # Usage:
 #   ./docs/scripts/release-cli.sh [version]
-#   Example: ./docs/scripts/release-cli.sh v1.2.2
+#   Example: ./docs/scripts/release-cli.sh v1.2.3
 #
 # Prerequisites:
 #   - Go 1.23+
@@ -16,47 +16,75 @@ set -euo pipefail
 VERSION="${1:-}"
 if [ -z "$VERSION" ]; then
   echo "Usage: $0 <version>"
-  echo "Example: $0 v1.2.2"
+  echo "Example: $0 v1.2.3"
   exit 1
 fi
 
 CLI_DIR="arthas-cli"
-BUILD_DIR="$CLI_DIR/build"
-MAIN_PKG="./cmd/arthas-cli"
+SERVER_DIR="arthas-server"
+BUILD_DIR="build"
 
-echo "=== Building arthas-cli $VERSION ==="
+echo "=== Building Arthas $VERSION ==="
 
-# Clean previous build artifacts
+# Clean
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-# Build for Linux amd64
-echo "[1/5] Building linux/amd64..."
-GOOS=linux GOARCH=amd64 go build -C "$CLI_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "build/arthas-cli-linux-amd64" "$MAIN_PKG"
+# ============================================================================
+# Build arthas-cli
+# ============================================================================
+echo ""
+echo "--- arthas-cli ---"
 
-# Build for Linux arm64
-echo "[2/5] Building linux/arm64..."
-GOOS=linux GOARCH=arm64 go build -C "$CLI_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "build/arthas-cli-linux-arm64" "$MAIN_PKG"
+echo "[1/5] linux/amd64..."
+GOOS=linux GOARCH=amd64 go build -C "$CLI_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "../$BUILD_DIR/arthas-cli-linux-amd64" ./cmd/arthas-cli
 
-# Build for macOS amd64
-echo "[3/5] Building darwin/amd64..."
-GOOS=darwin GOARCH=amd64 go build -C "$CLI_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "build/arthas-cli-darwin-amd64" "$MAIN_PKG"
+echo "[2/5] linux/arm64..."
+GOOS=linux GOARCH=arm64 go build -C "$CLI_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "../$BUILD_DIR/arthas-cli-linux-arm64" ./cmd/arthas-cli
 
-# Build for macOS arm64 (Apple Silicon)
-echo "[4/5] Building darwin/arm64..."
-GOOS=darwin GOARCH=arm64 go build -C "$CLI_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "build/arthas-cli-darwin-arm64" "$MAIN_PKG"
+echo "[3/5] darwin/amd64..."
+GOOS=darwin GOARCH=amd64 go build -C "$CLI_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "../$BUILD_DIR/arthas-cli-darwin-amd64" ./cmd/arthas-cli
 
-# Build for Windows amd64
-echo "[5/5] Building windows/amd64..."
-GOOS=windows GOARCH=amd64 go build -C "$CLI_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "build/arthas-cli-windows-amd64.exe" "$MAIN_PKG"
+echo "[4/5] darwin/arm64..."
+GOOS=darwin GOARCH=arm64 go build -C "$CLI_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "../$BUILD_DIR/arthas-cli-darwin-arm64" ./cmd/arthas-cli
 
-# Also create a generic "arthas-cli" name (linux amd64) for the simple curl download
+echo "[5/5] windows/amd64..."
+GOOS=windows GOARCH=amd64 go build -C "$CLI_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "../$BUILD_DIR/arthas-cli-windows-amd64.exe" ./cmd/arthas-cli
+
+# Generic name for simple curl download (linux amd64)
 cp "$BUILD_DIR/arthas-cli-linux-amd64" "$BUILD_DIR/arthas-cli"
 
+# ============================================================================
+# Build arthas-server
+# ============================================================================
+echo ""
+echo "--- arthas-server ---"
+
+echo "[1/5] linux/amd64..."
+GOOS=linux GOARCH=amd64 go build -C "$SERVER_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "../$BUILD_DIR/arthas-server-linux-amd64" ./cmd/server
+
+echo "[2/5] linux/arm64..."
+GOOS=linux GOARCH=arm64 go build -C "$SERVER_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "../$BUILD_DIR/arthas-server-linux-arm64" ./cmd/server
+
+echo "[3/5] darwin/amd64..."
+GOOS=darwin GOARCH=amd64 go build -C "$SERVER_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "../$BUILD_DIR/arthas-server-darwin-amd64" ./cmd/server
+
+echo "[4/5] darwin/arm64..."
+GOOS=darwin GOARCH=arm64 go build -C "$SERVER_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "../$BUILD_DIR/arthas-server-darwin-arm64" ./cmd/server
+
+echo "[5/5] windows/amd64..."
+GOOS=windows GOARCH=amd64 go build -C "$SERVER_DIR" -ldflags "-s -w -X main.version=$VERSION" -o "../$BUILD_DIR/arthas-server-windows-amd64.exe" ./cmd/server
+
+# ============================================================================
+# List artifacts
+# ============================================================================
 echo ""
 echo "=== Build artifacts ==="
 ls -lh "$BUILD_DIR"
 
+# ============================================================================
+# Create GitHub Release
+# ============================================================================
 echo ""
 echo "=== Creating GitHub Release $VERSION ==="
 
@@ -67,24 +95,34 @@ gh release create "$VERSION" \
   "$BUILD_DIR/arthas-cli-darwin-amd64" \
   "$BUILD_DIR/arthas-cli-darwin-arm64" \
   "$BUILD_DIR/arthas-cli-windows-amd64.exe" \
+  "$BUILD_DIR/arthas-server-linux-amd64" \
+  "$BUILD_DIR/arthas-server-linux-arm64" \
+  "$BUILD_DIR/arthas-server-darwin-amd64" \
+  "$BUILD_DIR/arthas-server-darwin-arm64" \
+  "$BUILD_DIR/arthas-server-windows-amd64.exe" \
   --title "$VERSION" \
-  --notes "## arthas-cli $VERSION
+  --notes "## Arthas $VERSION
 
 ### Downloads
 
-| Platform | Architecture | File |
-|----------|-------------|------|
-| Linux | x86_64 | \`arthas-cli-linux-amd64\` |
-| Linux | ARM64 | \`arthas-cli-linux-arm64\` |
-| macOS | x86_64 (Intel) | \`arthas-cli-darwin-amd64\` |
-| macOS | ARM64 (Apple Silicon) | \`arthas-cli-darwin-arm64\` |
-| Windows | x86_64 | \`arthas-cli-windows-amd64.exe\` |
+| Platform | arthas-cli | arthas-server |
+|----------|-----------|--------------|
+| Linux x86_64 | arthas-cli-linux-amd64 | arthas-server-linux-amd64 |
+| Linux ARM64 | arthas-cli-linux-arm64 | arthas-server-linux-arm64 |
+| macOS Intel | arthas-cli-darwin-amd64 | arthas-server-darwin-amd64 |
+| macOS Apple Silicon | arthas-cli-darwin-arm64 | arthas-server-darwin-arm64 |
+| Windows x86_64 | arthas-cli-windows-amd64.exe | arthas-server-windows-amd64.exe |
 
 ### Quick install (Linux/macOS)
 
 \`\`\`bash
+# CLI client
 curl -L https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli -o arthas-cli
 chmod +x arthas-cli
+
+# Server
+curl -L https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-linux-amd64 -o arthas-server
+chmod +x arthas-server
 \`\`\`
 "
 
