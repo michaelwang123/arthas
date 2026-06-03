@@ -629,7 +629,7 @@ docker run -d -p 8080:8080 --name arthas arthas-server
 git clone https://github.com/michaelwang123/arthas.git
 cd arthas
 
-# 构建所有平台的二进制（需要 Go 1.22+ 和 Node.js 18+）
+# 构建所有平台的二进制（需要 Go 1.23+ 和 Node.js 18+）
 make build-all
 
 # 产出在 dist/ 目录:
