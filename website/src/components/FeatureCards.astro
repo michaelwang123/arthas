@@ -2,14 +2,16 @@
 /**
  * FeatureCards — 首页核心特性卡片网格组件
  *
- * 展示 Arthas 的 6 个核心特性，每张卡片包含图标、标题和简短描述。
- * 使用 CSS Grid 实现响应式布局：桌面 3 列、平板 2 列、手机 1 列。
+ * 展示 Arthas 的 7 个核心特性，每张卡片包含图标、标题和简短描述。
+ * 使用 CSS Grid 实现响应式布局：桌面 4 列（4+3 行模式）、平板 2 列、手机 1 列。
  *
  * 📚 学习要点: CSS Grid 响应式布局策略
  * 使用 media query 断点切换 grid-template-columns，而非 auto-fit/minmax。
- * 原因：auto-fit + minmax 虽然更简洁，但在卡片数量固定（6 张）时，
- * 无法精确控制每个断点的列数（可能出现 4 列或 5 列的中间态）。
+ * 原因：auto-fit + minmax 虽然更简洁，但在卡片数量固定（7 张）时，
+ * 无法精确控制每个断点的列数（可能出现不理想的中间态）。
  * 显式断点确保设计意图在所有视口宽度下都被精确执行。
+ * 桌面断点选择 1100px 而非 1024px，确保 4 列布局下每张卡片约 262px 宽，
+ * 中文文案不会溢出。
  *
  * 与其他模块的关系：
  * - 被 src/pages/index.astro 和 src/pages/zh/index.astro 引用
@@ -49,6 +51,7 @@ const features = [
   { icon: '📁', titleKey: 'features.filesharing.title', descKey: 'features.filesharing.description' },
   { icon: '🎙️', titleKey: 'features.voice.title', descKey: 'features.voice.description' },
   { icon: '💻', titleKey: 'features.cli.title', descKey: 'features.cli.description' },
+  { icon: '🤖', titleKey: 'features.openclaw.title', descKey: 'features.openclaw.description' },
 ];
 ---
 
@@ -160,10 +163,10 @@ const features = [
     }
   }
 
-  /* 桌面断点 (≥1024px): 3 列 */
-  @media (min-width: 1024px) {
+  /* 桌面断点 (≥1100px): 4 列，7 张卡片排列为 4+3 */
+  @media (min-width: 1100px) {
     .feature-grid {
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
     }
   }
 

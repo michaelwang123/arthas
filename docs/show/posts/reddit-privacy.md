@@ -21,6 +21,7 @@ I built Arthas, a web-based end-to-end encrypted chat app designed around the pr
 - Self-destruct messages (optional: 10s/30s/60s/5min countdown)
 - Room passwords for access control
 - Fully self-hostable (single binary or Docker)
+- AI Agent Channel (`@arthas-chat/openclaw-channel` on npm) – the only E2EE channel for AI agent communication; your AI agents' conversations are encrypted the same way human chats are
 - Open source (MIT): https://github.com/michaelwang123/arthas
 
 **What it's NOT:**
@@ -38,8 +39,10 @@ I built Arthas, a web-based end-to-end encrypted chat app designed around the pr
 3. Chat with E2EE – server only sees ciphertext
 4. Everyone leaves → room destroyed, ciphertext gone
 
-Live demo: https://arthas-chat.vercel.app
+Live demo: https://arthas-blush.vercel.app/
 GitHub: https://github.com/michaelwang123/arthas
+Project website: https://michaelwang123.github.io/arthas/
+AI Agent plugin: `npm install @arthas-chat/openclaw-channel` (public demo server: wss://arthas100-arthas-server.hf.space/ws)
 
 I'd appreciate feedback on the threat model and any privacy concerns I might have missed.
 ```

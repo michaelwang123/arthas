@@ -9,7 +9,7 @@
 ## 插入内容
 
 ```markdown
-- [Arthas](https://github.com/michaelwang123/arthas) - End-to-end encrypted ephemeral chat with no registration. Features include file sharing, voice messages, self-destruct messages, and CLI client. ([Demo](https://arthas-chat.vercel.app), [Source Code](https://github.com/michaelwang123/arthas)) `MIT` `Go/Docker`
+- [Arthas](https://github.com/michaelwang123/arthas) - End-to-end encrypted ephemeral chat with no registration. Features include file sharing, voice messages, self-destruct messages, and CLI client. ([Demo](https://arthas-blush.vercel.app/), [Source Code](https://github.com/michaelwang123/arthas)) `MIT` `Go/Docker`
 ```
 
 ## PR 标题
@@ -41,7 +41,7 @@ Arthas is a self-hosted end-to-end encrypted ephemeral chat application.
 - No database required
 
 **Links:**
-- Demo: https://arthas-chat.vercel.app
+- Demo: https://arthas-blush.vercel.app/
 - Self-hosting docs: https://github.com/michaelwang123/arthas/blob/main/official_doc/self-hosting.md
 
 **Checklist:**

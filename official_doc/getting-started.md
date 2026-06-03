@@ -37,37 +37,65 @@ cd arthas
 
 ## 第二步：启动后端
 
+### 方式 A：Docker 一键启动（推荐，无需安装 Go/Node.js）
+
+```bash
+# 从项目根目录构建完整镜像（前端 + 后端）
+docker build -f deploy/Dockerfile -t arthas-server .
+
+# 启动容器
+docker run -d -p 8080:8080 --name arthas arthas-server
+```
+
+构建完成后直接访问 `http://localhost:8080` 即可使用，前端和后端在同一个端口。
+
+验证：
+
+```bash
+# 健康检查
+curl http://localhost:8080/ping
+# 返回 "pong" 表示正常
+
+# 查看容器状态
+docker ps --filter name=arthas
+# STATUS 应显示 "healthy"
+```
+
+停止和清理：
+
+```bash
+docker rm -f arthas
+```
+
+### 方式 B：源码启动（开发模式，前后端分离）
+
 ```bash
 cd arthas-server
 
 # 下载依赖
 go mod tidy
 
-# 启动服务器
-go run cmd/server/main.go
+# 启动服务器（开发模式，不含前端）
+go build -tags dev -o server ./cmd/server && ./server
 ```
 
 成功启动后你会看到：
 
 ```
-2024/01/01 12:00:00 Server starting on :8080
+[2024-01-01T12:00:00Z] [INFO] [Server] started on :8080 (version dev)
 ```
 
 服务器默认监听 `8080` 端口，WebSocket 端点为 `ws://localhost:8080/ws`。
 
-### 验证后端
-
-```bash
-# 检查服务器是否运行
-curl http://localhost:8080/ws
-# 应返回 "Bad Request"（因为不是 WebSocket 升级请求）
-```
+> **注意：** 开发模式下后端不服务前端页面（访问根路径返回 501），需要单独启动前端开发服务器。
 
 ---
 
 ## 第三步：启动前端
 
-打开新的终端窗口：
+> **如果你使用了方式 A（Docker），跳过此步骤。** 前端已内嵌在 Docker 镜像中。
+
+打开新的终端窗口（仅方式 B 源码开发需要）：
 
 ```bash
 cd arthas-client
@@ -91,7 +119,16 @@ npm run dev
 
 ## 第四步：开始使用
 
-### 方式一：Web 客户端
+### 方式一：Docker 部署（方式 A）
+
+1. 打开浏览器访问 `http://localhost:8080`
+2. 输入昵称，点击 **"创建房间"**
+3. 复制生成的分享码
+4. 打开另一个浏览器窗口（或隐身模式）
+5. 输入昵称和分享码，点击 **"加入"**
+6. 开始加密聊天！
+
+### 方式二：源码开发模式（方式 B）
 
 1. 打开浏览器访问 `http://localhost:3000`
 2. 输入昵称，点击 **"创建房间"**
@@ -100,7 +137,7 @@ npm run dev
 5. 输入昵称和分享码，点击 **"加入"**
 6. 开始加密聊天！
 
-### 方式二：CLI 客户端
+### 方式三：CLI 客户端
 
 ```bash
 cd arthas-cli

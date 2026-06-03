@@ -21,6 +21,7 @@ arthas/
 │       ├── App.tsx             # 根组件 + ErrorBoundary
 │       ├── crypto/             # E2EE 加密层
 │       ├── network/            # WebSocket 网络层
+│       ├── file-transfer/      # 加密文件分享模块
 │       ├── stores/             # Zustand 状态管理
 │       ├── pages/              # 页面组件
 │       ├── components/         # UI 组件
@@ -28,14 +29,36 @@ arthas/
 ├── arthas-server/              # 后端 (Go)
 │   ├── go.mod                  # Go 模块定义
 │   ├── go.sum                  # 依赖锁定
-│   ├── Dockerfile              # Docker 构建
-│   ├── cmd/server/main.go      # 服务器入口
+│   ├── Dockerfile              # HF Spaces 部署（仅后端，不含前端）
+│   ├── cmd/server/main.go      # 服务器入口（CLI flags + 优雅关闭）
 │   └── internal/
+│       ├── network/            # 网络层（Hub + Client + Origin + Protocol）
 │       ├── room/               # 房间管理
-│       └── network/            # 网络层
-├── docs/                       # 项目文档
-└── official_doc/               # 官方文档
+│       ├── static/             # 嵌入式前端服务（Go embed + SPA fallback）
+│       └── logger/             # 结构化日志
+├── arthas-cli/                 # CLI 客户端 (独立 Go 二进制)
+│   ├── cmd/arthas-cli/         # 入口（子命令: create, join）
+│   └── internal/
+│       ├── protocol/           # MessagePack 协议编解码
+│       ├── crypto/             # AES-256-GCM 加密/解密 + 分享码
+│       ├── network/            # WebSocket 连接管理
+│       ├── ui/                 # 终端输出格式化 + 颜色
+│       └── chat/               # 会话协调（状态机 + 事件循环）
+├── packages/openclaw-channel/  # OpenClaw AI Agent 通道插件
+├── deploy/                     # 自托管部署基础设施
+│   ├── Dockerfile              # 三阶段构建（前端→Go embed→Alpine）← 自托管用这个
+│   ├── docker-compose.yml      # Caddy + Backend 编排
+│   ├── deploy.sh               # 一键部署脚本
+│   ├── .env.example            # 环境变量模板
+│   └── Caddyfile.*.example     # Caddy 配置模板
+├── website/                    # 项目官网 (Astro)
+├── docs/                       # 内部文档
+└── official_doc/               # 用户文档
 ```
+
+> **注意：** 项目有两个 Dockerfile：
+> - `deploy/Dockerfile` — 自托管部署，三阶段构建（前端+后端嵌入），访问 `/` 返回完整 UI
+> - `arthas-server/Dockerfile` — HF Spaces 部署，仅编译后端，前端需单独部署到 Vercel
 
 ---
 
@@ -62,22 +85,23 @@ cd arthas-server
 # 下载依赖
 go mod tidy
 
-# 运行（带热重载，需安装 air）
-# go install github.com/cosmtrek/air@latest
-# air
+# 开发模式运行（不需要前端 dist/ 目录）
+go build -tags dev -o server ./cmd/server && ./server
 
-# 或直接运行
+# 或直接运行（需要 dist/ 目录存在）
 go run cmd/server/main.go
 
 # 运行测试
 go test ./...
 
-# 构建
+# 构建生产版本（需要先构建前端到 internal/static/dist/）
 go build -o server ./cmd/server
 
 # 代码检查
 go vet ./...
 ```
+
+> **开发模式 (`-tags dev`)：** 跳过 Go embed，后端不服务前端文件（访问 `/` 返回 501）。前端使用 Vite dev server（端口 3000）独立运行。这样后端和前端可以独立开发，互不依赖。
 
 ### 前端开发
 
@@ -112,16 +136,26 @@ npm run preview
 - 注册/注销 WebSocket 连接
 - 消息路由（根据消息类型分发到 handler）
 - 断线处理（自动离开房间）
+- 房间过期扫描与预警
+- 优雅关闭（done channel + WaitGroup）
 
 ```go
 type Hub struct {
-    roomManager *room.RoomManager
-    clients     map[*Client]bool
-    register    chan *Client
-    unregister  chan *Client
-    mu          sync.RWMutex
+    roomManager  *room.RoomManager
+    clients      map[*Client]bool
+    register     chan *Client
+    unregister   chan *Client
+    mu           sync.RWMutex
+    warnedExpiry map[string]bool   // 已发送过期预警的房间
+    done         chan struct{}      // 关闭信号（close 广播模式）
+    wg           sync.WaitGroup    // 跟踪所有 readPump/writePump goroutine
 }
 ```
+
+关键方法：
+- `Run()` — 事件循环（select 多路复用 register/unregister/done）
+- `Stop()` — 关闭 done channel，通知所有 goroutine 退出
+- `Wait()` — 阻塞等待所有 client goroutine 退出
 
 #### Client (`internal/network/client.go`)
 
@@ -274,7 +308,27 @@ npx tsc --noEmit
 
 ## 生产部署
 
-### 后端部署（HF Spaces）
+### 自托管部署（Docker，推荐）
+
+从项目根目录构建包含前端和后端的完整镜像：
+
+```bash
+# 构建（使用 deploy/Dockerfile，三阶段构建）
+docker build -f deploy/Dockerfile -t arthas-server .
+
+# 运行
+docker run -d -p 8080:8080 --name arthas arthas-server
+
+# 验证
+curl http://localhost:8080/ping  # 返回 "pong"
+# 浏览器访问 http://localhost:8080 即可看到前端页面
+```
+
+> **注意：** 不要使用 `arthas-server/Dockerfile`，那个只构建后端（用于 HF Spaces），不包含前端。
+
+详细部署指南请参考 [自托管文档](self-hosting.md)。
+
+### 后端部署（HF Spaces，前后端分离）
 
 后端以 Docker 容器形式部署到 Hugging Face Spaces。
 

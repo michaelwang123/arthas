@@ -93,24 +93,33 @@ Web 客户端和 CLI 客户端使用完全相同的协议（MessagePack + AES-25
 
 ```
 arthas-server/
-├── cmd/server/main.go          # 入口：HTTP 服务 + WebSocket 升级
+├── cmd/server/main.go          # 入口：HTTP 服务 + WebSocket 升级 + 信号处理
 ├── internal/
 │   ├── network/
-│   │   ├── hub.go              # Hub：连接池管理 + 消息路由
-│   │   ├── client.go           # Client：单连接读写 goroutine
+│   │   ├── hub.go              # Hub：连接池管理 + 消息路由 + 优雅关闭
+│   │   ├── client.go           # Client：单连接读写 goroutine + 频率限制
+│   │   ├── origin.go           # Origin：WebSocket CORS 来源验证
 │   │   └── protocol.go         # Protocol：MessagePack 消息定义
-│   └── room/
-│       ├── manager.go          # RoomManager：房间 CRUD
-│       └── room.go             # Room：成员管理 + 消息广播
+│   ├── room/
+│   │   ├── manager.go          # RoomManager：房间 CRUD
+│   │   └── room.go             # Room：成员管理 + 消息广播
+│   ├── static/
+│   │   ├── static_prod.go      # 生产模式：Go embed 嵌入 dist/ + SPA fallback
+│   │   ├── static_dev.go       # 开发模式：返回 501，引导使用 Vite dev server
+│   │   └── static_test.go      # 属性测试：文件服务正确性 + SPA fallback
+│   └── logger/
+│       └── logger.go           # 结构化日志：[时间] [级别] [模块] 格式
 ```
 
 | 模块　　　　　　| 职责　　　　　　　　　　　　　　　　　　　　　　　　　　　 |
 | -----------------| ------------------------------------------------------------|
 | **Hub**　　　　 | 管理所有 WebSocket 连接，处理注册/注销，路由消息到 handler |
-| **Client**　　　| 代表单个 WebSocket 连接，包含读写 goroutine　　　　　　　　|
+| **Client**　　　| 代表单个 WebSocket 连接，包含读写 goroutine + 频率限制　　 |
 | **Protocol**　　| 定义所有消息类型和数据结构　　　　　　　　　　　　　　　　 |
 | **RoomManager** | 管理房间生命周期（创建/查找/销毁）　　　　　　　　　　　　 |
 | **Room**　　　　| 管理单个房间的成员列表和消息广播　　　　　　　　　　　　　 |
+| **Static**　　　| 嵌入式前端静态文件服务（Go embed + SPA fallback + 缓存策略）|
+| **Logger**　　　| 结构化日志输出，统一格式和级别控制　　　　　　　　　　　　 |
 
 ### CLI 客户端模块
 
@@ -170,6 +179,57 @@ arthas-client/src/
     ├── MemberList.tsx          # 成员列表
     ├── ShareKey.tsx            # 分享码展示
     └── TypingIndicator.tsx     # 输入状态
+```
+
+---
+
+## 静态文件服务与单二进制部署
+
+### Go Embed 机制
+
+Arthas 使用 Go 1.16+ 的 `//go:embed` 指令将前端构建产物（`dist/` 目录）编译进二进制文件：
+
+```
+┌─────────────────────────────────────────────────────┐
+│              Go 二进制文件 (~10MB)                    │
+│                                                     │
+│  ┌──────────────────┐  ┌────────────────────────┐  │
+│  │  Go 服务器代码    │  │  嵌入的 dist/ 文件      │  │
+│  │  (WebSocket Hub)  │  │  ├── index.html        │  │
+│  │  (HTTP 路由)      │  │  └── assets/           │  │
+│  │  (SPA fallback)   │  │      ├── app-abc.js    │  │
+│  └──────────────────┘  │      └── style-xyz.css  │  │
+│                         └────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+```
+
+### Build Tags 条件编译
+
+通过 Go build tags 区分开发和生产模式：
+
+| 模式 | 编译命令 | 行为 |
+|------|----------|------|
+| 生产 | `go build ./cmd/server` | 嵌入 `dist/`，服务前端静态文件 |
+| 开发 | `go build -tags dev ./cmd/server` | 不嵌入，返回 501 提示使用 Vite |
+
+### SPA Fallback 与缓存策略
+
+| 请求路径 | 匹配规则 | 响应 | Cache-Control |
+|----------|----------|------|---------------|
+| `/assets/app-abc.js` | 文件存在于 dist/ | 返回文件内容 | `public, immutable, max-age=31536000` |
+| `/room/abc123` | 文件不存在 | 返回 index.html | `no-cache` |
+| `/` | index.html | 返回 index.html | `no-cache` |
+
+### 两个 Dockerfile 的架构差异
+
+```
+deploy/Dockerfile (自托管，三阶段构建):
+  Node.js → dist/ → Go embed → 单二进制 → Alpine
+  结果: 前端 + 后端一体，访问 / 返回完整 UI
+
+arthas-server/Dockerfile (HF Spaces，两阶段构建):
+  Go → 单二进制 → Alpine
+  结果: 仅后端中继，前端需单独部署到 Vercel
 ```
 
 ---

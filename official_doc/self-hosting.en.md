@@ -2,14 +2,30 @@
 
 # Self-Hosting Deployment Guide
 
-This guide helps you deploy a private Arthas instance on your own server. Arthas offers two deployment methods:
+This guide helps you deploy a private Arthas instance on your own server. Arthas offers three deployment methods:
 
 | Method | Use Case | Dependencies | HTTPS |
 |--------|----------|--------------|-------|
 | **Tier 1 — Single Binary** | Local/intranet/development/quick trial | None (single file) | None (HTTP) |
-| **Tier 2 — Docker Compose** | Public-facing production | Docker + Compose v2 | Automatic (Let's Encrypt) |
+| **Tier 2 — Docker Single Container** | Quick deploy/testing/intranet | Docker | None (HTTP) |
+| **Tier 3 — Docker Compose** | Public-facing production | Docker + Compose v2 | Automatic (Let's Encrypt) |
 
 > **Zero-knowledge architecture remains unchanged** — Regardless of deployment method, the server only relays encrypted ciphertext and never stores any message content.
+
+---
+
+## Two Dockerfiles in the Project
+
+| File | Purpose | Includes Frontend | Default Port | Build Context |
+|------|---------|-------------------|--------------|---------------|
+| `deploy/Dockerfile` | **Self-hosting (Tier 2/3, recommended)** | ✅ Three-stage build | 8080 | Project root |
+| `arthas-server/Dockerfile` | HF Spaces backend-only relay | ❌ Backend only | 7860 | arthas-server/ |
+
+**Key difference:**
+- `deploy/Dockerfile` builds the frontend first (Node.js), then embeds the output into the Go binary. The final image contains the complete frontend UI + WebSocket backend.
+- `arthas-server/Dockerfile` only compiles the Go backend without building the frontend. Used for split deployment (frontend on Vercel, backend on HF Spaces).
+
+> ⚠️ **Common mistake:** If you build with `docker build -t arthas-server ./arthas-server`, visiting the root URL will show a blank page (placeholder HTML). This is because you used the wrong Dockerfile. For self-hosting, use `deploy/Dockerfile`.
 
 ---
 
@@ -22,7 +38,7 @@ This guide helps you deploy a private Arthas instance on your own server. Arthas
 | CPU | 1 core | Go server has very low resource usage |
 | Memory | 512 MB | Including OS overhead |
 | Disk | 1 GB | Including Docker images and certificate storage |
-| Network | Ports 80 + 443 open | Required for Tier 2 public deployment (Tier 1 only needs a custom port) |
+| Network | Ports 80 + 443 open | Required for Tier 3 public deployment (Tier 1/2 only needs a custom port) |
 
 ### Tier 1 Prerequisites
 
@@ -31,11 +47,17 @@ This guide helps you deploy a private Arthas instance on your own server. Arthas
 ### Tier 2 Prerequisites
 
 - Docker Engine 20.10+
+
+```bash
+docker --version    # Docker version 20.10+
+```
+
+### Tier 3 Prerequisites
+
+- Docker Engine 20.10+
 - Docker Compose v2 (`docker compose` plugin, not the standalone `docker-compose`)
 - A domain name pointing to your server's IP (for public deployment)
 - Server firewall with ports 80 and 443 open
-
-Verify your Docker environment:
 
 ```bash
 docker --version          # Docker version 20.10+
@@ -50,23 +72,23 @@ Suitable for local testing, intranet deployment, or development. The Go binary e
 
 ### 1. Download the Binary
 
-Download the binary for your platform from [GitHub Releases](https://github.com/anthropics/arthas/releases):
+Download the binary for your platform from [GitHub Releases](https://github.com/michaelwang123/arthas/releases):
 
 ```bash
 # Linux (x86_64)
-curl -Lo arthas-server https://github.com/anthropics/arthas/releases/latest/download/arthas-server-linux-amd64
+curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-linux-amd64
 chmod +x arthas-server
 
 # Linux (ARM64, e.g. Raspberry Pi)
-curl -Lo arthas-server https://github.com/anthropics/arthas/releases/latest/download/arthas-server-linux-arm64
+curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-linux-arm64
 chmod +x arthas-server
 
 # macOS (Apple Silicon)
-curl -Lo arthas-server https://github.com/anthropics/arthas/releases/latest/download/arthas-server-darwin-arm64
+curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-darwin-arm64
 chmod +x arthas-server
 
 # macOS (Intel)
-curl -Lo arthas-server https://github.com/anthropics/arthas/releases/latest/download/arthas-server-darwin-amd64
+curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-darwin-amd64
 chmod +x arthas-server
 ```
 
@@ -95,18 +117,126 @@ Open your browser and navigate to `http://localhost:8080` (or the port you speci
 | `--allowed-origins` | `*` (allow all origins) | WebSocket CORS whitelist, comma-separated for multiple values |
 | `--version` | — | Print version and exit |
 
-> **Note:** Tier 1 does not provide HTTPS. For public HTTPS deployment, use Tier 2 or configure a reverse proxy yourself.
+> **Note:** Tier 1 does not provide HTTPS. For public HTTPS deployment, use Tier 3 or configure a reverse proxy yourself.
 
 ---
 
-## Quick Start: Tier 2 (Docker Compose)
+## Quick Start: Tier 2 (Docker Single Container)
+
+Suitable for quick deployment, intranet use, or testing. One command builds a complete image containing both frontend and backend.
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/michaelwang123/arthas.git
+cd arthas
+```
+
+### 2. Build the Image
+
+```bash
+# Build from project root (must use deploy/Dockerfile)
+docker build -f deploy/Dockerfile -t arthas-server .
+```
+
+The build takes about 1-2 minutes with a three-stage process:
+1. **Stage 1 (frontend):** Node.js builds the React frontend → produces `dist/`
+2. **Stage 2 (builder):** Go compiler embeds `dist/` into the binary → produces a single executable
+3. **Stage 3 (runtime):** Minimal Alpine image + binary → final image < 30MB
+
+### 3. Start the Container
+
+```bash
+# Basic start
+docker run -d -p 8080:8080 --name arthas arthas-server
+
+# Custom port
+docker run -d -p 3000:3000 -e PORT=3000 --name arthas arthas-server
+
+# Restrict CORS origins
+docker run -d -p 8080:8080 -e ALLOWED_ORIGINS=https://chat.example.com --name arthas arthas-server
+```
+
+### 4. Verify
+
+```bash
+# Health check
+curl http://localhost:8080/ping
+# Returns "pong"
+
+# Check container status (shows "healthy" after ~30 seconds)
+docker ps --filter name=arthas
+# STATUS: Up X seconds (healthy)
+
+# View logs
+docker logs arthas
+# [2024-01-01T12:00:00Z] [INFO] [Server] started on :8080 (version latest)
+```
+
+### 5. Access
+
+Open your browser and navigate to `http://localhost:8080` to see the full frontend and start using Arthas.
+
+**Container routes:**
+
+| Path | Function |
+|------|----------|
+| `/` | Frontend SPA page (index.html) |
+| `/assets/*` | Frontend static assets (JS/CSS, with content-hash long-term caching) |
+| `/ws` | WebSocket connection endpoint |
+| `/ping` | Health check |
+
+### 6. Stop and Cleanup
+
+```bash
+# Stop the container
+docker stop arthas
+
+# Remove the container
+docker rm arthas
+
+# Remove the image (optional)
+docker rmi arthas-server
+```
+
+### Docker Compose Single Container Mode
+
+If you prefer using Docker Compose for management:
+
+```yaml
+# docker-compose.yml
+services:
+  arthas:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ALLOWED_ORIGINS=*
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+```
+
+```bash
+docker compose up -d
+```
+
+---
+
+## Quick Start: Tier 3 (Docker Compose + HTTPS)
 
 Suitable for public-facing production environments. Caddy automatically obtains Let's Encrypt certificates — deploy with a single command.
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/anthropics/arthas.git
+git clone https://github.com/michaelwang123/arthas.git
 cd arthas/deploy
 ```
 
@@ -164,29 +294,6 @@ This automatically sets `DOMAIN=localhost`, uses HTTP (no HTTPS), and is accessi
 | `./deploy.sh --down` | Stop and remove all containers |
 | `./deploy.sh --reconfigure` | Delete config files and re-enter interactive setup |
 
-### Examples
-
-```bash
-# Check service status
-./deploy.sh --status
-# Output:
-# arthas-backend: healthy (running)
-# arthas-caddy:   healthy (running)
-
-# View logs for troubleshooting
-./deploy.sh --logs
-
-# Upgrade to the latest version
-./deploy.sh --upgrade
-
-# Stop services
-./deploy.sh --down
-
-# Switch domain (stop first, then reconfigure)
-./deploy.sh --down
-./deploy.sh --reconfigure
-```
-
 ---
 
 ## Configuration Reference
@@ -195,62 +302,38 @@ All configuration is managed through the `deploy/.env` file. It is interactively
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DOMAIN` | Yes | — | Deployment domain. Use your actual domain for public deployment (e.g., `chat.example.com`), or `localhost` for local |
-| `EMAIL` | Required for public | — | Let's Encrypt certificate registration email for expiry notifications. Can be left empty when `DOMAIN=localhost` |
+| `DOMAIN` | Yes | — | Deployment domain. Use your actual domain for public (e.g., `chat.example.com`), or `localhost` for local |
+| `EMAIL` | Required for public | — | Let's Encrypt certificate registration email. Can be left empty when `DOMAIN=localhost` |
 | `ARTHAS_VERSION` | No | `latest` | Docker image version tag (e.g., `v1.0.0`). Recommended to pin a specific version in production |
 | `GITHUB_OWNER` | Yes | — | GitHub username/organization, used to construct image address `ghcr.io/{GITHUB_OWNER}/arthas` |
 | `ALLOWED_ORIGINS` | No | Auto-generated | WebSocket CORS whitelist. Automatically set to `https://{DOMAIN}` for public, `*` for local |
-
-### Manually Editing Configuration
-
-If you need to manually modify the configuration:
-
-```bash
-# Edit the .env file
-vim deploy/.env
-
-# Regenerate Caddyfile and restart
-./deploy.sh --reconfigure
-```
-
-### Configuration File Template
-
-Refer to `deploy/.env.example` for the complete configuration template with comments.
 
 ---
 
 ## Upgrading
 
-### Tier 2 (Docker Compose) Upgrade
+### Tier 3 (Docker Compose) Upgrade
 
 ```bash
 cd deploy
-
-# Option 1: Upgrade to the latest version
-./deploy.sh --upgrade
-
-# Option 2: Upgrade to a specific version
-# 1. Modify ARTHAS_VERSION in .env
-sed -i 's/ARTHAS_VERSION=.*/ARTHAS_VERSION=v1.2.0/' .env
-# 2. Pull new image and restart
 ./deploy.sh --upgrade
 ```
 
-What `--upgrade` does:
-1. `docker compose pull` — Pull the latest images
-2. `docker compose up -d` — Restart services with new images (zero-downtime, old containers replaced with new ones)
+### Tier 2 (Docker Single Container) Upgrade
+
+```bash
+git pull
+docker build -f deploy/Dockerfile -t arthas-server .
+docker rm -f arthas
+docker run -d -p 8080:8080 --name arthas arthas-server
+```
 
 ### Tier 1 (Single Binary) Upgrade
 
 ```bash
-# 1. Stop the currently running service
 kill $(pgrep arthas-server)
-
-# 2. Download the new version (overwrite the old file)
-curl -Lo arthas-server https://github.com/anthropics/arthas/releases/latest/download/arthas-server-linux-amd64
+curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-linux-amd64
 chmod +x arthas-server
-
-# 3. Restart
 ./arthas-server --port 8080
 ```
 
@@ -258,228 +341,136 @@ chmod +x arthas-server
 
 ---
 
-## Backup
-
-### Caddy Certificate Backup (Tier 2)
-
-Caddy's TLS certificates are stored in the Docker named volume `caddy_data`. Regular backups are recommended to avoid frequently requesting new certificates from Let's Encrypt (which has rate limits).
-
-```bash
-# Backup the certificate volume
-docker run --rm \
-  -v arthas_caddy_data:/data \
-  -v $(pwd)/backup:/backup \
-  alpine tar czf /backup/caddy-certs-$(date +%Y%m%d).tar.gz /data
-
-# Restore the certificate volume
-docker run --rm \
-  -v arthas_caddy_data:/data \
-  -v $(pwd)/backup:/backup \
-  alpine sh -c "cd / && tar xzf /backup/caddy-certs-20240101.tar.gz"
-```
-
-> **Note:** Even if certificates are lost, Caddy will automatically re-request them. However, Let's Encrypt has [rate limits](https://letsencrypt.org/docs/rate-limits/) for the same domain (5 certificates per week), and frequent rebuilds may trigger these limits.
-
-### Tier 1 Backup
-
-Tier 1 is stateless — no backup needed. The binary can be re-downloaded at any time.
-
----
-
 ## Troubleshooting
 
-### DNS Not Propagated
+### Blank Page After Docker Run
 
-**Symptoms:** After deployment, visiting the domain shows "This site can't be reached", and Caddy logs report ACME challenge failure.
+**Symptoms:** After `docker run`, visiting `http://localhost:8080` shows a blank page or only `<div id="root"></div>`.
 
-**Troubleshooting steps:**
+**Cause:** Used the wrong Dockerfile. `arthas-server/Dockerfile` does not include the frontend build step.
+
+**Solution:**
 
 ```bash
-# Check if DNS resolves to your server IP
+# Wrong ❌ (backend only, no frontend)
+docker build -t arthas-server ./arthas-server
+
+# Correct ✅ (from project root, using deploy/Dockerfile)
+docker build -f deploy/Dockerfile -t arthas-server .
+```
+
+### Port Already Allocated
+
+**Symptoms:** `docker run` reports `port is already allocated`.
+
+**Troubleshooting:**
+
+```bash
+# Linux/macOS
+lsof -i :8080
+
+# Windows
+netstat -ano | findstr "8080"
+
+# Check if another Docker container is using the port
+docker ps --filter "publish=8080"
+```
+
+**Solution:**
+
+```bash
+# Remove the container using the port
+docker rm -f <container_name>
+
+# Or use a different port
+docker run -d -p 9090:9090 -e PORT=9090 --name arthas arthas-server
+```
+
+### DNS Not Propagated (Tier 3)
+
+**Symptoms:** After deployment, visiting the domain shows "This site can't be reached".
+
+```bash
 dig +short chat.example.com
 # Should return your server's public IP
-
-# If empty or wrong IP, DNS has not propagated yet
-# DNS propagation typically takes 5 minutes to 48 hours
-
-# Verify using a specific DNS server
-dig @8.8.8.8 chat.example.com
 ```
+
+### Certificate Request Failed (Tier 3)
 
 **Solution:**
-1. Confirm the domain's DNS A record points to your server IP
-2. Wait for DNS propagation (typically 5-30 minutes, up to 48 hours)
-3. After DNS propagates, restart Caddy: `./deploy.sh --down && ./deploy.sh`
-
-### Port Conflict
-
-**Symptoms:** `deploy.sh` reports that port 80 or 443 is already in use.
-
-**Troubleshooting steps:**
-
-```bash
-# Linux: Check which process is using the port
-sudo ss -tlnp | grep ':80 '
-sudo ss -tlnp | grep ':443 '
-
-# macOS: Check which process is using the port
-sudo lsof -i :80 -sTCP:LISTEN
-sudo lsof -i :443 -sTCP:LISTEN
-```
-
-**Common conflicting processes and solutions:**
-
-| Process | Solution |
-|---------|----------|
-| nginx | `sudo systemctl stop nginx && sudo systemctl disable nginx` |
-| apache2/httpd | `sudo systemctl stop apache2 && sudo systemctl disable apache2` |
-| Another Caddy instance | `sudo systemctl stop caddy` |
-
-### Certificate Request Failed
-
-**Symptoms:** Caddy logs show ACME challenge failure, HTTPS is unavailable.
-
-**Troubleshooting steps:**
-
-```bash
-# View detailed Caddy logs
-./deploy.sh --logs
-
-# Common error messages:
-# "challenge failed" — DNS not propagated or port 80 blocked by firewall
-# "too many certificates" — Let's Encrypt rate limit triggered
-```
-
-**Solution:**
-1. Confirm port 80 is open to the internet (required for Let's Encrypt HTTP-01 validation)
+1. Confirm port 80 is open to the internet
 2. Confirm DNS correctly resolves to your server
-3. Check server firewall rules:
-   ```bash
-   # Ubuntu/Debian
-   sudo ufw allow 80/tcp
-   sudo ufw allow 443/tcp
+3. Check firewall rules: `sudo ufw allow 80/tcp && sudo ufw allow 443/tcp`
 
-   # CentOS/RHEL
-   sudo firewall-cmd --permanent --add-service=http
-   sudo firewall-cmd --permanent --add-service=https
-   sudo firewall-cmd --reload
-   ```
-4. If rate limited, wait one week before retrying, or use the Let's Encrypt staging environment for testing
+### Unhealthy Container
+
+```bash
+docker inspect arthas --format='{{.State.Health.Status}}'
+docker exec arthas wget -qO- http://localhost:8080/ping
+docker logs arthas
+```
 
 ### ARM64 Compatibility
 
-**Symptoms:** Image pull fails or runtime issues on Raspberry Pi or ARM64 servers.
-
-**Confirm architecture:**
+Arthas Docker images support both `linux/amd64` and `linux/arm64`. Docker automatically pulls the matching image.
 
 ```bash
-# Check system architecture
-uname -m
-# aarch64 = ARM64, x86_64 = AMD64
+uname -m    # aarch64 = ARM64, x86_64 = AMD64
+docker build -f deploy/Dockerfile -t arthas-server .
 ```
-
-**Solution:**
-
-Arthas Docker images support both `linux/amd64` and `linux/arm64` architectures. Docker will automatically pull the matching image. If you encounter issues:
-
-```bash
-# Force pull for a specific platform
-docker pull --platform linux/arm64 ghcr.io/{GITHUB_OWNER}/arthas:latest
-
-# Verify image architecture
-docker inspect ghcr.io/{GITHUB_OWNER}/arthas:latest | grep Architecture
-```
-
-For Tier 1 single binary, download the `arthas-server-linux-arm64` version.
-
-### Unhealthy Service
-
-**Symptoms:** `./deploy.sh --status` shows a service as unhealthy.
-
-**Troubleshooting steps:**
-
-```bash
-# View detailed health check status
-docker inspect arthas-backend --format='{{.State.Health.Status}}'
-docker inspect arthas-caddy --format='{{.State.Health.Status}}'
-
-# View recent health check logs
-docker inspect arthas-backend --format='{{range .State.Health.Log}}{{.Output}}{{end}}'
-
-# Manually test the backend health endpoint
-docker exec arthas-backend wget -qO- http://localhost:8080/ping
-# Should return "pong"
-```
-
-**Solution:**
-- Services will automatically restart (`restart: unless-stopped` policy)
-- If persistently unhealthy, check logs: `./deploy.sh --logs`
-- Try a full restart: `./deploy.sh --down && ./deploy.sh`
 
 ---
 
 ## Architecture Overview
 
-### Tier 1 Architecture
+### Tier 1 / Tier 2 Architecture
 
 ```
-Browser ──HTTP/WS──▶ Go Binary (port 8080)
+Browser ──HTTP/WS──→ Go Service (port 8080)
                        ├── Static file server (embedded dist/)
-                       └── WebSocket Hub (message relay)
+                       ├── WebSocket Hub (message relay)
+                       └── /ping health check
 ```
 
-### Tier 2 Architecture
+### Tier 3 Architecture
 
 ```
-Browser ──HTTPS──▶ Caddy (port 443)
+Browser ──HTTPS──→ Caddy (port 443)
                      │
-                     ▼ (reverse proxy)
+                     │ (reverse proxy)
+                     ↓
                    Go Container (internal port 8080)
                      ├── Static file server (embedded dist/)
-                     └── WebSocket Hub (message relay)
+                     ├── WebSocket Hub (message relay)
+                     └── /ping health check
 ```
-
-Caddy is responsible for:
-- HTTPS termination and automatic certificate renewal
-- HTTP → HTTPS redirect
-- Reverse proxying all requests to the Go backend
-- Security response header injection
-
-Go backend is responsible for:
-- Serving frontend static files (SPA routing)
-- WebSocket message relay
-- Health check endpoint (`/ping`)
 
 ---
 
 ## Building from Source
 
-If you want to build from source rather than using prebuilt images:
+### Docker Build (Recommended)
 
 ```bash
-# Clone the repository
-git clone https://github.com/anthropics/arthas.git
+git clone https://github.com/michaelwang123/arthas.git
 cd arthas
+docker build -f deploy/Dockerfile -t arthas-server .
+docker run -d -p 8080:8080 --name arthas arthas-server
+```
 
-# Build binaries for all platforms (requires Go 1.22+ and Node.js 18+)
+### Local Build (Requires Go + Node.js)
+
+```bash
+git clone https://github.com/michaelwang123/arthas.git
+cd arthas
 make build-all
-
-# Output in dist/ directory:
-# dist/arthas-server-linux-amd64
-# dist/arthas-server-linux-arm64
-# dist/arthas-server-darwin-amd64
-# dist/arthas-server-darwin-arm64
-# dist/arthas-server-windows-amd64.exe
-
-# Build development version for current platform only (no frontend needed)
-make dev-server
+# Output in dist/ directory
 ```
 
 ---
 
 ## Next Steps
 
-- [System Architecture](architecture.en.md) — Understand the overall design
-- [Configuration Reference](configuration.en.md) — All configurable parameters
-- [Security Design](security.md) — Encryption and security mechanisms
-- [Getting Started](getting-started.en.md) — Set up a local development environment
+- [System Architecture](architecture.md) — Understand the overall design
+- [Configuration Reference](configuration.md) — All configurable parameters
+- [Getting Started](getting-started.md) — Set up a local development environment

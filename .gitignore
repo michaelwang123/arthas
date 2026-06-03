@@ -45,7 +45,11 @@ deploy/docker-compose.override.yml
 arthas-cli/arthas-cli
 
 # Internal scripts (contain sensitive info like mailmap with company email)
-/scripts/
+/scripts/*
+!/scripts/validate-openclaw-docs.sh
+
+# Coverage reports
+packages/openclaw-channel/coverage/
 
 # Demo recording raw video (too large for git)
 docs/show/demo-full.mp4
@@ -55,4 +59,7 @@ website/node_modules/
 website/dist/
 website/src/content/docs/
 website/src/data/release.json
-packages/openclaw-channel/coverage/
+
+# Chrome Extension
+arthas-extension/node_modules/
+arthas-extension/dist/

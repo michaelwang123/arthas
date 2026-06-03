@@ -64,15 +64,15 @@
 
 ## 修复状态追踪
 
-| #   | 问题　　　　　　　　　 | 优先级 | 状态　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 |
-| -----| ------------------------| --------| --------------------------------------------------------------------|
-| 1   | 语言切换行多余　　　　 | 高　　 | ✅ 已修复 — sync-docs.mjs 添加 stripLanguageSwitcher 函数　　　　　 |
-| 2   | git clone URL 错误　　 | 高　　 | ✅ 已修复 — 更新为 michaelwang123/arthas.git　　　　　　　　　　　　|
-| 3   | 版本号硬编码　　　　　 | 中　　 | ⬜ 延后 — 需要 GitHub API 集成　　　　　　　　　　　　　　　　　　　|
-| 4   | Trust Section 未国际化 | 中　　 | ✅ 已修复 — 添加 trust.diagram.* i18n keys　　　　　　　　　　　　　|
-| 5   | 生产 HTML 含学习注释　 | 中　　 | ✅ 已修复 — postbuild 脚本移除 HTML 注释，节省 41.7KB　　　　　　　|
-| 6   | og:image SVG 兼容性　　| 低　　 | ✅ 已修复 — 生成 PNG 版本，build 时自动从 SVG 转换　　　　　　　　　|
-| 7   | Launch App URL　　　　 | 低　　 | ✅ 已确认 — arthas-blush.vercel.app 为正式生产 URL，无需修改　　　　|
+| #   | 问题　　　　　　　　　 | 优先级 | 状态　　　　　　　　　　　　　　　　　　　　　　　　　　　　|
+| -----| ------------------------| --------| -------------------------------------------------------------|
+| 1   | 语言切换行多余　　　　 | 高　　 | ✅ 已修复 — sync-docs.mjs 添加 stripLanguageSwitcher 函数　　|
+| 2   | git clone URL 错误　　 | 高　　 | ✅ 已修复 — 更新为 michaelwang123/arthas.git　　　　　　　　 |
+| 3   | 版本号硬编码　　　　　 | 中　　 | ✅ 已实现 — fetch-release.mjs 在 CI 构建时自动获取最新版本　 |
+| 4   | Trust Section 未国际化 | 中　　 | ✅ 已修复 — 添加 trust.diagram.* i18n keys　　　　　　　　　 |
+| 5   | 生产 HTML 含学习注释　 | 中　　 | ✅ 已修复 — postbuild 脚本移除 HTML 注释，节省 41.7KB　　　　|
+| 6   | og:image SVG 兼容性　　| 低　　 | ✅ 已修复 — 生成 PNG 版本，build 时自动从 SVG 转换　　　　　 |
+| 7   | Launch App URL　　　　 | 低　　 | ✅ 已确认 — arthas-blush.vercel.app 为正式生产 URL，无需修改 |
 
 ---
 

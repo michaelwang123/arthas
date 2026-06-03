@@ -1,13 +1,29 @@
 # 自托管部署指南 (Self-Hosting Guide)
 
-本指南帮助你在自己的服务器上部署 Arthas 私有实例。Arthas 提供两种部署方式：
+本指南帮助你在自己的服务器上部署 Arthas 私有实例。Arthas 提供三种部署方式：
 
 | 方式 | 适用场景 | 依赖 | HTTPS |
 |------|----------|------|-------|
-| **Tier 1 — 单二进制** | 本地/内网/开发/快速体验 | 无（单文件） | 无（HTTP） |
-| **Tier 2 — Docker Compose** | 公网生产环境 | Docker + Compose v2 | 自动（Let's Encrypt） |
+| **Tier 1 — 单二进制** | 本地/内网/开发快速体验 | 无（单文件） | 无（HTTP） |
+| **Tier 2 — Docker 单容器** | 快速部署/测试/内网 | Docker | 无（HTTP） |
+| **Tier 3 — Docker Compose** | 公网生产环境 | Docker + Compose v2 | 自动（Let's Encrypt） |
 
 > **零知识架构不变** — 无论哪种部署方式，服务器仅中转加密密文，不存储任何消息内容。
+
+---
+
+## 项目中的两个 Dockerfile
+
+| 文件 | 用途 | 包含前端 | 默认端口 | 构建上下文 |
+|------|------|----------|----------|------------|
+| `deploy/Dockerfile` | **自托管部署（Tier 2/3 推荐）** | ✅ 三阶段构建 | 8080 | 项目根目录 |
+| `arthas-server/Dockerfile` | HF Spaces 纯后端中继 | ❌ 仅后端 | 7860 | arthas-server/ |
+
+**关键区别：**
+- `deploy/Dockerfile` 会先构建前端（Node.js），再将产物嵌入 Go 二进制，最终镜像包含完整的前端页面 + WebSocket 后端
+- `arthas-server/Dockerfile` 只编译 Go 后端，不构建前端，用于前后端分离部署（前端在 Vercel，后端在 HF Spaces）
+
+> ⚠️ **常见错误：** 如果你用 `docker build -t arthas-server ./arthas-server` 构建，访问根路径只会看到空白页面（placeholder HTML）。这是因为用错了 Dockerfile。自托管请使用 `deploy/Dockerfile`。
 
 ---
 
@@ -20,7 +36,7 @@
 | CPU | 1 核 | Go 服务器资源占用极低 |
 | 内存 | 512 MB | 含操作系统开销 |
 | 磁盘 | 1 GB | 含 Docker 镜像和证书存储 |
-| 网络 | 端口 80 + 443 开放 | Tier 2 公网部署需要（Tier 1 仅需自定义端口） |
+| 网络 | 端口 80 + 443 开放 | Tier 3 公网部署需要（Tier 1/2 仅需自定义端口） |
 
 ### Tier 1 前置要求
 
@@ -29,11 +45,17 @@
 ### Tier 2 前置要求
 
 - Docker Engine 20.10+
+
+```bash
+docker --version    # Docker version 20.10+
+```
+
+### Tier 3 前置要求
+
+- Docker Engine 20.10+
 - Docker Compose v2（`docker compose` 插件，非独立的 `docker-compose`）
 - 一个指向服务器 IP 的域名（公网部署）
 - 服务器防火墙开放 80 和 443 端口
-
-验证 Docker 环境：
 
 ```bash
 docker --version          # Docker version 20.10+
@@ -48,23 +70,23 @@ docker compose version    # Docker Compose version v2.x.x
 
 ### 1. 下载二进制
 
-从 [GitHub Releases](https://github.com/anthropics/arthas/releases) 下载对应平台的二进制文件：
+从 [GitHub Releases](https://github.com/michaelwang123/arthas/releases) 下载对应平台的二进制文件：
 
 ```bash
 # Linux (x86_64)
-curl -Lo arthas-server https://github.com/anthropics/arthas/releases/latest/download/arthas-server-linux-amd64
+curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-linux-amd64
 chmod +x arthas-server
 
 # Linux (ARM64, 如树莓派)
-curl -Lo arthas-server https://github.com/anthropics/arthas/releases/latest/download/arthas-server-linux-arm64
+curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-linux-arm64
 chmod +x arthas-server
 
 # macOS (Apple Silicon)
-curl -Lo arthas-server https://github.com/anthropics/arthas/releases/latest/download/arthas-server-darwin-arm64
+curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-darwin-arm64
 chmod +x arthas-server
 
 # macOS (Intel)
-curl -Lo arthas-server https://github.com/anthropics/arthas/releases/latest/download/arthas-server-darwin-amd64
+curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-darwin-amd64
 chmod +x arthas-server
 ```
 
@@ -93,18 +115,126 @@ chmod +x arthas-server
 | `--allowed-origins` | `*`（允许所有来源） | WebSocket CORS 白名单，多个用逗号分隔 |
 | `--version` | — | 打印版本号并退出 |
 
-> **注意：** Tier 1 不提供 HTTPS。如需公网 HTTPS 部署，请使用 Tier 2 或自行配置反向代理。
+> **注意：** Tier 1 不提供 HTTPS。如需公网 HTTPS 部署，请使用 Tier 3 或自行配置反向代理。
 
 ---
 
-## 快速开始：Tier 2（Docker Compose）
+## 快速开始：Tier 2（Docker 单容器）
+
+适合快速部署、内网使用或测试。一条命令构建包含前端和后端的完整镜像。
+
+### 1. 克隆仓库
+
+```bash
+git clone https://github.com/michaelwang123/arthas.git
+cd arthas
+```
+
+### 2. 构建镜像
+
+```bash
+# 从项目根目录构建（必须使用 deploy/Dockerfile）
+docker build -f deploy/Dockerfile -t arthas-server .
+```
+
+构建过程约 1-2 分钟，三阶段流程：
+1. **Stage 1 (frontend):** Node.js 构建前端 React 应用 → 产出 `dist/`
+2. **Stage 2 (builder):** Go 编译器将 `dist/` 嵌入二进制 → 产出单一可执行文件
+3. **Stage 3 (runtime):** 最小化 Alpine 镜像 + 二进制 → 最终镜像 < 30MB
+
+### 3. 启动容器
+
+```bash
+# 基本启动
+docker run -d -p 8080:8080 --name arthas arthas-server
+
+# 自定义端口
+docker run -d -p 3000:3000 -e PORT=3000 --name arthas arthas-server
+
+# 限制 CORS 来源
+docker run -d -p 8080:8080 -e ALLOWED_ORIGINS=https://chat.example.com --name arthas arthas-server
+```
+
+### 4. 验证
+
+```bash
+# 健康检查
+curl http://localhost:8080/ping
+# 返回 "pong"
+
+# 查看容器状态（等待约 30 秒后显示 healthy）
+docker ps --filter name=arthas
+# STATUS: Up X seconds (healthy)
+
+# 查看日志
+docker logs arthas
+# [2024-01-01T12:00:00Z] [INFO] [Server] started on :8080 (version latest)
+```
+
+### 5. 访问
+
+打开浏览器访问 `http://localhost:8080`，即可看到完整的前端页面并开始使用。
+
+**容器内的路由：**
+
+| 路径 | 功能 |
+|------|------|
+| `/` | 前端 SPA 页面（index.html） |
+| `/assets/*` | 前端静态资源（JS/CSS，带内容哈希长期缓存） |
+| `/ws` | WebSocket 连接端点 |
+| `/ping` | 健康检查 |
+
+### 6. 停止和清理
+
+```bash
+# 停止容器
+docker stop arthas
+
+# 删除容器
+docker rm arthas
+
+# 删除镜像（可选）
+docker rmi arthas-server
+```
+
+### Docker Compose 单容器模式
+
+如果你偏好使用 Docker Compose 管理：
+
+```yaml
+# docker-compose.yml
+services:
+  arthas:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ALLOWED_ORIGINS=*
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+```
+
+```bash
+docker compose up -d
+```
+
+---
+
+## 快速开始：Tier 3（Docker Compose + HTTPS）
 
 适合公网生产环境。Caddy 自动申请 Let's Encrypt 证书，一条命令完成部署。
 
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/anthropics/arthas.git
+git clone https://github.com/michaelwang123/arthas.git
 cd arthas/deploy
 ```
 
@@ -201,8 +331,6 @@ Enter your GitHub username (image registry): your-username
 
 ### 手动编辑配置
 
-如果需要手动修改配置：
-
 ```bash
 # 编辑 .env 文件
 vim deploy/.env
@@ -211,15 +339,11 @@ vim deploy/.env
 ./deploy.sh --reconfigure
 ```
 
-### 配置文件模板
-
-参考 `deploy/.env.example` 获取完整的配置模板和注释说明。
-
 ---
 
 ## 升级
 
-### Tier 2（Docker Compose）升级
+### Tier 3（Docker Compose）升级
 
 ```bash
 cd deploy
@@ -234,9 +358,19 @@ sed -i 's/ARTHAS_VERSION=.*/ARTHAS_VERSION=v1.2.0/' .env
 ./deploy.sh --upgrade
 ```
 
-`--upgrade` 执行的操作：
-1. `docker compose pull` — 拉取最新镜像
-2. `docker compose up -d` — 用新镜像重启服务（零停机，旧容器替换为新容器）
+### Tier 2（Docker 单容器）升级
+
+```bash
+# 1. 拉取最新代码
+git pull
+
+# 2. 重新构建镜像
+docker build -f deploy/Dockerfile -t arthas-server .
+
+# 3. 替换容器
+docker rm -f arthas
+docker run -d -p 8080:8080 --name arthas arthas-server
+```
 
 ### Tier 1（单二进制）升级
 
@@ -245,7 +379,7 @@ sed -i 's/ARTHAS_VERSION=.*/ARTHAS_VERSION=v1.2.0/' .env
 kill $(pgrep arthas-server)
 
 # 2. 下载新版本（覆盖旧文件）
-curl -Lo arthas-server https://github.com/anthropics/arthas/releases/latest/download/arthas-server-linux-amd64
+curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-linux-amd64
 chmod +x arthas-server
 
 # 3. 重新启动
@@ -258,7 +392,7 @@ chmod +x arthas-server
 
 ## 备份
 
-### Caddy 证书备份（Tier 2）
+### Caddy 证书备份（Tier 3）
 
 Caddy 的 TLS 证书存储在 Docker 命名卷 `caddy_data` 中。建议定期备份以避免频繁向 Let's Encrypt 请求新证书（有速率限制）。
 
@@ -276,17 +410,58 @@ docker run --rm \
   alpine sh -c "cd / && tar xzf /backup/caddy-certs-20240101.tar.gz"
 ```
 
-> **注意：** 即使证书丢失，Caddy 也会自动重新申请。但 Let's Encrypt 对同一域名有 [速率限制](https://letsencrypt.org/docs/rate-limits/)（每周 5 张证书），频繁重建可能触发限制。
+### Tier 1/2 备份
 
-### Tier 1 备份
-
-Tier 1 无状态，无需备份。二进制文件可随时重新下载。
+Tier 1 和 Tier 2 无状态，无需备份。二进制文件可随时重新下载，Docker 镜像可随时重新构建。
 
 ---
 
 ## 故障排查
 
-### DNS 未生效
+### 访问根路径显示空白页面
+
+**症状：** `docker run` 后访问 `http://localhost:8080` 显示空白或只有 `<div id="root"></div>`。
+
+**原因：** 使用了错误的 Dockerfile。`arthas-server/Dockerfile` 不包含前端构建步骤。
+
+**解决方案：**
+
+```bash
+# 错误 ❌（只构建后端，无前端）
+docker build -t arthas-server ./arthas-server
+
+# 正确 ✅（从项目根目录，使用 deploy/Dockerfile）
+docker build -f deploy/Dockerfile -t arthas-server .
+```
+
+### 端口被占用
+
+**症状：** `docker run` 报错 `port is already allocated`。
+
+**排查步骤：**
+
+```bash
+# Linux/macOS
+lsof -i :8080
+
+# Windows
+netstat -ano | findstr "8080"
+
+# 查看是否有其他 Docker 容器占用
+docker ps --filter "publish=8080"
+```
+
+**解决方案：**
+
+```bash
+# 停止占用端口的容器
+docker rm -f <container_name>
+
+# 或使用其他端口
+docker run -d -p 9090:9090 -e PORT=9090 --name arthas arthas-server
+```
+
+### DNS 未生效（Tier 3）
 
 **症状：** 部署后访问域名显示"无法访问此网站"，Caddy 日志报 ACME challenge 失败。
 
@@ -295,10 +470,6 @@ Tier 1 无状态，无需备份。二进制文件可随时重新下载。
 ```bash
 # 检查 DNS 解析是否指向你的服务器 IP
 dig +short chat.example.com
-# 应返回你的服务器公网 IP
-
-# 如果返回空或错误 IP，说明 DNS 尚未生效
-# DNS 传播通常需要 5 分钟 ~ 48 小时
 
 # 使用指定 DNS 服务器验证
 dig @8.8.8.8 chat.example.com
@@ -309,18 +480,18 @@ dig @8.8.8.8 chat.example.com
 2. 等待 DNS 传播（通常 5-30 分钟，最长 48 小时）
 3. DNS 生效后重启 Caddy：`./deploy.sh --down && ./deploy.sh`
 
-### 端口冲突
+### 端口冲突（Tier 3）
 
 **症状：** `deploy.sh` 报告端口 80 或 443 被占用。
 
 **排查步骤：**
 
 ```bash
-# Linux: 查看占用端口的进程
+# Linux
 sudo ss -tlnp | grep ':80 '
 sudo ss -tlnp | grep ':443 '
 
-# macOS: 查看占用端口的进程
+# macOS
 sudo lsof -i :80 -sTCP:LISTEN
 sudo lsof -i :443 -sTCP:LISTEN
 ```
@@ -333,20 +504,9 @@ sudo lsof -i :443 -sTCP:LISTEN
 | apache2/httpd | `sudo systemctl stop apache2 && sudo systemctl disable apache2` |
 | 其他 Caddy 实例 | `sudo systemctl stop caddy` |
 
-### 证书申请失败
+### 证书申请失败（Tier 3）
 
 **症状：** Caddy 日志显示 ACME challenge 失败，HTTPS 不可用。
-
-**排查步骤：**
-
-```bash
-# 查看 Caddy 详细日志
-./deploy.sh --logs
-
-# 常见错误信息:
-# "challenge failed" — DNS 未生效或端口 80 被防火墙阻挡
-# "too many certificates" — 触发 Let's Encrypt 速率限制
-```
 
 **解决方案：**
 1. 确认端口 80 对外开放（Let's Encrypt HTTP-01 验证需要）
@@ -362,79 +522,62 @@ sudo lsof -i :443 -sTCP:LISTEN
    sudo firewall-cmd --permanent --add-service=https
    sudo firewall-cmd --reload
    ```
-4. 如触发速率限制，等待一周后重试，或使用 Let's Encrypt staging 环境测试
+
+### 服务不健康
+
+**症状：** `docker ps` 显示容器 unhealthy。
+
+**排查步骤：**
+
+```bash
+# 查看健康检查状态
+docker inspect arthas --format='{{.State.Health.Status}}'
+
+# 手动测试健康端点
+docker exec arthas wget -qO- http://localhost:8080/ping
+# 应返回 "pong"
+
+# 查看日志
+docker logs arthas
+```
 
 ### ARM64 兼容性
 
-**症状：** 在树莓派或 ARM64 服务器上拉取镜像失败或运行异常。
-
-**确认架构：**
+Arthas Docker 镜像支持 `linux/amd64` 和 `linux/arm64` 双架构。Docker 会自动拉取匹配的镜像。
 
 ```bash
 # 查看系统架构
 uname -m
 # aarch64 = ARM64, x86_64 = AMD64
+
+# 从源码构建时自动适配当前架构
+docker build -f deploy/Dockerfile -t arthas-server .
 ```
-
-**解决方案：**
-
-Arthas Docker 镜像支持 `linux/amd64` 和 `linux/arm64` 双架构。Docker 会自动拉取匹配的镜像。如果遇到问题：
-
-```bash
-# 强制指定平台拉取
-docker pull --platform linux/arm64 ghcr.io/{GITHUB_OWNER}/arthas:latest
-
-# 验证镜像架构
-docker inspect ghcr.io/{GITHUB_OWNER}/arthas:latest | grep Architecture
-```
-
-对于 Tier 1 单二进制，下载 `arthas-server-linux-arm64` 版本即可。
-
-### 服务不健康
-
-**症状：** `./deploy.sh --status` 显示服务 unhealthy。
-
-**排查步骤：**
-
-```bash
-# 查看详细健康检查状态
-docker inspect arthas-backend --format='{{.State.Health.Status}}'
-docker inspect arthas-caddy --format='{{.State.Health.Status}}'
-
-# 查看最近的健康检查日志
-docker inspect arthas-backend --format='{{range .State.Health.Log}}{{.Output}}{{end}}'
-
-# 手动测试后端健康端点
-docker exec arthas-backend wget -qO- http://localhost:8080/ping
-# 应返回 "pong"
-```
-
-**解决方案：**
-- 服务会自动重启（`restart: unless-stopped` 策略）
-- 如持续不健康，查看日志：`./deploy.sh --logs`
-- 尝试完全重启：`./deploy.sh --down && ./deploy.sh`
 
 ---
 
 ## 架构说明
 
-### Tier 1 架构
+### Tier 1 / Tier 2 架构
 
 ```
-用户浏览器 ──HTTP/WS──▶ Go 二进制 (端口 8080)
+用户浏览器 ──HTTP/WS──→ Go 服务 (端口 8080)
                           ├── 静态文件服务（内嵌 dist/）
-                          └── WebSocket Hub（消息中转）
+                          ├── WebSocket Hub（消息中转）
+                          └── /ping 健康检查
 ```
 
-### Tier 2 架构
+### Tier 3 架构
 
 ```
-用户浏览器 ──HTTPS──▶ Caddy (端口 443)
+用户浏览器 ──HTTPS──→ Caddy (端口 443)
                         │
-                        ▼ (反向代理)
+                        │ (反向代理)
+                        ↓
                       Go 容器 (内部端口 8080)
                         ├── 静态文件服务（内嵌 dist/）
-                        └── WebSocket Hub（消息中转）
+                        ├── WebSocket Hub（消息中转）
+                        └── /ping 健康检查
 ```
 
 Caddy 负责：
@@ -444,7 +587,7 @@ Caddy 负责：
 - 安全响应头注入
 
 Go 后端负责：
-- 服务前端静态文件（SPA 路由）
+- 服务前端静态文件（SPA 路由 fallback）
 - WebSocket 消息中转
 - 健康检查端点 (`/ping`)
 
@@ -454,9 +597,28 @@ Go 后端负责：
 
 如果你想从源码构建而非使用预构建镜像：
 
+### Docker 构建（推荐）
+
 ```bash
 # 克隆仓库
-git clone https://github.com/anthropics/arthas.git
+git clone https://github.com/michaelwang123/arthas.git
+cd arthas
+
+# 构建完整镜像（前端 + 后端）
+docker build -f deploy/Dockerfile -t arthas-server .
+
+# 指定版本号
+docker build -f deploy/Dockerfile --build-arg VERSION=v1.2.3 -t arthas-server:v1.2.3 .
+
+# 运行
+docker run -d -p 8080:8080 --name arthas arthas-server
+```
+
+### 本地构建（需要 Go + Node.js）
+
+```bash
+# 克隆仓库
+git clone https://github.com/michaelwang123/arthas.git
 cd arthas
 
 # 构建所有平台的二进制（需要 Go 1.22+ 和 Node.js 18+）
@@ -479,5 +641,4 @@ make dev-server
 
 - [系统架构](architecture.md) — 了解整体设计
 - [配置参考](configuration.md) — 所有可配置参数
-- [安全设计](security.md) — 加密和安全机制
 - [快速开始](getting-started.md) — 本地开发环境搭建
