@@ -1,221 +1,152 @@
 # CLI 客户端使用指南 (arthas-cli)
 
-arthas-cli 是 Arthas 的终端客户端，让你无需浏览器即可创建和加入加密聊天室。它实现与 Web 客户端完全相同的 E2EE 协议，两端可互操作。
+单文件终端客户端，用于 Arthas 端到端加密聊天。无依赖、无需注册。
+
+## 下载
+
+| 平台 | 命令 |
+|------|------|
+| **Windows** | `curl.exe -L -o arthas-cli.exe https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli-windows-amd64.exe` |
+| **Linux (x86_64)** | `curl -L -o arthas-cli https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli && chmod +x arthas-cli` |
+| **Linux (ARM64)** | `curl -L -o arthas-cli https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli-linux-arm64 && chmod +x arthas-cli` |
+| **macOS (Intel)** | `curl -L -o arthas-cli https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli-darwin-amd64 && chmod +x arthas-cli` |
+| **macOS (Apple Silicon)** | `curl -L -o arthas-cli https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli-darwin-arm64 && chmod +x arthas-cli` |
+
+也可以直接从 [GitHub Releases](https://github.com/michaelwang123/arthas/releases/latest) 手动下载。
+
+> 免费公共服务器：`wss://arthas100-arthas-server.hf.space/ws`，无需搭建，开箱即用。
 
 ---
 
-## 安装
+## 快速上手
 
-### 从源码编译
-
-```bash
-cd arthas-cli
-go build -o arthas-cli ./cmd/arthas-cli/
-```
-
-### 跨平台编译
+### 1. 创建房间
 
 ```bash
-# 使用 Makefile 编译所有平台
-make build-all
+# Linux/macOS
+./arthas-cli create --server wss://arthas100-arthas-server.hf.space/ws --name "Alice"
 
-# 产物在 build/ 目录：
-# arthas-cli-linux-amd64
-# arthas-cli-linux-arm64
-# arthas-cli-darwin-amd64
-# arthas-cli-darwin-arm64
-# arthas-cli-windows-amd64.exe
+# Windows
+.\arthas-cli.exe create --server wss://arthas100-arthas-server.hf.space/ws --name "Alice"
 ```
 
-### 验证安装
+输出：
+
+```
+✓ Room created! Share code:
+QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM
+
+Share this code with others to join.
+```
+
+**保持此终端打开** — 房间仅在至少一个参与者在线时存在。
+
+### 2. 加入房间（在另一个终端）
 
 ```bash
-arthas-cli --version
-# 输出: arthas-cli v1.0.0
+# Linux/macOS
+./arthas-cli join QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM \
+  --server wss://arthas100-arthas-server.hf.space/ws --name "Bob"
+
+# Windows
+.\arthas-cli.exe join QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM --server wss://arthas100-arthas-server.hf.space/ws --name "Bob"
 ```
 
----
+输入消息并回车 — 消息会经过 AES-256-GCM 加密后发送，服务器只能看到密文。
 
-## 基本用法
+### 3. 发送消息
 
-### 创建房间
+直接打字并按 Enter。每条消息使用独立的随机 IV 加密。
 
-```bash
-arthas-cli create --name Alice
-```
+### 4. 退出
 
-成功后输出分享码：
-```
-Share this code to invite others:
-  X2-KtJ6oRzdxbguxl5DAR:AMVGFZBTFLeed7tVncI1oKoFUdNIv6goGz64x0cuU1M
-```
-
-将此分享码通过安全渠道发送给你的伙伴。
-
-### 加入房间
-
-```bash
-arthas-cli join <share_code> --name Bob
-```
-
-成功后显示成员列表并进入聊天模式：
-```
-Members in room:
-  • Alice
-  • Bob
-```
-
-### 发送消息
-
-直接输入文本并按回车：
-```
-Hello, Alice!
-[16:08] Bob: Hello, Alice!
-```
-
-### 退出
-
-- 输入 `/quit` 或 `/exit`
-- 按 `Ctrl+C`
-- 按 `Ctrl+D`（Unix）或 `Ctrl+Z+Enter`（Windows）
+按 `Ctrl+C` 离开房间。如果你是最后一个参与者，房间会立即销毁。
 
 ---
 
 ## 命令参考
 
+### create — 创建房间
+
+创建一个新的加密房间并保持连接。
+
 ```
-arthas-cli create [--server URL] [--name NAME]
-arthas-cli join <share_code> [--server URL] [--name NAME]
-arthas-cli --version
-arthas-cli --help
+arthas-cli create --server <URL> --name <显示名>
 ```
 
-### 全局选项
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `--server` | 是 | Arthas 服务器的 WebSocket 地址 |
+| `--name` | 是 | 你在房间中的显示名称 |
 
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `--server` | WebSocket 服务器 URL | `wss://arthas-chat.onrender.com/ws` |
-| `--name` | 显示昵称（1-20 字符） | 交互式提示输入 |
-| `--version` | 显示版本号 | — |
-| `--help` | 显示帮助信息 | — |
+### join — 加入房间
 
-### 环境变量
+使用分享码加入已有的房间。
 
-| 变量 | 说明 | 优先级 |
-|------|------|--------|
-| `ARTHAS_SERVER` | WebSocket 服务器 URL | 低于 `--server` flag |
+```
+arthas-cli join <分享码> --server <URL> --name <显示名>
+```
 
-配置优先级：`--server` flag > `ARTHAS_SERVER` 环境变量 > 默认值
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `<分享码>` | 是 | 房间创建者提供的分享码 |
+| `--server` | 是 | WebSocket 地址（必须和创建者使用同一服务器） |
+| `--name` | 是 | 你的显示名称 |
 
 ---
 
-## 连接自托管服务器
+## 分享码格式
+
+```
+roomId:base64Key[:ephemeralFlag[:expiresAt]]
+```
+
+| 段 | 长度 | 说明 |
+|----|------|------|
+| `roomId` | 21 字符 | 房间唯一标识（NanoID） |
+| `base64Key` | 43 字符 | AES-256 加密密钥（base64url 编码，无 padding） |
+| `ephemeralFlag` | 1 字符 | 可选。`0` = 持久，`1` = 阅后即焚 |
+| `expiresAt` | 可变 | 可选。Unix 时间戳（0 = 永不过期） |
+
+加密密钥**永远不会**离开你的设备。它嵌入在分享码中，仅通过你选择的渠道传递（复制粘贴、二维码、当面）。
+
+---
+
+## 重要注意事项
+
+- **房间是临时的** — 所有参与者断开后，房间立即销毁。没有持久化的聊天记录。
+- **分享码 = 完全访问权限** — 任何持有分享码的人都能读取所有消息。像密码一样保管它。
+- **创建者必须保持在线** — 如果创建者在其他人加入之前断开连接，房间就消失了。需要在创建者保持连接的同时，在另一个终端 join。
+- **`room not found` 错误** — 房间已被销毁（所有人都离开了）。需要重新创建。
+- **跨平台互通** — CLI 客户端（Go）和 Web 客户端（React）完全互操作。你可以在网页上创建房间，用 CLI 加入；反之亦然。
+
+---
+
+## 使用自托管服务器
+
+如果你部署了自己的 Arthas 服务器：
 
 ```bash
-# 方式一：使用 --server flag
-arthas-cli create --server wss://chat.example.com/ws --name Alice
+# 本地开发
+./arthas-cli create --server ws://localhost:8080/ws --name "Alice"
 
-# 方式二：使用环境变量（持久配置）
-export ARTHAS_SERVER=wss://chat.example.com/ws
-arthas-cli create --name Alice
+# 生产环境（带 TLS）
+./arthas-cli create --server wss://arthas.yourdomain.com/ws --name "Alice"
 ```
 
-**注意**：自托管服务器需要在 `ALLOWED_ORIGINS` 环境变量中添加 `arthas-cli`：
+服务器部署请参考 [自托管部署指南](self-hosting.md)。
+
+---
+
+## 从源码编译
+
+需要 Go 1.23+：
 
 ```bash
-# 服务器端配置
-ALLOWED_ORIGINS=https://your-domain.com,arthas-cli
+cd arthas-cli
+go build -o arthas-cli ./cmd/arthas-cli
+
+# 交叉编译
+GOOS=linux GOARCH=amd64 go build -o arthas-cli-linux ./cmd/arthas-cli
+GOOS=windows GOARCH=amd64 go build -o arthas-cli.exe ./cmd/arthas-cli
 ```
-
----
-
-## 与 Web 客户端互操作
-
-arthas-cli 和 Web 客户端使用完全相同的协议：
-- 相同的 MessagePack 二进制信封格式
-- 相同的 AES-256-GCM 加密参数
-- 相同的 base64url 编码规则
-- 相同的分享码格式
-
-你可以：
-- 用 Web 创建房间 → CLI 加入
-- 用 CLI 创建房间 → Web 加入
-- CLI 和 Web 用户在同一房间聊天
-
----
-
-## 消息格式
-
-终端中的消息显示格式：
-
-```
-[HH:MM] <彩色昵称>: 消息内容        # 他人消息
-[HH:MM] <粗体昵称>: 消息内容        # 自己消息
-*** Alice joined                    # 系统消息（成员加入）
-*** Bob left                        # 系统消息（成员离开）
-  ↩ Re: Alice: 被引用的消息...      # 引用回复上下文
-```
-
----
-
-## 限制
-
-当前 MVP 版本不支持以下功能（Web 客户端支持）：
-
-| 功能 | 原因 |
-|------|------|
-| 文件传输 | 终端环境不适合文件操作 |
-| Emoji 反应 | 终端 UX 不适合 |
-| 输入状态指示 | 行输入模式无法检测"正在输入" |
-| 密码保护房间 | 后续版本添加 |
-| 自动重连 | CLI 退出后重新运行即可 |
-
----
-
-## 故障排除
-
-### 连接失败
-
-```
-Error: failed to connect to server: ...
-```
-
-检查：
-1. 服务器是否在运行
-2. URL 是否正确（必须以 `ws://` 或 `wss://` 开头）
-3. 网络是否可达
-
-### Origin 被拒绝
-
-```
-Error: failed to connect to server: websocket: bad handshake
-```
-
-自托管服务器需要将 `arthas-cli` 添加到 `ALLOWED_ORIGINS`。
-
-### 分享码无效
-
-```
-Error: invalid share code: expected format {roomId}:{key}[:{ephemeral}]
-```
-
-确保完整复制了分享码（21 字符 roomId + 冒号 + 43 字符 key）。
-
----
-
-## 技术细节
-
-- **语言**: Go 1.22
-- **依赖**: gorilla/websocket, vmihailenco/msgpack/v5
-- **加密**: Go 标准库 crypto/aes + crypto/cipher (AES-256-GCM)
-- **并发模型**: 4 goroutine CSP 模型（main + stdinPump + readPump + writePump）
-- **跨平台**: Linux/macOS/Windows，单一静态二进制
-- **测试**: 14 个属性测试 + 17 个集成测试 + 单元测试（共 77 个）
-
----
-
-## 下一步
-
-- [系统架构](architecture.md) — 了解整体设计
-- [协议规范](protocol.md) — 消息格式详解
-- [自托管部署](self-hosting.md) — 部署自己的服务器

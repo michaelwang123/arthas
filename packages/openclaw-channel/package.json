@@ -1,7 +1,7 @@
 {
-  "name": "@arthas/openclaw-channel",
-  "version": "1.0.0",
-  "description": "OpenClaw Channel Plugin for Arthas E2EE Chat — 将 Arthas 端到端加密聊天暴露为 AI Agent 通信通道",
+  "name": "@arthas-chat/openclaw-channel",
+  "version": "1.0.5",
+  "description": "Arthas Node.js SDK for AI agents — connect any LLM to an E2EE encrypted chat room with AES-256-GCM",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -45,13 +45,5 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "openclaw": {
-    "channels": {
-      "arthas": {
-        "name": "Arthas E2EE Chat",
-        "description": "End-to-end encrypted communication channel via Arthas"
-      }
-    }
   }
 }

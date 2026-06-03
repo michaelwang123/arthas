@@ -1,223 +1,152 @@
-[中文](cli-guide.md) | English
+# CLI Client Guide (arthas-cli)
 
-# CLI Client User Guide (arthas-cli)
+A single-binary terminal client for Arthas E2EE chat. No dependencies, no signup.
 
-arthas-cli is the terminal client for Arthas, allowing you to create and join encrypted chat rooms without a browser. It implements the exact same E2EE protocol as the Web client, making both ends fully interoperable.
+## Download
 
----
+| Platform | Command |
+|----------|---------|
+| **Windows** | `curl.exe -L -o arthas-cli.exe https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli-windows-amd64.exe` |
+| **Linux (x86_64)** | `curl -L -o arthas-cli https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli && chmod +x arthas-cli` |
+| **Linux (ARM64)** | `curl -L -o arthas-cli https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli-linux-arm64 && chmod +x arthas-cli` |
+| **macOS (Intel)** | `curl -L -o arthas-cli https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli-darwin-amd64 && chmod +x arthas-cli` |
+| **macOS (Apple Silicon)** | `curl -L -o arthas-cli https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli-darwin-arm64 && chmod +x arthas-cli` |
 
-## Installation
+Or download manually from [GitHub Releases](https://github.com/michaelwang123/arthas/releases/latest).
 
-### Build from Source
-
-```bash
-cd arthas-cli
-go build -o arthas-cli ./cmd/arthas-cli/
-```
-
-### Cross-Platform Compilation
-
-```bash
-# Build for all platforms using Makefile
-make build-all
-
-# Output in build/ directory:
-# arthas-cli-linux-amd64
-# arthas-cli-linux-arm64
-# arthas-cli-darwin-amd64
-# arthas-cli-darwin-arm64
-# arthas-cli-windows-amd64.exe
-```
-
-### Verify Installation
-
-```bash
-arthas-cli --version
-# Output: arthas-cli v1.0.0
-```
+> A free public server is available at `wss://arthas100-arthas-server.hf.space/ws` — no setup needed.
 
 ---
 
-## Basic Usage
+## Quick Start
 
-### Create a Room
-
-```bash
-arthas-cli create --name Alice
-```
-
-On success, a share code is printed:
-```
-Share this code to invite others:
-  X2-KtJ6oRzdxbguxl5DAR:AMVGFZBTFLeed7tVncI1oKoFUdNIv6goGz64x0cuU1M
-```
-
-Send this share code to your partner through a secure channel.
-
-### Join a Room
+### 1. Create a room
 
 ```bash
-arthas-cli join <share_code> --name Bob
+# Linux/macOS
+./arthas-cli create --server wss://arthas100-arthas-server.hf.space/ws --name "Alice"
+
+# Windows
+.\arthas-cli.exe create --server wss://arthas100-arthas-server.hf.space/ws --name "Alice"
 ```
 
-On success, the member list is displayed and chat mode begins:
-```
-Members in room:
-  • Alice
-  • Bob
-```
+Output:
 
-### Send Messages
-
-Type text and press Enter:
 ```
-Hello, Alice!
-[16:08] Bob: Hello, Alice!
+✓ Room created! Share code:
+QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM
+
+Share this code with others to join.
 ```
 
-### Exit
+**Keep this terminal open** — the room exists only while at least one participant is connected.
 
-- Type `/quit` or `/exit`
-- Press `Ctrl+C`
-- Press `Ctrl+D` (Unix) or `Ctrl+Z+Enter` (Windows)
+### 2. Join a room (in another terminal)
+
+```bash
+# Linux/macOS
+./arthas-cli join QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM \
+  --server wss://arthas100-arthas-server.hf.space/ws --name "Bob"
+
+# Windows
+.\arthas-cli.exe join QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM --server wss://arthas100-arthas-server.hf.space/ws --name "Bob"
+```
+
+Now type messages — they are encrypted end-to-end. The server only sees ciphertext.
+
+### 3. Send a message
+
+Just type and press Enter. Messages are encrypted with AES-256-GCM before being sent.
+
+### 4. Exit
+
+Press `Ctrl+C` to leave the room. If you're the last participant, the room is destroyed.
 
 ---
 
 ## Command Reference
 
+### create
+
+Create a new encrypted room and stay connected.
+
 ```
-arthas-cli create [--server URL] [--name NAME]
-arthas-cli join <share_code> [--server URL] [--name NAME]
-arthas-cli --version
-arthas-cli --help
+arthas-cli create --server <URL> --name <DISPLAY_NAME>
 ```
 
-### Global Options
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--server` | Yes | WebSocket URL of the Arthas server |
+| `--name` | Yes | Your display name in the room |
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--server` | WebSocket server URL | `wss://arthas-chat.onrender.com/ws` |
-| `--name` | Display nickname (1-20 characters) | Interactive prompt |
-| `--version` | Show version number | — |
-| `--help` | Show help information | — |
+### join
 
-### Environment Variables
+Join an existing room using a share code.
 
-| Variable | Description | Priority |
-|----------|-------------|----------|
-| `ARTHAS_SERVER` | WebSocket server URL | Lower than `--server` flag |
+```
+arthas-cli join <SHARE_CODE> --server <URL> --name <DISPLAY_NAME>
+```
 
-Configuration priority: `--server` flag > `ARTHAS_SERVER` environment variable > default value
+| Argument/Flag | Required | Description |
+|---------------|----------|-------------|
+| `<SHARE_CODE>` | Yes | The share code from the room creator |
+| `--server` | Yes | WebSocket URL (same server as creator) |
+| `--name` | Yes | Your display name |
 
 ---
 
-## Connecting to a Self-Hosted Server
+## Share Code Format
+
+```
+roomId:base64Key[:ephemeralFlag[:expiresAt]]
+```
+
+| Segment | Length | Description |
+|---------|--------|-------------|
+| `roomId` | 21 chars | Room unique identifier (NanoID) |
+| `base64Key` | 43 chars | AES-256 encryption key (base64url, no padding) |
+| `ephemeralFlag` | 1 char | Optional. `0` = persistent, `1` = ephemeral |
+| `expiresAt` | variable | Optional. Unix timestamp (0 = no expiry) |
+
+The encryption key **never** leaves your device. It's embedded in the share code and transmitted only through your chosen side channel (copy-paste, QR code, in-person).
+
+---
+
+## Important Notes
+
+- **Rooms are ephemeral** — when all participants disconnect, the room is immediately destroyed. There is no persistent chat history.
+- **Share code = full access** — anyone with the share code can read all messages. Treat it like a password.
+- **Creator must stay online** — if the room creator disconnects before anyone else joins, the room is gone. Join from another terminal while the creator is still connected.
+- **`room not found` error** — the room was already destroyed (all participants left). Create a new room.
+- **Cross-platform** — the CLI client (Go) and web client (React) are fully interoperable. You can create a room in the web UI and join it from the CLI, or vice versa.
+
+---
+
+## Using with Self-Hosted Server
+
+If you're running your own Arthas server:
 
 ```bash
-# Method 1: Use the --server flag
-arthas-cli create --server wss://chat.example.com/ws --name Alice
+# Local development
+./arthas-cli create --server ws://localhost:8080/ws --name "Alice"
 
-# Method 2: Use an environment variable (persistent configuration)
-export ARTHAS_SERVER=wss://chat.example.com/ws
-arthas-cli create --name Alice
+# Production (with TLS)
+./arthas-cli create --server wss://arthas.yourdomain.com/ws --name "Alice"
 ```
 
-**Note**: Self-hosted servers must add `arthas-cli` to the `ALLOWED_ORIGINS` environment variable:
+See the [Self-Hosting Guide](self-hosting.en.md) for server deployment instructions.
+
+---
+
+## Build from Source
+
+Requires Go 1.23+:
 
 ```bash
-# Server-side configuration
-ALLOWED_ORIGINS=https://your-domain.com,arthas-cli
+cd arthas-cli
+go build -o arthas-cli ./cmd/arthas-cli
+
+# Or cross-compile for other platforms
+GOOS=linux GOARCH=amd64 go build -o arthas-cli-linux ./cmd/arthas-cli
+GOOS=windows GOARCH=amd64 go build -o arthas-cli.exe ./cmd/arthas-cli
 ```
-
----
-
-## Interoperability with the Web Client
-
-arthas-cli and the Web client use the exact same protocol:
-- Same MessagePack binary envelope format
-- Same AES-256-GCM encryption parameters
-- Same base64url encoding rules
-- Same share code format
-
-You can:
-- Create a room on Web → join from CLI
-- Create a room on CLI → join from Web
-- CLI and Web users chat in the same room
-
----
-
-## Message Format
-
-Messages are displayed in the terminal as follows:
-
-```
-[HH:MM] <colored nickname>: message content    # Messages from others
-[HH:MM] <bold nickname>: message content       # Your own messages
-*** Alice joined                               # System message (member joined)
-*** Bob left                                   # System message (member left)
-  ↩ Re: Alice: quoted message...               # Reply context
-```
-
----
-
-## Limitations
-
-The current MVP version does not support the following features (which the Web client supports):
-
-| Feature | Reason |
-|---------|--------|
-| File transfer | Terminal environment is not suited for file operations |
-| Emoji reactions | Terminal UX is not suited for this |
-| Typing indicator | Line-input mode cannot detect "is typing" |
-| Password-protected rooms | To be added in a future version |
-| Auto-reconnect | Simply re-run the CLI after disconnection |
-
----
-
-## Troubleshooting
-
-### Connection Failed
-
-```
-Error: failed to connect to server: ...
-```
-
-Check:
-1. Whether the server is running
-2. Whether the URL is correct (must start with `ws://` or `wss://`)
-3. Whether the network is reachable
-
-### Origin Rejected
-
-```
-Error: failed to connect to server: websocket: bad handshake
-```
-
-Self-hosted servers must add `arthas-cli` to `ALLOWED_ORIGINS`.
-
-### Invalid Share Code
-
-```
-Error: invalid share code: expected format {roomId}:{key}[:{ephemeral}]
-```
-
-Make sure you copied the full share code (21-character roomId + colon + 43-character key).
-
----
-
-## Technical Details
-
-- **Language**: Go 1.22
-- **Dependencies**: gorilla/websocket, vmihailenco/msgpack/v5
-- **Encryption**: Go standard library crypto/aes + crypto/cipher (AES-256-GCM)
-- **Concurrency model**: 4-goroutine CSP model (main + stdinPump + readPump + writePump)
-- **Cross-platform**: Linux/macOS/Windows, single static binary
-- **Tests**: 14 property tests + 17 integration tests + unit tests (77 total)
-
----
-
-## Next Steps
-
-- [System Architecture](architecture.en.md) — Understand the overall design
-- [Protocol Specification](protocol.en.md) — Message format details
-- [Self-Hosted Deployment](self-hosting.en.md) — Deploy your own server

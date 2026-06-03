@@ -55,3 +55,4 @@ website/node_modules/
 website/dist/
 website/src/content/docs/
 website/src/data/release.json
+packages/openclaw-channel/coverage/
