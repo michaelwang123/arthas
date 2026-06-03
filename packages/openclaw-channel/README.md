@@ -1,187 +1,323 @@
-# @arthas/openclaw-channel
+# @arthas-chat/openclaw-channel
 
-📖 Full documentation: [中文](../../official_doc/openclaw-channel.md) | [English](../../official_doc/openclaw-channel.en.md)
+📖 [Documentation](https://michaelwang123.github.io/arthas/openclaw-channel/) | [中文文档](https://michaelwang123.github.io/arthas/zh/openclaw-channel/)
+
+Arthas Node.js client SDK for server-side AI agents — connect any LLM to an [Arthas](https://github.com/michaelwang123/arthas) encrypted chat room in 10 lines of code. The server never sees your prompts or the AI's responses.
+
+> **About the name:** "openclaw-channel" in the package name is a legacy label. Functionally this is Arthas's Node.js SDK, designed specifically for server-side (AI agent) use cases. It handles WebSocket connection, Arthas binary protocol, AES-256-GCM encryption, file transfer, and auto-reconnection — so you only write the LLM logic.
+
+## Quick Start (3 steps, 2 minutes)
+
+A free public server is running — no signup, no setup needed.
+
+### 1. Install
+
+```bash
+npm install @arthas-chat/openclaw-channel
+```
+
+Requires Node.js >= 18.
+
+### 2. Get a share code (create an encrypted room)
+
+The share code contains both the room address and the AES-256 encryption key. Create one using the CLI:
+
+```bash
+# Linux/macOS
+curl -L -o arthas-cli https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli && chmod +x arthas-cli
+
+# Windows (PowerShell)
+# curl.exe -L -o arthas-cli.exe https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli-windows-amd64.exe
+
+# Create room → outputs share code (key generated locally, never sent to server)
+./arthas-cli create --server wss://arthas100-arthas-server.hf.space/ws --name "My AI Room"
+# Windows: .\arthas-cli.exe create --server ... --name "My AI Room"
+
+# ✓ Room created! Share code:
+# QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM
+```
+
+Or create a room from the [web UI](https://michaelwang123.github.io/arthas/) and copy the share code from the share dialog.
+
+### 3. Connect your AI agent
+
+```typescript
+import { ArthasChannelAdapter } from '@arthas-chat/openclaw-channel';
+
+const adapter = new ArthasChannelAdapter();
+
+adapter.onMessage(async (message) => {
+  // message.text is already decrypted — E2EE handled by the SDK
+  const response = await yourLLM.generate(message.text);
+  await adapter.send({ id: crypto.randomUUID(), channelId: 'arthas', text: response });
+});
+
+await adapter.connect({
+  serverUrl: 'wss://arthas100-arthas-server.hf.space/ws',
+  shareCode: 'QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM',
+  displayName: 'AI Assistant',
+});
+```
+
+Now chat with your AI from the CLI or web — everything is encrypted end-to-end:
+
+```bash
+./arthas-cli join QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM \
+  --server wss://arthas100-arthas-server.hf.space/ws --name "Michael"
+
+> What's the capital of France?
+AI Assistant: The capital of France is Paris.
+```
 
 ---
 
-OpenClaw Channel Plugin for [Arthas](https://github.com/michaelwang123/arthas) — enables AI agents to communicate with users through end-to-end encrypted chat rooms.
+## Real-World Example: OpenAI GPT Agent
 
-This plugin bridges the Arthas E2EE messaging protocol with the OpenClaw AI Agent framework, allowing agents to receive and respond to user messages without any server being able to observe the conversation content. The server acts as a blind relay — it forwards encrypted binary frames but cannot decrypt them.
-
-## Why This Exists
-
-Every other AI agent channel (Telegram, Slack, Discord) transmits messages in plaintext. Arthas is the only option that provides true end-to-end encryption for AI interactions. With this plugin:
-
-- **Zero-knowledge AI conversations** — the server cannot see your prompts or the AI's responses
-- **Self-hostable** — run both Arthas server and OpenClaw Gateway on your own infrastructure
-- **No server modifications needed** — the AI agent joins as a regular room participant
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     OpenClaw Gateway                              │
-│                                                                   │
-│  ┌──────────────┐    ┌──────────────────────────────────────┐   │
-│  │  AI Agent    │    │  @arthas/openclaw-channel             │   │
-│  │  (LLM)       │◄──►│                                      │   │
-│  │              │    │  ┌────────────┐  ┌────────────────┐  │   │
-│  └──────────────┘    │  │ Adapter    │  │ Crypto Engine  │  │   │
-│                      │  │ (msg flow) │  │ (AES-256-GCM)  │  │   │
-│                      │  └─────┬──────┘  └───────┬────────┘  │   │
-│                      │        │                  │            │   │
-│                      │  ┌─────┴──────────────────┴────────┐  │   │
-│                      │  │  WebSocket Client + msgpack      │  │   │
-│                      │  └─────────────────┬───────────────┘  │   │
-│                      └────────────────────┼──────────────────┘   │
-└───────────────────────────────────────────┼───────────────────────┘
-                                │ WSS (encrypted binary frames)
-                                ▼
-                    ┌───────────────────────┐
-                    │   Arthas Server       │
-                    │   (blind relay)       │
-                    └───────────┬───────────┘
-                                │
-                                ▼
-                    ┌───────────────────────┐
-                    │   User (Web/CLI)      │
-                    │   (end-to-end encrypted)│
-                    └───────────────────────┘
-```
-
-## Quick Start
+A complete, runnable example connecting GPT-4o-mini to an encrypted room:
 
 ```typescript
-import { ArthasChannelAdapter } from '@arthas/openclaw-channel';
+// agent.ts
+import { ArthasChannelAdapter } from '@arthas-chat/openclaw-channel';
+import OpenAI from 'openai';
+
+const openai = new OpenAI(); // uses OPENAI_API_KEY env var
 const adapter = new ArthasChannelAdapter();
-adapter.onMessage(msg => console.log(`${msg.userName}: ${msg.text}`));
-await adapter.connect({ serverUrl: 'wss://your-server.com/ws', shareCode: 'roomId:key' });
-await adapter.send({ text: 'Hello!', id: '1', channelId: 'arthas' });
+
+const history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+
+adapter.onMessage(async (message) => {
+  history.push({ role: 'user', content: message.text });
+
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      ...history,
+    ],
+  });
+
+  const reply = completion.choices[0].message.content ?? '';
+  history.push({ role: 'assistant', content: reply });
+
+  await adapter.send({ id: crypto.randomUUID(), channelId: 'arthas', text: reply });
+});
+
+adapter.onStatusChange((status) => {
+  console.log(`[Agent] Connection: ${status}`);
+});
+
+await adapter.connect({
+  serverUrl: process.env.ARTHAS_SERVER_URL!,
+  shareCode: process.env.ARTHAS_SHARE_CODE!,
+  displayName: 'GPT Assistant',
+});
+
+console.log('[Agent] Running. Ctrl+C to stop.');
 ```
 
-## Installation
+Run it:
 
 ```bash
-npm install @arthas/openclaw-channel
+export ARTHAS_SERVER_URL=wss://arthas100-arthas-server.hf.space/ws
+export ARTHAS_SHARE_CODE=your-share-code-here
+export OPENAI_API_KEY=sk-...
+
+npx tsx agent.ts
 ```
 
-Requires Node.js >= 18.0.0 (uses built-in `crypto` module for AES-256-GCM).
+---
+
+## How It Works
+
+This SDK is a standalone Node.js client for Arthas encrypted rooms. Under the hood it:
+
+1. **Connects** to the Arthas server via WebSocket (binary MessagePack protocol)
+2. **Joins** the room using the roomId from the share code
+3. **Decrypts** incoming messages with the AES-256-GCM key from the share code
+4. **Encrypts** outgoing messages before sending
+5. **Reconnects** automatically with exponential backoff (1s → 30s max)
+
+```
+You (CLI/Web)              Arthas Server (blind relay)         AI Agent (this SDK)
+     │                            │                                  │
+     │── AES-256-GCM encrypt ──→  │── forward ciphertext ──→         │
+     │                            │                                  │→ decrypt → LLM → encrypt
+     │                            │  ←── forward ciphertext ──       │
+     │← AES-256-GCM decrypt ──   │                                  │
+```
+
+The server only sees encrypted binary blobs. It cannot read, store, or parse message content. It cannot distinguish human traffic from AI traffic.
+
+---
 
 ## Configuration
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `ARTHAS_SERVER_URL` | Yes | — | Arthas server WebSocket URL (`wss://` or `ws://`) |
-| `ARTHAS_SHARE_CODE` | Yes | — | Room share code (roomId + encryption key) |
-| `ARTHAS_DISPLAY_NAME` | No | `AI Assistant` | Agent's display name in the room |
-| `ARTHAS_SIGNING_ENABLED` | No | `false` | Enable Ed25519 message signing |
-| `ARTHAS_ROOM_PASSWORD` | No | — | Password for password-protected rooms |
+### Environment Variables
 
-> For detailed configuration options (share code format, package.json config, priority rules), see the [full documentation](../../official_doc/openclaw-channel.en.md).
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `ARTHAS_SERVER_URL` | Yes | WebSocket URL | `wss://arthas100-arthas-server.hf.space/ws` |
+| `ARTHAS_SHARE_CODE` | Yes | Room share code (roomId + key) | `abc123:dGhpcyBpcyBhIGtleQ` |
+| `ARTHAS_DISPLAY_NAME` | No | Agent's name in room (default: `AI Assistant`) | `Code Bot` |
+| `ARTHAS_SIGNING_ENABLED` | No | Ed25519 message signing (default: `false`) | `true` |
+| `ARTHAS_ROOM_PASSWORD` | No | For password-protected rooms | `secret` |
+
+### Programmatic Config
+
+```typescript
+await adapter.connect({
+  serverUrl: 'wss://arthas100-arthas-server.hf.space/ws',
+  shareCode: 'roomId:base64Key',
+  displayName: 'My Agent',
+  signingEnabled: false,
+});
+```
+
+### Share Code Format
+
+```
+roomId:base64Key[:ephemeralFlag[:expiresAt]]
+  │       │          │              │
+  │       │          │              └─ Unix timestamp (0 = no expiry)
+  │       │          └─ 0 or 1 (ephemeral room)
+  │       └─ Base64url AES-256 key (43 chars)
+  └─ Room ID (21 chars, NanoID)
+```
+
+Minimum required: `roomId:base64Key`. The ephemeral and expiry segments are optional.
+
+---
 
 ## API Reference
 
-### ArthasChannelAdapter Methods
-
-| Method | Description |
-|--------|-------------|
-| `connect(config)` | Connect to Arthas server and join room |
-| `disconnect()` | Disconnect, zero keys, release resources |
-| `send(message)` | Encrypt and send agent response |
-| `onMessage(callback)` | Register callback for incoming user messages |
-| `onStatusChange(callback)` | Register callback for connection status changes |
-
-### Exported Types
+### ArthasChannelAdapter
 
 ```typescript
-import type {
-  ChannelAdapter,      // Interface to implement custom adapters
-  ChannelConfig,       // Generic config passed by Gateway
-  ArthasChannelConfig, // Arthas-specific strongly-typed config
-  IncomingMessage,     // User message (decrypted)
-  OutgoingMessage,     // Agent response (before encryption)
-  MessageAttachment,   // File attachment
-  ConnectionStatus,    // 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error'
-  MessageType,         // 'text' | 'typing' | 'file'
-  Plugin,              // Plugin instance type
-  PluginDefinition,    // Plugin metadata
-} from '@arthas/openclaw-channel';
+import { ArthasChannelAdapter } from '@arthas-chat/openclaw-channel';
+
+const adapter = new ArthasChannelAdapter();
+
+// Connect to an encrypted room
+await adapter.connect(config);
+
+// Listen for decrypted messages from other room participants
+adapter.onMessage((msg) => {
+  msg.text;         // decrypted message text
+  msg.userName;     // sender's display name
+  msg.attachments;  // file attachments (if any)
+});
+
+// Send an encrypted response
+await adapter.send({
+  id: crypto.randomUUID(),
+  channelId: 'arthas',
+  text: 'Hello!',
+});
+
+// Monitor connection status
+adapter.onStatusChange((status) => {
+  // 'connected' | 'disconnected' | 'reconnecting' | 'error'
+});
+
+// Disconnect (zeroes encryption keys from memory)
+await adapter.disconnect();
 ```
 
-> For programmatic integration examples, file transfer usage, security model details, troubleshooting, and share code format, see the [full documentation](../../official_doc/openclaw-channel.en.md).
+### File Transfer
+
+Supports encrypted file exchange (up to 5MB):
+
+```typescript
+// Receiving files
+adapter.onMessage((msg) => {
+  if (msg.attachments?.length) {
+    for (const file of msg.attachments) {
+      console.log(`${file.fileName} (${file.size} bytes)`);
+      // file.data is a Buffer with decrypted content
+    }
+  }
+});
+
+// Sending files
+await adapter.send({
+  id: crypto.randomUUID(),
+  channelId: 'arthas',
+  text: 'Here is the analysis:',
+  attachments: [{
+    fileName: 'report.pdf',
+    mimeType: 'application/pdf',
+    size: buffer.length,
+    data: buffer,
+  }],
+});
+```
+
+---
+
+## Security
+
+| Server CAN see | Server CANNOT see |
+|----------------|-------------------|
+| Message timestamps | Message content |
+| Ciphertext sizes | File contents |
+| Connection status | Sender names (encrypted) |
+| Room membership events | Encryption keys |
+
+- **AES-256-GCM** with unique random 12-byte IV per message
+- **Authenticated encryption** — tampering detected via 16-byte auth tag
+- **Keys in memory only** — never written to disk, zeroed on `disconnect()`
+- **Optional Ed25519 signing** — verify messages came from your agent (TOFU model)
+- **WSS (TLS 1.2+)** enforced in production — double encryption layer
+
+---
+
+## Troubleshooting
+
+| Error | Fix |
+|-------|-----|
+| `缺少必填配置: serverUrl` | Set `ARTHAS_SERVER_URL` env var |
+| `缺少必填配置: shareCode` | Set `ARTHAS_SHARE_CODE` — create a room first (see Quick Start step 2) |
+| `serverUrl 格式无效` | URL must start with `wss://` (production) or `ws://` (local dev only) |
+| `消息解密失败` | Share code is from a different room or was regenerated — get a fresh one |
+| Keeps reconnecting | Check: server URL reachable? Firewall allows 443? Room password set if needed? |
+
+Reconnection uses exponential backoff: 1s → 2s → 4s → ... → 30s max.
+
+---
 
 ## Development
 
-### Prerequisites
-
-- Node.js >= 18.0.0
-- npm >= 9.0.0
-
-### Setup
-
 ```bash
-# From the repository root
 cd packages/openclaw-channel
-
-# Install dependencies
 npm install
-
-# Build
-npm run build
-
-# Run tests
-npm test
-
-# Run tests in watch mode
-npm run test:watch
+npm run build    # TypeScript → dist/
+npm test         # Vitest
 ```
 
 ### Project Structure
 
 ```
-packages/openclaw-channel/
-├── package.json          # npm package config + openclaw plugin metadata
-├── tsconfig.json         # TypeScript config (strict, ESM output)
-├── vitest.config.ts      # Test framework configuration
-├── src/
-│   ├── index.ts          # Plugin entry — registers channel with OpenClaw
-│   ├── adapter.ts        # ChannelAdapter implementation (core integration)
-│   ├── client.ts         # Arthas WebSocket client (connect, join, send)
-│   ├── crypto.ts         # AES-256-GCM encrypt/decrypt (Node.js crypto)
-│   ├── signing.ts        # Ed25519 message signing (optional)
-│   ├── protocol.ts       # msgpack encode/decode + message type constants
-│   ├── config.ts         # Configuration loading and validation
-│   ├── reconnect.ts      # Exponential backoff reconnection manager
-│   ├── file-transfer.ts  # Chunked file transfer (receive + send)
-│   └── types.ts          # TypeScript type definitions (OpenClaw SDK types)
-├── tests/
-│   ├── crypto.test.ts    # Encryption compatibility tests
-│   ├── protocol.test.ts  # Protocol encode/decode tests
-│   └── adapter.test.ts   # Adapter integration tests
-└── README.md             # This file
+src/
+├── index.ts         # Package entry point + exports
+├── adapter.ts       # ArthasChannelAdapter (main class)
+├── client.ts        # WebSocket client (connect, join, send)
+├── crypto.ts        # AES-256-GCM encrypt/decrypt
+├── signing.ts       # Ed25519 message signing (optional)
+├── protocol.ts      # MessagePack encode/decode
+├── config.ts        # Config loading + validation
+├── reconnect.ts     # Exponential backoff reconnection
+├── file-transfer.ts # Chunked encrypted file send/receive
+└── types.ts         # TypeScript type definitions
 ```
 
-### Running Tests
+---
 
-```bash
-# Unit tests
-npm test
+## Links
 
-# With coverage
-npx vitest run --coverage
-
-# Single test file
-npx vitest run tests/crypto.test.ts
-```
-
-### Contributing
-
-1. Fork the [Arthas repository](https://github.com/michaelwang123/arthas)
-2. Create a feature branch: `git checkout -b feat/my-feature`
-3. Make changes in `packages/openclaw-channel/`
-4. Run tests: `npm test`
-5. Submit a pull request
+- **Public Server**: `wss://arthas100-arthas-server.hf.space/ws` (free, no signup)
+- **GitHub**: [github.com/michaelwang123/arthas](https://github.com/michaelwang123/arthas)
+- **Docs**: [michaelwang123.github.io/arthas](https://michaelwang123.github.io/arthas/)
 
 ## License
 
-AGPL-3.0 — see [LICENSE](../../LICENSE) for details.
+MIT

@@ -1,25 +1,116 @@
 ---
-title: "How I built an E2EE chat in Go + React"
+title: "How I built an E2EE chat in Go + React (with AI agent support)"
 published: false
-description: "A step-by-step tutorial on building end-to-end encrypted ephemeral chat with AES-256-GCM, WebSocket relay, and zero-knowledge server design."
-tags: go, react, encryption, webdev
+description: "End-to-end encrypted ephemeral chat with AES-256-GCM. Try it in 2 minutes — create a room from the CLI, connect an AI agent via npm, and chat privately."
+tags: go, react, encryption, webdev, ai, privacy, security
 cover_image: ""
+---
+
+## TL;DR — Try It in 2 Minutes
+
+No signup required. A free public server is running at `wss://arthas100-arthas-server.hf.space/ws`.
+
+### 1. Create an encrypted room (CLI)
+
+```bash
+# Linux/macOS — download and make executable
+curl -L -o arthas-cli https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli
+chmod +x arthas-cli
+
+# Windows (PowerShell) — download the .exe
+# curl.exe -L -o arthas-cli.exe https://github.com/michaelwang123/arthas/releases/latest/download/arthas-cli-windows-amd64.exe
+
+# Create a room — generates AES-256 key locally, outputs share code
+./arthas-cli create --server wss://arthas100-arthas-server.hf.space/ws --name "Alice"
+# Windows: .\arthas-cli.exe create --server wss://arthas100-arthas-server.hf.space/ws --name "Alice"
+
+# Output:
+# ✓ Room created! Share code:
+# QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM
+#
+# The encryption key never leaves your device.
+```
+
+> ⚠️ **Keep this terminal open** — the room exists only while at least one participant is connected.
+
+### 2. Join from another terminal (or send the code to a friend)
+
+```bash
+# Linux/macOS
+./arthas-cli join QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM \
+  --server wss://arthas100-arthas-server.hf.space/ws \
+  --name "Bob"
+
+# Windows
+# .\arthas-cli.exe join QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM --server wss://arthas100-arthas-server.hf.space/ws --name "Bob"
+```
+
+That's it — you're chatting end-to-end encrypted. The server only sees ciphertext blobs; it cannot read, store, or parse anything.
+
+> 💡 Prefer a web UI? Open the [Arthas web app](https://michaelwang123.github.io/arthas/), create a room, and share the code.
+
+---
+
+## Bonus: Connect an AI Agent to the Same Room
+
+Every AI agent channel today (Telegram bots, Slack apps, Discord) transmits prompts in plaintext. With Arthas, your AI joins the encrypted room as a regular participant — the server can't tell human from bot (both are encrypted binary blobs).
+
+```bash
+npm install @arthas-chat/openclaw-channel
+```
+
+```typescript
+import { ArthasChannelAdapter } from '@arthas-chat/openclaw-channel';
+
+const adapter = new ArthasChannelAdapter();
+
+adapter.onMessage(async (message) => {
+  // message.text is already decrypted — E2EE handled internally
+  const response = await yourLLM.generate(message.text);
+  await adapter.send({ id: crypto.randomUUID(), channelId: 'arthas', text: response });
+});
+
+await adapter.connect({
+  serverUrl: 'wss://arthas100-arthas-server.hf.space/ws',
+  shareCode: 'QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM', // from step 1
+  displayName: 'AI Assistant',
+});
+```
+
+Now talk to the AI from the CLI:
+
+```bash
+./arthas-cli join QYEq9uxfKP9h-KCUsPUay:NlZezXoUErYr92grhif3Y-Hy3FOOK1ocb3WocCJJrQM \
+  --server wss://arthas100-arthas-server.hf.space/ws --name "Michael"
+
+> Summarize GDPR Article 17
+AI Assistant: Article 17 establishes the "right to erasure"...
+```
+
+**What the server sees vs. reality:**
+
+| Server's view | Reality |
+|---------------|---------|
+| Binary blob from User A | "Summarize this contract for me" |
+| Binary blob from User B | "Here's a summary of the key clauses..." |
+| Binary blob with file attachment | Confidential PDF being analyzed |
+
+The plugin ([`@arthas-chat/openclaw-channel`](https://www.npmjs.com/package/@arthas-chat/openclaw-channel)) handles WebSocket, MessagePack, AES-256-GCM, and exponential-backoff reconnection internally.
+
 ---
 
 ## Motivation
 
-I needed to share API keys and credentials with teammates but didn't trust Slack DMs. Existing tools like PrivNote or Yopass are one-shot — you paste a secret, someone reads it, and it's gone. No real-time conversation.
+I needed to share API keys and credentials with teammates but didn't trust Slack DMs. Existing tools like PrivNote or Yopass are one-shot — you paste a secret, someone reads it, gone. No real-time conversation.
 
-I wanted something different:
+I wanted:
 
 - **Ephemeral** — create a room, chat, leave, everything disappears
 - **End-to-end encrypted** — the server can't read anything
 - **No signup** — open a URL and start chatting
-- **Self-hostable** — run it on your own infrastructure with zero dependencies
+- **Self-hostable** — run it on your own infrastructure
 
-So I built [Arthas](https://github.com/michaelwang123/arthas): an E2EE ephemeral chat app with a Go relay server and a React frontend. The server only ever sees ciphertext — it cannot decrypt, store, or parse any message content.
-
-In this tutorial, I'll walk through the key technical decisions and show you how the encryption, WebSocket relay, and frontend all fit together.
+So I built [Arthas](https://github.com/michaelwang123/arthas). Here's how the crypto, relay server, and frontend fit together.
 
 ---
 
@@ -36,14 +127,12 @@ Browser A                   Go Server (Relay)              Browser B
    Server only ever sees ciphertext. Cannot decrypt.
 ```
 
-Here's how it works:
-
 1. **Room creator** generates a 256-bit AES key locally (never sent to server)
-2. **Share code** = `roomId:base64url(key)` — one string contains both the room address and the decryption key
-3. **Joiner** parses the share code, connects to the room, and uses the key to decrypt messages
-4. **Server** receives encrypted blobs via WebSocket and broadcasts them to other room members — zero knowledge
+2. **Share code** = `roomId:base64url(key)` — one string, both address and key
+3. **Joiner** parses the share code, connects, decrypts
+4. **Server** broadcasts encrypted blobs — zero knowledge
 
-The key insight: the encryption key travels through a **side channel** (copy-paste, QR code, in-person) — never through the server. The server only knows the room ID, not the key.
+The encryption key travels through a **side channel** (copy-paste, QR code) — never through the server.
 
 **Tech stack:**
 
@@ -61,77 +150,59 @@ The key insight: the encryption key travels through a **side channel** (copy-pas
 
 ### Key Generation
 
-The room creator generates a 256-bit AES key. This key is the single shared secret — anyone who has it can read messages, anyone without it sees only ciphertext.
-
-**TypeScript (Web Client — using Web Crypto API):**
+**TypeScript (Web Client):**
 
 ```typescript
-// Generate a new AES-256-GCM CryptoKey for a chat room.
-// extractable: true — needed so we can export it into the share code.
 export async function generateRoomKey(): Promise<CryptoKey> {
   return crypto.subtle.generateKey(
     { name: "AES-GCM", length: 256 },
-    true, // extractable — needed for export/sharing
+    true,
     ["encrypt", "decrypt"]
   );
 }
 
-// Export the key to a base64url string (43 chars for 32 bytes)
 export async function exportRoomKey(key: CryptoKey): Promise<string> {
   const raw = await crypto.subtle.exportKey("raw", key);
-  return toBase64Url(raw);
+  return toBase64Url(raw); // 43-char string for 32 bytes
 }
 ```
 
-**Go (CLI Client — using crypto/rand):**
+**Go (CLI Client):**
 
 ```go
-const keySize = 32 // AES-256 = 32 bytes
-
-// GenerateRoomKey creates a 256-bit AES key using the OS CSPRNG.
-// On Linux: getrandom(2), macOS: arc4random, Windows: CryptGenRandom.
 func GenerateRoomKey() ([]byte, error) {
-    key := make([]byte, keySize)
+    key := make([]byte, 32) // AES-256
     if _, err := io.ReadFull(rand.Reader, key); err != nil {
-        return nil, fmt.Errorf("failed to generate room key: %w", err)
+        return nil, fmt.Errorf("generate key: %w", err)
     }
     return key, nil
 }
 
-// ExportKeyBase64URL encodes the key as a URL-safe base64 string (no padding).
-// Output is always 43 characters for a 32-byte key.
 func ExportKeyBase64URL(key []byte) string {
-    return base64.RawURLEncoding.EncodeToString(key)
+    return base64.RawURLEncoding.EncodeToString(key) // 43 chars
 }
 ```
 
-Both implementations produce the same 43-character base64url string — the Go CLI and web client are fully interoperable.
+Both produce the same 43-character base64url string — Go CLI and web client are fully interoperable.
 
 ### AES-256-GCM Encryption
 
-Every message gets a unique random 12-byte IV (initialization vector). AES-GCM provides both confidentiality and integrity — if anyone tampers with the ciphertext, decryption fails with an authentication error rather than producing garbage.
+Every message gets a unique random 12-byte IV. AES-GCM provides confidentiality + integrity in one operation.
 
-**TypeScript (Web Client):**
+**TypeScript:**
 
 ```typescript
 export async function encryptMessage(
   key: CryptoKey,
   plaintext: string
 ): Promise<{ iv: string; ciphertext: string }> {
-  // 1. Generate a random 96-bit (12 bytes) IV
   const iv = crypto.getRandomValues(new Uint8Array(12));
-
-  // 2. Encode plaintext to UTF-8 bytes
   const plaintextBytes = new TextEncoder().encode(plaintext);
-
-  // 3. Encrypt using AES-GCM (output includes 16-byte auth tag)
   const ciphertextBuffer = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     key,
     plaintextBytes
   );
-
-  // 4. Return base64url-encoded IV and ciphertext
   return {
     iv: toBase64Url(iv.buffer),
     ciphertext: toBase64Url(ciphertextBuffer),
@@ -139,62 +210,29 @@ export async function encryptMessage(
 }
 ```
 
-**Go (CLI Client):**
+**Go:**
 
 ```go
-func Encrypt(key []byte, plaintext []byte) (iv string, ciphertext string, err error) {
-    // 1. Create AES cipher block (key must be 32 bytes for AES-256)
-    block, err := aes.NewCipher(key)
-    if err != nil {
-        return "", "", fmt.Errorf("failed to create AES cipher: %w", err)
-    }
-
-    // 2. Create GCM mode (12-byte nonce, 16-byte auth tag)
-    gcm, err := cipher.NewGCM(block)
-    if err != nil {
-        return "", "", fmt.Errorf("failed to create GCM: %w", err)
-    }
-
-    // 3. Generate 12-byte random IV
-    nonce := make([]byte, gcm.NonceSize()) // NonceSize() = 12
-    if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-        return "", "", fmt.Errorf("failed to generate random IV: %w", err)
-    }
-
-    // 4. Encrypt: result = ciphertext || 16-byte auth tag
+func Encrypt(key []byte, plaintext []byte) (iv, ciphertext string, err error) {
+    block, _ := aes.NewCipher(key)
+    gcm, _ := cipher.NewGCM(block)
+    nonce := make([]byte, gcm.NonceSize()) // 12 bytes
+    io.ReadFull(rand.Reader, nonce)
     sealed := gcm.Seal(nil, nonce, plaintext, nil)
-
-    // 5. Base64URL encode (no padding) — matches Web Crypto output
-    iv = base64.RawURLEncoding.EncodeToString(nonce)
-    ciphertext = base64.RawURLEncoding.EncodeToString(sealed)
-
-    return iv, ciphertext, nil
+    return base64.RawURLEncoding.EncodeToString(nonce),
+           base64.RawURLEncoding.EncodeToString(sealed), nil
 }
 ```
 
-**Why AES-GCM?**
-
-- It's an AEAD cipher — encryption + authentication in one operation
-- No need for a separate HMAC step (fewer things to get wrong)
-- Hardware-accelerated on modern CPUs (AES-NI)
-- Natively supported by Web Crypto API (no third-party libraries needed)
-
-**Critical rule:** Never reuse an IV with the same key. With random 12-byte IVs, the collision probability is ~2⁻⁴⁸ after 2³² messages — negligible for a chat app.
+**Why AES-GCM?** AEAD (no separate HMAC), hardware-accelerated (AES-NI), natively in Web Crypto API. Never reuse an IV with the same key — with random 12-byte IVs, collision probability is ~2⁻⁴⁸ after 2³² messages.
 
 ---
 
 ## WebSocket Relay Design
 
-The server is intentionally simple. It's a Go program that:
+The server is a Go program that accepts connections, manages rooms, and broadcasts ciphertext. It never decrypts.
 
-1. Accepts WebSocket connections
-2. Manages rooms (create/join/leave)
-3. Broadcasts encrypted messages to room members
-4. Never decrypts, parses, or stores message content
-
-### The Hub Pattern
-
-The server uses a CSP (Communicating Sequential Processes) concurrency model. A central `Hub` goroutine owns all mutable state, and other goroutines communicate through channels:
+### Hub Pattern (CSP concurrency)
 
 ```go
 type Hub struct {
@@ -202,258 +240,100 @@ type Hub struct {
     clients     map[*Client]bool
     register    chan *Client
     unregister  chan *Client
-    done        chan struct{}
-    wg          sync.WaitGroup
 }
 
 func (h *Hub) Run() {
     for {
         select {
-        case <-h.done:
-            return // graceful shutdown
         case client := <-h.register:
             h.clients[client] = true
         case client := <-h.unregister:
             delete(h.clients, client)
             close(client.send)
-            h.handleClientDisconnect(client)
         }
     }
 }
 ```
 
-Each client gets two goroutines: `readPump` (reads from WebSocket) and `writePump` (writes to WebSocket). This goroutine-per-connection model is natural in Go and handles thousands of concurrent connections efficiently.
-
-### Zero-Knowledge Message Relay
-
-The message handler for chat messages is remarkably simple — it just forwards the encrypted blob:
+### Zero-Knowledge Relay
 
 ```go
 func (h *Hub) handleSendMessage(client *Client, data interface{}) {
-    // Extract iv and ciphertext (both are opaque strings to the server)
     dataMap, _ := data.(map[string]interface{})
     iv, _ := dataMap["iv"].(string)
     ciphertext, _ := dataMap["ciphertext"].(string)
 
-    // Validate non-empty (basic sanity check, no content inspection)
     if iv == "" || ciphertext == "" {
         h.sendError(client, ErrCodeInvalidMessage, "iv and ciphertext required")
         return
     }
-
-    // Rate limiting (sliding window: max 10 messages per 10 seconds)
     if client.IsRateLimited() {
         h.sendError(client, ErrCodeRateLimited, "rate limited")
         return
     }
 
-    // Build relay message with server timestamp and sender identity
+    // Forward — server never decrypts
     relayMsg := Message{
         Type: MsgRelayMessage,
         Data: RelayMessageData{
-            SenderID:   client.ID,
-            SenderName: client.Name,
-            IV:         iv,
-            Ciphertext: ciphertext,
-            T:          time.Now().UnixMilli(),
+            SenderID: client.ID, SenderName: client.Name,
+            IV: iv, Ciphertext: ciphertext, T: time.Now().UnixMilli(),
         },
     }
-
-    // Broadcast to all room members except sender
     broadcastData, _ := msgpack.Marshal(relayMsg)
     room.Broadcast(client.ID, broadcastData)
 }
 ```
 
-The server adds two things the client can't forge: `SenderID` (from the authenticated connection) and `T` (server timestamp). Everything else passes through untouched.
+### MessagePack over JSON
 
-### Binary Protocol with MessagePack
-
-All messages use [MessagePack](https://msgpack.org/) binary encoding instead of JSON. This gives us:
-
-- **30-50% smaller payloads** compared to JSON
-- **Efficient binary data** — no base64 overhead for file chunks
-- **Single-byte message type IDs** — fast routing without string comparison
-
-The protocol uses a simple envelope: `{ type: uint8, data: any }`. Message types are organized by direction and domain:
-
-```
-Client → Server: 0x01-0x07 (chat), 0x08-0x0C (file transfer)
-Server → Client: 0x10-0x19 (chat), 0x1A-0x1E (file transfer)
-```
-
----
-
-## Frontend Integration
-
-### State Management with Zustand
-
-The React frontend uses [Zustand](https://github.com/pmndrs/zustand) for state management. The chat store handles the WebSocket message dispatch and crypto operations:
-
-```typescript
-// Simplified flow: sending a message
-async function sendMessage(text: string) {
-  const { roomKey } = get(); // AES-256-GCM CryptoKey from store
-
-  // 1. Encrypt locally
-  const { iv, ciphertext } = await encryptMessage(roomKey, text);
-
-  // 2. Send encrypted payload via WebSocket (MessagePack binary)
-  send(MSG_SEND_MESSAGE, { iv, ciphertext });
-
-  // 3. Add to local message list (we already know the plaintext)
-  addMessage({ text, isMine: true, timestamp: Date.now() });
-}
-
-// Receiving a message
-function handleRelayMessage(data: RelayMessageData) {
-  const { roomKey } = get();
-
-  // Decrypt the ciphertext using the shared room key
-  const plaintext = await decryptMessage(roomKey, data.iv, data.ciphertext);
-
-  addMessage({
-    text: plaintext,
-    senderId: data.senderId,
-    senderName: data.senderName,
-    timestamp: data.t,
-    isMine: false,
-  });
-}
-```
-
-### The Share Code
-
-The share code is the key distribution mechanism. It encodes everything needed to join a room into a single copy-pasteable string:
-
-```
-Format: {roomId}:{base64url(key)}
-Example: V1StGXR8_Z5jdHi6B-myT:dGhpcyBpcyBhIDMyIGJ5dGUga2V5ISEhISEh
-         ├── 21 chars (NanoID) ──┤├── 43 chars (base64url of 32 bytes) ──┤
-```
-
-The share code never touches the server. Users share it through whatever side channel they trust — copy-paste, QR code, in-person, carrier pigeon.
-
-```typescript
-export async function encodeShareKey(
-  roomId: string,
-  key: CryptoKey
-): Promise<string> {
-  const keyEncoded = await exportRoomKey(key); // 43-char base64url
-  return `${roomId}:${keyEncoded}`;
-}
-
-export function decodeShareKey(code: string): ShareCodeComponents | null {
-  const parts = code.split(":");
-  if (parts.length < 2) return null;
-
-  const roomId = parts[0];
-  const keyEncoded = parts[1];
-
-  // Validate lengths (NanoID = 21, base64url of 32 bytes = 43)
-  if (roomId.length !== 21 || keyEncoded.length !== 43) return null;
-
-  return { roomId, keyEncoded };
-}
-```
-
-### WebSocket Connection with Auto-Reconnect
-
-The WebSocket layer handles connection management with exponential backoff reconnection:
-
-```typescript
-export function connect(url?: string): void {
-  ws = new WebSocket(wsUrl);
-  ws.binaryType = "arraybuffer"; // binary mode for MessagePack
-
-  ws.onmessage = (event: MessageEvent) => {
-    // Decode MessagePack binary → { type, data } envelope
-    const msg = decode(new Uint8Array(event.data)) as Message;
-
-    // Auto-reply to server pings (connection liveness)
-    if (msg.type === MSG_PING) {
-      send(MSG_PONG, { t: (msg.data as PingData).t });
-      return;
-    }
-
-    // Dispatch to registered handler (chatStore)
-    messageHandler?.(msg);
-  };
-
-  ws.onclose = () => {
-    // Exponential backoff: 1s → 2s → 4s → 8s → ... → 30s max
-    scheduleReconnect(wsUrl);
-  };
-}
-```
+30-50% smaller payloads, efficient binary, single-byte message type routing. Protocol envelope: `{ type: uint8, data: any }`.
 
 ---
 
 ## Deployment
 
-Arthas supports two deployment tiers:
-
-### Tier 1: Single Binary (Zero Dependencies)
-
-The Go server embeds the compiled frontend using `go:embed`. Download one binary, run it, done:
+### Single Binary (dev/intranet)
 
 ```bash
 ./arthas-server --port 8080
+# Serves WebSocket at /ws + frontend at / — one process, zero deps
 ```
 
-This serves both the API (WebSocket at `/ws`) and the frontend (static files at `/`) from a single process. Perfect for local use or intranet deployment.
-
-### Tier 2: Docker Compose (Production)
-
-For public deployment with automatic HTTPS via Caddy:
+### Docker (production)
 
 ```dockerfile
-# Multi-stage build: ~30MB final image
 FROM golang:1.23-alpine AS builder
 WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags "-s -w" \
-    -o server ./cmd/server
+RUN CGO_ENABLED=0 go build -ldflags "-s -w" -o server ./cmd/server
 
 FROM alpine:3.23
-RUN adduser -D -u 1000 appuser
 COPY --from=builder /app/server .
-USER appuser
+USER 1000
 EXPOSE 7860
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD wget -qO- http://localhost:7860/ping || exit 1
 CMD ["./server"]
 ```
 
-The final Docker image is under 30MB. Combined with Caddy for automatic TLS certificate management, you get a production-ready deployment with one `docker compose up`.
+Under 30MB final image. Add Caddy for automatic HTTPS.
 
 ---
 
 ## What I Learned
 
-Building this project taught me several things:
-
-1. **Web Crypto API is powerful** — you don't need third-party crypto libraries for AES-GCM in the browser. The native API is well-designed and hardware-accelerated.
-
-2. **Go's concurrency model fits WebSocket servers perfectly** — goroutine-per-connection with channel-based coordination is both simple and efficient.
-
-3. **MessagePack > JSON for binary protocols** — the size savings are real, and the encoding/decoding is faster. Worth the slight debugging inconvenience.
-
-4. **The hardest part of E2EE is key distribution** — the crypto itself is straightforward (use standard algorithms, don't roll your own). The challenge is getting the key to the right people through a trusted channel.
-
-5. **Zero-knowledge design simplifies the server** — when the server can't read messages, you don't need to worry about data retention policies, GDPR compliance for message content, or database encryption at rest. The server is just a relay.
+1. **Web Crypto API is powerful** — no third-party crypto libs needed in the browser
+2. **Go's goroutine-per-connection model** fits WebSocket servers perfectly
+3. **MessagePack > JSON** for binary protocols (size + speed)
+4. **Key distribution is the hard part** — the crypto is straightforward, getting the key to the right people securely is the challenge
+5. **Zero-knowledge simplifies everything** — no GDPR concerns for message content, no database encryption needed
 
 ---
 
-## Try It Out
+## Links
 
-- **Live Demo**: [arthas-blush.vercel.app](https://arthas-blush.vercel.app/)
+- **Public Server**: `wss://arthas100-arthas-server.hf.space/ws` (free, no signup)
 - **GitHub**: [github.com/michaelwang123/arthas](https://github.com/michaelwang123/arthas)
-- **Self-Hosting Guide**: [official_doc/self-hosting.md](https://github.com/michaelwang123/arthas/blob/main/official_doc/self-hosting.md)
+- **AI Agent Plugin**: [`@arthas-chat/openclaw-channel` on npm](https://www.npmjs.com/package/@arthas-chat/openclaw-channel)
+- **Docs**: [michaelwang123.github.io/arthas](https://michaelwang123.github.io/arthas/)
 
-The codebase is heavily commented with learning notes (marked with 📚) explaining design decisions. If you're interested in the crypto implementation details, the comments are a good starting point.
-
-Feedback, issues, and PRs are welcome!
+⭐ Star the repo if you find it useful. Feedback and PRs welcome!
