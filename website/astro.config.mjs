@@ -58,6 +58,7 @@ export default defineConfig({
           items: [
             { slug: 'architecture' },
             { slug: 'protocol' },
+            { slug: 'security' },
             { slug: 'development' },
           ],
         },
@@ -72,6 +73,14 @@ export default defineConfig({
           translations: { 'zh-CN': '集成' },
           items: [
             { slug: 'openclaw-channel' },
+          ],
+        },
+        {
+          label: 'Community',
+          translations: { 'zh-CN': '社区' },
+          items: [
+            { slug: 'faq' },
+            { slug: 'contributing' },
           ],
         },
       ],

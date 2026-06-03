@@ -84,9 +84,9 @@ npm run dev
 On successful startup you will see:
 
 ```
-  VITE v5.x.x  ready in xxx ms
+  VITE v6.x.x  ready in xxx ms
 
-  ➜  Local:   http://localhost:3000/
+  ➜  Local:   http://localhost:5173/
 ```
 
 ---
@@ -95,7 +95,7 @@ On successful startup you will see:
 
 ### Option 1: Web Client
 
-1. Open your browser and navigate to `http://localhost:3000`
+1. Open your browser and navigate to `http://localhost:5173`
 2. Enter a nickname and click **"Create Room"**
 3. Copy the generated share code
 4. Open another browser window (or incognito mode)
@@ -156,7 +156,7 @@ The frontend port is configured in `vite.config.ts`:
 
 ```typescript
 server: {
-  port: 3000,
+  port: 4000,
 }
 ```
 
@@ -175,4 +175,4 @@ go env -w GOPROXY=https://goproxy.cn,direct
 - [System Architecture](architecture.en.md) — Understand the overall design
 - [CLI Client Guide](cli-guide.en.md) — Detailed terminal client usage
 - [Development Guide](development.en.md) — Dive into the code structure
-- [Deployment Guide](deployment.md) — Deploy to production
+- [Self-Hosting Guide](self-hosting.en.md) — Deploy to production

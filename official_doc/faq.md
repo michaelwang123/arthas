@@ -1,5 +1,7 @@
 # 常见问题 (FAQ)
 
+> 🌐 [English version available](faq.en.md)
+
 ---
 
 ## 一般问题
@@ -86,7 +88,7 @@ V1StGXR8_Z5jdHi6B-myT:k7_9xPqR2mNvLwE3hJfKdA1234567890abcdefghijk
 
 ### 消息有长度限制吗？
 
-单条消息最多 500 字符。支持 UTF-8 全字符集（包括 emoji）。
+Web 客户端单条消息最多 500 字符，AI Agent 通道（OpenClaw）支持最多 4000 字符/条（自动分割）。支持 UTF-8 全字符集（包括 emoji）。
 
 ### 发送消息有频率限制吗？
 
@@ -134,10 +136,10 @@ Arthas 是纯客户端应用，不需要 SSR。Vite + React 更轻量，构建�
 
 ### 如何自己部署？
 
-参考 [部署指南](deployment.md)，支持多种方案：
-- Vercel + Docker（推荐）
-- Docker Compose（自建 VPS）
-- Railway / Fly.io
+参考 [自托管部署指南](self-hosting.md)，支持三种方案：
+- 单二进制（零依赖，推荐开发/内网使用）
+- Docker 单容器（一条命令快速部署）
+- Docker Compose + Caddy（公网自动 HTTPS）
 
 ### 部署需要数据库吗？
 
@@ -161,4 +163,4 @@ Arthas 是纯客户端应用，不需要 SSR。Vite + React 更轻量，构建�
 
 - [快速开始](getting-started.md) — 本地运行
 - [安全模型](security.md) — 深入了解加密设计
-- [部署指南](deployment.md) — 生产环境部署
+- [自托管部署](self-hosting.md) — 生产环境部署

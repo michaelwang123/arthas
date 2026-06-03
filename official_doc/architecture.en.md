@@ -287,4 +287,4 @@ Last member leaves → Room deleted from memory → roomId invalidated
 
 - [Protocol Specification](protocol.md) — Detailed message format definitions
 - [Security Model](security.md) — Encryption scheme and threat analysis
-- [Deployment Guide](deployment.md) — Production environment deployment
+- [Self-Hosting Guide](self-hosting.en.md) — Production environment deployment

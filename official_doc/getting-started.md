@@ -110,9 +110,9 @@ npm run dev
 成功启动后你会看到：
 
 ```
-  VITE v5.x.x  ready in xxx ms
+  VITE v6.x.x  ready in xxx ms
 
-  ➜  Local:   http://localhost:3000/
+  ➜  Local:   http://localhost:5173/
 ```
 
 ---
@@ -130,7 +130,7 @@ npm run dev
 
 ### 方式二：源码开发模式（方式 B）
 
-1. 打开浏览器访问 `http://localhost:3000`
+1. 打开浏览器访问 `http://localhost:5173`
 2. 输入昵称，点击 **"创建房间"**
 3. 复制生成的分享码
 4. 打开另一个浏览器窗口（或隐身模式）
@@ -191,7 +191,7 @@ PORT=9090 go run cmd/server/main.go
 
 ```typescript
 server: {
-  port: 3000,
+  port: 4000,
 }
 ```
 
@@ -210,4 +210,4 @@ go env -w GOPROXY=https://goproxy.cn,direct
 - [系统架构](architecture.md) — 了解整体设计
 - [CLI 客户端指南](cli-guide.md) — 终端客户端详细用法
 - [开发指南](development.md) — 深入代码结构
-- [部署指南](deployment.md) — 部署到生产环境
+- [自托管部署](self-hosting.md) — 部署到生产环境

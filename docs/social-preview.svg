@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <!-- Background -->
+  <rect fill="#0d0d1a" width="1280" height="640"/>
+
+  <!-- Gold lock/shield icon (centered, ~100px tall) -->
+  <g transform="translate(640, 200)">
+    <!-- Shield outline -->
+    <path d="M0,-55 C-35,-55 -50,-40 -50,-20 L-50,10 C-50,40 -25,55 0,65 C25,55 50,40 50,10 L50,-20 C50,-40 35,-55 0,-55 Z" fill="none" stroke="#ffd700" stroke-width="4"/>
+    <!-- Lock body -->
+    <rect x="-18" y="-5" width="36" height="28" rx="4" ry="4" fill="#ffd700"/>
+    <!-- Lock shackle -->
+    <path d="M-12,-5 L-12,-18 C-12,-28 -8,-35 0,-35 C8,-35 12,-28 12,-18 L12,-5" fill="none" stroke="#ffd700" stroke-width="5" stroke-linecap="round"/>
+    <!-- Keyhole -->
+    <circle cx="0" cy="8" r="5" fill="#0d0d1a"/>
+    <rect x="-2.5" y="8" width="5" height="10" rx="2" fill="#0d0d1a"/>
+  </g>
+
+  <!-- Title: "Arthas" -->
+  <text x="640" y="340" text-anchor="middle" font-size="48" font-weight="bold" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif">Arthas</text>
+
+  <!-- Tagline: "E2EE Ephemeral Chat" -->
+  <text x="640" y="390" text-anchor="middle" font-size="24" fill="#888888" font-family="system-ui, -apple-system, sans-serif">E2EE Ephemeral Chat</text>
+
+  <!-- Keyword pills row (centered at y=480) -->
+  <!-- Pill 1: "End-to-End Encrypted" -->
+  <g transform="translate(640, 480)">
+    <!-- Pill 1 (left) -->
+    <rect x="-380" y="-18" width="220" height="36" rx="18" ry="18" fill="#1a1a2e" stroke="#ffd700" stroke-width="1"/>
+    <text x="-270" y="6" text-anchor="middle" font-size="16" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif">End-to-End Encrypted</text>
+
+    <!-- Pill 2 (center) -->
+    <rect x="-100" y="-18" width="200" height="36" rx="18" ry="18" fill="#1a1a2e" stroke="#ffd700" stroke-width="1"/>
+    <text x="0" y="6" text-anchor="middle" font-size="16" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif">Zero Knowledge</text>
+
+    <!-- Pill 3 (right) -->
+    <rect x="160" y="-18" width="220" height="36" rx="18" ry="18" fill="#1a1a2e" stroke="#ffd700" stroke-width="1"/>
+    <text x="270" y="6" text-anchor="middle" font-size="16" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif">Self-Hostable</text>
+  </g>
+
+  <!-- Subtle gold accent line at top -->
+  <rect x="540" y="80" width="200" height="2" rx="1" fill="#ffd700" opacity="0.4"/>
+
+  <!-- Subtle gold accent line at bottom -->
+  <rect x="540" y="560" width="200" height="2" rx="1" fill="#ffd700" opacity="0.4"/>
+
+  <!-- GitHub URL -->
+  <text x="640" y="600" text-anchor="middle" font-size="14" fill="#555555" font-family="system-ui, -apple-system, sans-serif">github.com/michaelwang123/arthas</text>
+</svg>
