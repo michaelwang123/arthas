@@ -4,11 +4,11 @@
 
 This guide helps you deploy a private Arthas instance on your own server. Arthas offers three deployment methods:
 
-| Method | Use Case | Dependencies | HTTPS |
-|--------|----------|--------------|-------|
-| **Tier 1 — Single Binary** | Local/intranet/development/quick trial | None (single file) | None (HTTP) |
-| **Tier 2 — Docker Single Container** | Quick deploy/testing/intranet | Docker | None (HTTP) |
-| **Tier 3 — Docker Compose** | Public-facing production | Docker + Compose v2 | Automatic (Let's Encrypt) |
+| Method                               | Use Case                               | Dependencies        | HTTPS                     |
+| --------------------------------------| ----------------------------------------| ---------------------| ---------------------------|
+| **Tier 1 — Single Binary**           | Local/intranet/development/quick trial | None (single file)  | None (HTTP)               |
+| **Tier 2 — Docker Single Container** | Quick deploy/testing/intranet          | Docker              | None (HTTP)               |
+| **Tier 3 — Docker Compose**          | Public-facing production               | Docker + Compose v2 | Automatic (Let's Encrypt) |
 
 > **Zero-knowledge architecture remains unchanged** — Regardless of deployment method, the server only relays encrypted ciphertext and never stores any message content.
 
@@ -72,37 +72,41 @@ Suitable for local testing, intranet deployment, or development. The Go binary e
 
 ### 1. Download the Binary
 
-Download the binary for your platform from [GitHub Releases](https://github.com/michaelwang123/arthas/releases):
+Download the binary for your platform from [GitHub Releases](https://github.com/michaelwang123/arthas/releases) — choose the **arthas-server-all** variant (includes frontend + backend):
 
 ```bash
 # Linux (x86_64)
-curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-linux-amd64
-chmod +x arthas-server
+curl -Lo arthas-server-all https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-all-linux-amd64
+chmod +x arthas-server-all
 
 # Linux (ARM64, e.g. Raspberry Pi)
-curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-linux-arm64
-chmod +x arthas-server
+curl -Lo arthas-server-all https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-all-linux-arm64
+chmod +x arthas-server-all
 
 # macOS (Apple Silicon)
-curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-darwin-arm64
-chmod +x arthas-server
+curl -Lo arthas-server-all https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-all-darwin-arm64
+chmod +x arthas-server-all
 
 # macOS (Intel)
-curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-darwin-amd64
-chmod +x arthas-server
+curl -Lo arthas-server-all https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-all-darwin-amd64
+chmod +x arthas-server-all
 ```
+
+> **Binary variants:**
+> - `arthas-server-all-*` — Includes frontend + backend (recommended for self-hosting, ~7MB)
+> - `arthas-server-*` — Backend WebSocket relay only (for split deployment)
 
 ### 2. Start the Service
 
 ```bash
 # Default port 8080
-./arthas-server
+./arthas-server-all
 
 # Custom port
-./arthas-server --port 3000
+./arthas-server-all --port 3000
 
 # Restrict WebSocket origins (recommended for production)
-./arthas-server --port 443 --allowed-origins "https://chat.example.com"
+./arthas-server-all --port 443 --allowed-origins "https://chat.example.com"
 ```
 
 ### 3. Access
@@ -298,6 +302,29 @@ This automatically sets `DOMAIN=localhost`, uses HTTP (no HTTPS), and is accessi
 | `./deploy.sh --down` | Stop and remove all containers |
 | `./deploy.sh --reconfigure` | Delete config files and re-enter interactive setup |
 
+### Examples
+
+```bash
+# Check service status
+./deploy.sh --status
+# Output:
+# arthas-backend: healthy (running)
+# arthas-caddy:   healthy (running)
+
+# View logs to troubleshoot issues
+./deploy.sh --logs
+
+# Upgrade to latest version
+./deploy.sh --upgrade
+
+# Stop services
+./deploy.sh --down
+
+# Switch domains (stop first, then reconfigure)
+./deploy.sh --down
+./deploy.sh --reconfigure
+```
+
 ---
 
 ## Configuration Reference
@@ -312,6 +339,16 @@ All configuration is managed through the `deploy/.env` file. It is interactively
 | `GITHUB_OWNER` | Yes | — | GitHub username/organization, used to construct image address `ghcr.io/{GITHUB_OWNER}/arthas` |
 | `ALLOWED_ORIGINS` | No | Auto-generated | WebSocket CORS whitelist. Automatically set to `https://{DOMAIN}` for public, `*` for local |
 
+### Manual Configuration
+
+```bash
+# Edit the .env file
+vim deploy/.env
+
+# Regenerate Caddyfile and restart
+./deploy.sh --reconfigure
+```
+
 ---
 
 ## Upgrading
@@ -320,6 +357,14 @@ All configuration is managed through the `deploy/.env` file. It is interactively
 
 ```bash
 cd deploy
+
+# Option 1: Upgrade to latest
+./deploy.sh --upgrade
+
+# Option 2: Upgrade to a specific version
+# 1. Update ARTHAS_VERSION in .env
+sed -i 's/ARTHAS_VERSION=.*/ARTHAS_VERSION=v1.2.0/' .env
+# 2. Pull new image and restart
 ./deploy.sh --upgrade
 ```
 
@@ -335,13 +380,44 @@ docker run -d -p 8080:8080 --name arthas ghcr.io/michaelwang123/arthas:latest
 ### Tier 1 (Single Binary) Upgrade
 
 ```bash
+# 1. Stop the current service
 kill $(pgrep arthas-server)
-curl -Lo arthas-server https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-linux-amd64
-chmod +x arthas-server
-./arthas-server --port 8080
+
+# 2. Download new version (overwrite old file)
+curl -Lo arthas-server-all https://github.com/michaelwang123/arthas/releases/latest/download/arthas-server-all-linux-amd64
+chmod +x arthas-server-all
+
+# 3. Restart
+./arthas-server-all --port 8080
 ```
 
 > **Tip:** Arthas is a stateless service (no message storage), so upgrades do not involve data migration.
+
+---
+
+## Backup
+
+### Caddy Certificate Backup (Tier 3)
+
+Caddy's TLS certificates are stored in the Docker named volume `caddy_data`. Regular backups are recommended to avoid hitting Let's Encrypt rate limits when requesting new certificates.
+
+```bash
+# Backup the certificate volume
+docker run --rm \
+  -v arthas_caddy_data:/data \
+  -v $(pwd)/backup:/backup \
+  alpine tar czf /backup/caddy-certs-$(date +%Y%m%d).tar.gz /data
+
+# Restore the certificate volume
+docker run --rm \
+  -v arthas_caddy_data:/data \
+  -v $(pwd)/backup:/backup \
+  alpine sh -c "cd / && tar xzf /backup/caddy-certs-20240101.tar.gz"
+```
+
+### Tier 1/2 Backup
+
+Tier 1 and Tier 2 are stateless — no backup needed. Binaries can be re-downloaded anytime, Docker images can be rebuilt anytime.
 
 ---
 
@@ -395,25 +471,81 @@ docker run -d -p 9090:9090 -e PORT=9090 --name arthas arthas-server
 
 ### DNS Not Propagated (Tier 3)
 
-**Symptoms:** After deployment, visiting the domain shows "This site can't be reached".
+**Symptoms:** After deployment, visiting the domain shows "This site can't be reached", Caddy logs show ACME challenge failure.
+
+**Troubleshooting:**
 
 ```bash
+# Check if DNS resolves to your server IP
 dig +short chat.example.com
-# Should return your server's public IP
+
+# Verify using a specific DNS server
+dig @8.8.8.8 chat.example.com
 ```
+
+**Solution:**
+1. Confirm the domain's DNS A record points to your server IP
+2. Wait for DNS propagation (usually 5-30 minutes, up to 48 hours)
+3. After DNS is effective, restart Caddy: `./deploy.sh --down && ./deploy.sh`
+
+### Port Conflict (Tier 3)
+
+**Symptoms:** `deploy.sh` reports port 80 or 443 is occupied.
+
+**Troubleshooting:**
+
+```bash
+# Linux
+sudo ss -tlnp | grep ':80 '
+sudo ss -tlnp | grep ':443 '
+
+# macOS
+sudo lsof -i :80 -sTCP:LISTEN
+sudo lsof -i :443 -sTCP:LISTEN
+```
+
+**Common processes and solutions:**
+
+| Process | Solution |
+|---------|----------|
+| nginx | `sudo systemctl stop nginx && sudo systemctl disable nginx` |
+| apache2/httpd | `sudo systemctl stop apache2 && sudo systemctl disable apache2` |
+| Another Caddy instance | `sudo systemctl stop caddy` |
 
 ### Certificate Request Failed (Tier 3)
 
+**Symptoms:** Caddy logs show ACME challenge failure, HTTPS unavailable.
+
 **Solution:**
-1. Confirm port 80 is open to the internet
+1. Confirm port 80 is open to the internet (Let's Encrypt HTTP-01 validation requires it)
 2. Confirm DNS correctly resolves to your server
-3. Check firewall rules: `sudo ufw allow 80/tcp && sudo ufw allow 443/tcp`
+3. Check server firewall rules:
+   ```bash
+   # Ubuntu/Debian
+   sudo ufw allow 80/tcp
+   sudo ufw allow 443/tcp
+
+   # CentOS/RHEL
+   sudo firewall-cmd --permanent --add-service=http
+   sudo firewall-cmd --permanent --add-service=https
+   sudo firewall-cmd --reload
+   ```
 
 ### Unhealthy Container
 
+**Symptoms:** `docker ps` shows container as unhealthy.
+
+**Troubleshooting:**
+
 ```bash
+# Check health status
 docker inspect arthas --format='{{.State.Health.Status}}'
+
+# Manually test health endpoint
 docker exec arthas wget -qO- http://localhost:8080/ping
+# Should return "pong"
+
+# View logs
 docker logs arthas
 ```
 
@@ -452,6 +584,17 @@ Browser ──HTTPS──→ Caddy (port 443)
                      └── /ping health check
 ```
 
+Caddy handles:
+- HTTPS termination and automatic certificate renewal
+- HTTP → HTTPS redirect
+- Reverse proxy all requests to Go backend
+- Security response header injection
+
+Go backend handles:
+- Serving frontend static files (SPA route fallback)
+- WebSocket message relay
+- Health check endpoint (`/ping`)
+
 ---
 
 ## Building from Source
@@ -461,7 +604,14 @@ Browser ──HTTPS──→ Caddy (port 443)
 ```bash
 git clone https://github.com/michaelwang123/arthas.git
 cd arthas
+
+# Build the full image (frontend + backend)
 docker build -f deploy/Dockerfile -t arthas-server .
+
+# Specify version number
+docker build -f deploy/Dockerfile --build-arg VERSION=v1.2.3 -t arthas-server:v1.2.3 .
+
+# Run
 docker run -d -p 8080:8080 --name arthas arthas-server
 ```
 
@@ -472,14 +622,25 @@ docker run -d -p 8080:8080 --name arthas arthas-server
 ```bash
 git clone https://github.com/michaelwang123/arthas.git
 cd arthas
+
+# Build all platform binaries (requires Go 1.23+ and Node.js 18+)
 make build-all
-# Output in dist/ directory
+
+# Output in dist/ directory:
+# dist/arthas-server-all-linux-amd64
+# dist/arthas-server-all-linux-arm64
+# dist/arthas-server-all-darwin-amd64
+# dist/arthas-server-all-darwin-arm64
+# dist/arthas-server-all-windows-amd64.exe
+
+# Build dev version for current platform only (no frontend)
+make dev-server
 ```
 
 ---
 
 ## Next Steps
 
-- [System Architecture](architecture.md) — Understand the overall design
-- [Configuration Reference](configuration.md) — All configurable parameters
-- [Getting Started](getting-started.md) — Set up a local development environment
+- [System Architecture](architecture.en.md) — Understand the overall design
+- [Configuration Reference](configuration.en.md) — All configurable parameters
+- [Getting Started](getting-started.en.md) — Set up a local development environment
