@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" fill="none">
+  <defs>
+    <linearGradient id="bgU" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a"/>
+      <stop offset="100%" style="stop-color:#1e293b"/>
+    </linearGradient>
+    <linearGradient id="purpleU" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#a855f7"/>
+    </linearGradient>
+    <linearGradient id="greenU" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#059669"/>
+      <stop offset="100%" style="stop-color:#10b981"/>
+    </linearGradient>
+    <linearGradient id="blueU" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2563eb"/>
+      <stop offset="100%" style="stop-color:#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="redU" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#dc2626"/>
+      <stop offset="100%" style="stop-color:#ef4444"/>
+    </linearGradient>
+    <marker id="arrowG" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#10b981"/>
+    </marker>
+    <marker id="arrowB" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#3b82f6"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="400" rx="12" fill="url(#bgU)"/>
+
+  <!-- Title -->
+  <text x="450" y="30" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">Chrome Extension — Usage Flow</text>
+
+  <!-- === ROW 1: Create Room Flow === -->
+  <text x="50" y="65" fill="#a855f7" font-family="system-ui, sans-serif" font-size="11" font-weight="600">CREATE ROOM</text>
+
+  <!-- Step A: Enter name -->
+  <rect x="50" y="78" width="150" height="60" rx="8" fill="#1e293b" stroke="#7c3aed" stroke-width="1"/>
+  <text x="125" y="100" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="10" font-weight="500">Enter Nickname</text>
+  <text x="125" y="118" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9">1–20 characters</text>
+  <text x="125" y="132" text-anchor="middle" fill="#64748b" font-family="system-ui, sans-serif" font-size="8">e.g. "Alice"</text>
+
+  <path d="M205 108 L235 108" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrowG)"/>
+
+  <!-- Step B: Generate key -->
+  <rect x="240" y="78" width="150" height="60" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="1"/>
+  <text x="315" y="100" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="10" font-weight="500">Generate AES-256 Key</text>
+  <text x="315" y="118" text-anchor="middle" fill="#6ee7b7" font-family="system-ui, sans-serif" font-size="9">Web Crypto API</text>
+  <text x="315" y="132" text-anchor="middle" fill="#64748b" font-family="system-ui, sans-serif" font-size="8">Key stays in browser</text>
+
+  <path d="M395 108 L425 108" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrowG)"/>
+
+  <!-- Step C: Connect WS -->
+  <rect x="430" y="78" width="150" height="60" rx="8" fill="#1e293b" stroke="#3b82f6" stroke-width="1"/>
+  <text x="505" y="100" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="10" font-weight="500">Connect WebSocket</text>
+  <text x="505" y="118" text-anchor="middle" fill="#93c5fd" font-family="system-ui, sans-serif" font-size="9">wss://server/ws</text>
+  <text x="505" y="132" text-anchor="middle" fill="#64748b" font-family="system-ui, sans-serif" font-size="8">Send CREATE_ROOM msg</text>
+
+  <path d="M585 108 L615 108" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrowG)"/>
+
+  <!-- Step D: Share code -->
+  <rect x="620" y="78" width="150" height="60" rx="8" fill="#1e293b" stroke="#f59e0b" stroke-width="1"/>
+  <text x="695" y="100" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="10" font-weight="500">Get Share Code</text>
+  <text x="695" y="118" text-anchor="middle" fill="#fcd34d" font-family="system-ui, sans-serif" font-size="9">roomId:base64(key)</text>
+  <text x="695" y="132" text-anchor="middle" fill="#64748b" font-family="system-ui, sans-serif" font-size="8">Copy &amp; send to friend</text>
+
+  <!-- === ROW 2: Message Flow === -->
+  <text x="50" y="185" fill="#3b82f6" font-family="system-ui, sans-serif" font-size="11" font-weight="600">SEND MESSAGE</text>
+
+  <rect x="50" y="198" width="130" height="55" rx="8" fill="#1e293b" stroke="#6366f1" stroke-width="1"/>
+  <text x="115" y="218" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="10" font-weight="500">Type Message</text>
+  <text x="115" y="237" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9">"Hello, Bob!"</text>
+
+  <path d="M185 225 L215 225" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrowB)"/>
+
+  <rect x="220" y="198" width="130" height="55" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="1"/>
+  <text x="285" y="218" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="10" font-weight="500">AES-GCM Encrypt</text>
+  <text x="285" y="237" text-anchor="middle" fill="#6ee7b7" font-family="system-ui, sans-serif" font-size="9">+ random 12B IV</text>
+
+  <path d="M355 225 L385 225" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrowB)"/>
+
+  <rect x="390" y="198" width="130" height="55" rx="8" fill="#1e293b" stroke="#6366f1" stroke-width="1"/>
+  <text x="455" y="218" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="10" font-weight="500">Ed25519 Sign</text>
+  <text x="455" y="237" text-anchor="middle" fill="#a5b4fc" font-family="system-ui, sans-serif" font-size="9">Tamper detection</text>
+
+  <path d="M525 225 L555 225" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrowB)"/>
+
+  <rect x="560" y="198" width="130" height="55" rx="8" fill="#1e293b" stroke="#ef4444" stroke-width="1"/>
+  <text x="625" y="218" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="10" font-weight="500">Server Relay</text>
+  <text x="625" y="237" text-anchor="middle" fill="#fca5a5" font-family="system-ui, sans-serif" font-size="9">Sees only ciphertext</text>
+
+  <path d="M695 225 L725 225" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrowB)"/>
+
+  <rect x="730" y="198" width="130" height="55" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="1"/>
+  <text x="795" y="218" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="10" font-weight="500">Recipient Decrypts</text>
+  <text x="795" y="237" text-anchor="middle" fill="#6ee7b7" font-family="system-ui, sans-serif" font-size="9">Sees "Hello, Bob!"</text>
+
+  <!-- === ROW 3: Session Lifecycle === -->
+  <text x="50" y="300" fill="#f59e0b" font-family="system-ui, sans-serif" font-size="11" font-weight="600">SESSION LIFECYCLE</text>
+
+  <rect x="50" y="313" width="160" height="50" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="130" y="333" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="10">Popup Open = Connected</text>
+  <text x="130" y="350" text-anchor="middle" fill="#6ee7b7" font-family="system-ui, sans-serif" font-size="9">● Active WebSocket</text>
+
+  <path d="M215 338 L255 338" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#arrowG)"/>
+
+  <rect x="260" y="313" width="160" height="50" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="340" y="333" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="10">Popup Closed</text>
+  <text x="340" y="350" text-anchor="middle" fill="#fbbf24" font-family="system-ui, sans-serif" font-size="9">⚠ WS disconnected</text>
+
+  <path d="M425 338 L465 338" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#arrowG)"/>
+
+  <rect x="470" y="313" width="160" height="50" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="550" y="333" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="10">Reopen Popup</text>
+  <text x="550" y="350" text-anchor="middle" fill="#6ee7b7" font-family="system-ui, sans-serif" font-size="9">Auto-rejoin room ✓</text>
+
+  <path d="M635 338 L675 338" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#arrowG)"/>
+
+  <rect x="680" y="313" width="180" height="50" rx="8" fill="#1e293b" stroke="#ef4444" stroke-width="1" stroke-dasharray="3 2"/>
+  <text x="770" y="333" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="10">Messages while closed</text>
+  <text x="770" y="350" text-anchor="middle" fill="#f87171" font-family="system-ui, sans-serif" font-size="9">✗ Not recoverable (by design)</text>
+
+  <!-- Footer -->
+  <text x="450" y="388" text-anchor="middle" fill="#475569" font-family="system-ui, sans-serif" font-size="9">Zero-knowledge design: server never stores messages, so offline delivery is intentionally impossible</text>
+</svg>

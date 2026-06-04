@@ -162,13 +162,21 @@ CLI 是独立的 Go 二进制，实现与 Web 客户端相同的 E2EE 协议 —
 
 ### Chrome 扩展
 
+浏览器工具栏中的 E2EE 聊天 — 构建一次，加载为未打包扩展即可使用。
+
+<p align="center">
+  <img src="docs/diagrams/chrome-extension-flow.svg" alt="Chrome 扩展构建流程" width="900"/>
+</p>
+
 ```bash
 cd arthas-extension
 npm install
 npm run build
 ```
 
-在 `chrome://extensions/`（开发者模式）中加载 `arthas-extension/dist/` 目录。在设置中配置服务器地址，然后从工具栏弹出窗口创建或加入加密房间。
+在 `chrome://extensions/`（开发者模式）中加载 `arthas-extension/dist/` 目录。在设置中配置服务器地址，即可从工具栏弹窗创建或加入加密房间。使用相同的 E2EE 协议 — 与 Web 应用和 CLI 完全互通。
+
+完整指南：[Chrome 扩展文档](official_doc/chrome-extension.md)
 
 ---
 
@@ -198,6 +206,7 @@ arthas/
 | [协议规范](official_doc/protocol.md) | WebSocket 消息格式规范 |
 | [安全设计](official_doc/security.md) | E2EE 设计、信任模型、威胁分析 |
 | [CLI 指南](official_doc/cli-guide.md) | 终端客户端使用 |
+| [Chrome 扩展](official_doc/chrome-extension.md) | 浏览器扩展构建与使用 |
 | [OpenClaw 频道](official_doc/openclaw-channel.md) | AI Agent E2EE 插件 |
 | [开发指南](official_doc/development.md) | 本地开发环境搭建、代码结构 |
 | [配置参考](official_doc/configuration.md) | 所有可配置参数 |
