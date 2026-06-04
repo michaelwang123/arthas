@@ -207,6 +207,7 @@ arthas/
 | [安全设计](official_doc/security.md) | E2EE 设计、信任模型、威胁分析 |
 | [CLI 指南](official_doc/cli-guide.md) | 终端客户端使用 |
 | [Chrome 扩展](official_doc/chrome-extension.md) | 浏览器扩展构建与使用 |
+| [create-arthas](official_doc/create-arthas.md) | 一键自托管部署工具 |
 | [OpenClaw 频道](official_doc/openclaw-channel.md) | AI Agent E2EE 插件 |
 | [开发指南](official_doc/development.md) | 本地开发环境搭建、代码结构 |
 | [配置参考](official_doc/configuration.md) | 所有可配置参数 |

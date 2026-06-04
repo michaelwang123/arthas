@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 280" fill="none">
+  <defs>
+    <linearGradient id="bgCA" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a"/>
+      <stop offset="100%" style="stop-color:#1e293b"/>
+    </linearGradient>
+    <linearGradient id="s1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b"/>
+      <stop offset="100%" style="stop-color:#d97706"/>
+    </linearGradient>
+    <linearGradient id="s2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#6d28d9"/>
+    </linearGradient>
+    <linearGradient id="s3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563eb"/>
+      <stop offset="100%" style="stop-color:#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="s4" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#059669"/>
+      <stop offset="100%" style="stop-color:#047857"/>
+    </linearGradient>
+    <marker id="arrowCA" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="280" rx="12" fill="url(#bgCA)"/>
+
+  <text x="450" y="30" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600">npx create-arthas — One-Command Self-Hosted Deployment</text>
+
+  <!-- Step 1 -->
+  <rect x="30" y="55" width="190" height="160" rx="10" fill="url(#s1)" opacity="0.12"/>
+  <rect x="30" y="55" width="190" height="32" rx="10" fill="url(#s1)"/>
+  <text x="125" y="76" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-size="11" font-weight="600">① npx create-arthas</text>
+  <text x="125" y="105" text-anchor="middle" fill="#fcd34d" font-family="monospace" font-size="9">$ npx create-arthas</text>
+  <text x="125" y="125" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9">No install needed</text>
+  <text x="125" y="142" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9">npm downloads &amp; runs</text>
+  <text x="125" y="162" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9">automatically</text>
+  <text x="125" y="195" text-anchor="middle" fill="#64748b" font-family="system-ui, sans-serif" font-size="8">Requires: Node.js 18+</text>
+
+  <path d="M225 135 L255 135" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowCA)"/>
+
+  <!-- Step 2 -->
+  <rect x="260" y="55" width="190" height="160" rx="10" fill="url(#s2)" opacity="0.12"/>
+  <rect x="260" y="55" width="190" height="32" rx="10" fill="url(#s2)"/>
+  <text x="355" y="76" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-size="11" font-weight="600">② Answer Prompts</text>
+  <text x="355" y="103" text-anchor="middle" fill="#c4b5fd" font-family="system-ui, sans-serif" font-size="9">? Domain: chat.example.com</text>
+  <text x="355" y="119" text-anchor="middle" fill="#c4b5fd" font-family="system-ui, sans-serif" font-size="9">? Port: 8080</text>
+  <text x="355" y="135" text-anchor="middle" fill="#c4b5fd" font-family="system-ui, sans-serif" font-size="9">? HTTPS: Yes</text>
+  <text x="355" y="151" text-anchor="middle" fill="#c4b5fd" font-family="system-ui, sans-serif" font-size="9">? Email: admin@example.com</text>
+  <text x="355" y="167" text-anchor="middle" fill="#c4b5fd" font-family="system-ui, sans-serif" font-size="9">? Start now: Yes</text>
+  <text x="355" y="195" text-anchor="middle" fill="#64748b" font-family="system-ui, sans-serif" font-size="8">Or: --defaults for localhost</text>
+
+  <path d="M455 135 L485 135" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowCA)"/>
+
+  <!-- Step 3 -->
+  <rect x="490" y="55" width="190" height="160" rx="10" fill="url(#s3)" opacity="0.12"/>
+  <rect x="490" y="55" width="190" height="32" rx="10" fill="url(#s3)"/>
+  <text x="585" y="76" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-size="11" font-weight="600">③ Files Generated</text>
+  <text x="585" y="103" text-anchor="middle" fill="#93c5fd" font-family="monospace" font-size="9">./arthas/</text>
+  <text x="585" y="119" text-anchor="middle" fill="#94a3b8" font-family="monospace" font-size="9">├── docker-compose.yml</text>
+  <text x="585" y="135" text-anchor="middle" fill="#94a3b8" font-family="monospace" font-size="9">├── .env</text>
+  <text x="585" y="151" text-anchor="middle" fill="#94a3b8" font-family="monospace" font-size="9">└── Caddyfile</text>
+  <text x="585" y="175" text-anchor="middle" fill="#60a5fa" font-family="system-ui, sans-serif" font-size="9" font-weight="500">Pre-configured for your setup</text>
+  <text x="585" y="195" text-anchor="middle" fill="#64748b" font-family="system-ui, sans-serif" font-size="8">No Caddyfile if HTTPS disabled</text>
+
+  <path d="M685 135 L715 135" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowCA)"/>
+
+  <!-- Step 4 -->
+  <rect x="720" y="55" width="150" height="160" rx="10" fill="url(#s4)" opacity="0.12"/>
+  <rect x="720" y="55" width="150" height="32" rx="10" fill="url(#s4)"/>
+  <text x="795" y="76" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-size="11" font-weight="600">④ Running!</text>
+  <text x="795" y="105" text-anchor="middle" fill="#6ee7b7" font-family="system-ui, sans-serif" font-size="9">docker compose up -d</text>
+  <text x="795" y="128" text-anchor="middle" fill="#10b981" font-family="system-ui, sans-serif" font-size="10" font-weight="600">🎉 Ready</text>
+  <text x="795" y="148" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9">E2EE chat at</text>
+  <text x="795" y="164" text-anchor="middle" fill="#6ee7b7" font-family="system-ui, sans-serif" font-size="9">https://your-domain</text>
+  <text x="795" y="195" text-anchor="middle" fill="#64748b" font-family="system-ui, sans-serif" font-size="8">Auto Let's Encrypt HTTPS</text>
+
+  <!-- Bottom -->
+  <text x="450" y="245" text-anchor="middle" fill="#475569" font-family="system-ui, sans-serif" font-size="9">Total time: ~30 seconds from npx to running instance. No manual config files needed.</text>
+  <text x="450" y="262" text-anchor="middle" fill="#475569" font-family="system-ui, sans-serif" font-size="9">Prerequisites: Node.js 18+ and Docker. Server stores nothing — zero-knowledge relay.</text>
+</svg>

@@ -64,8 +64,11 @@ export default defineConfig({
         },
         {
           label: 'Tools',
+          translations: { 'zh-CN': '工具' },
           items: [
             { slug: 'cli-guide' },
+            { slug: 'chrome-extension' },
+            { slug: 'create-arthas' },
           ],
         },
         {

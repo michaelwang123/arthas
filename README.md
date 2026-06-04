@@ -206,6 +206,7 @@ arthas/
 | [Security](official_doc/security.en.md) | E2EE design, trust model, threat analysis |
 | [CLI Guide](official_doc/cli-guide.en.md) | Terminal client usage |
 | [Chrome Extension](official_doc/chrome-extension.en.md) | Browser extension build & usage |
+| [create-arthas](official_doc/create-arthas.en.md) | One-command self-hosted deployment |
 | [OpenClaw Channel](official_doc/openclaw-channel.en.md) | AI Agent E2EE plugin |
 | [Development](official_doc/development.en.md) | Local dev setup, code structure |
 | [Configuration](official_doc/configuration.en.md) | All configurable parameters |
