@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 320" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a"/>
+      <stop offset="100%" style="stop-color:#1e293b"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#a855f7"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#0d9488"/>
+      <stop offset="100%" style="stop-color:#14b8a6"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2563eb"/>
+      <stop offset="100%" style="stop-color:#3b82f6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="320" rx="12" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="400" y="35" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">Chrome Extension Architecture</text>
+
+  <!-- Popup Box -->
+  <rect x="40" y="60" width="180" height="200" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+  <rect x="40" y="60" width="180" height="32" rx="10" fill="url(#purple)"/>
+  <text x="130" y="81" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-size="12" font-weight="600">Popup UI</text>
+  <text x="130" y="110" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="10">React 18 + Zustand</text>
+  <text x="130" y="128" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="10">Tailwind CSS</text>
+  <text x="130" y="155" text-anchor="middle" fill="#cbd5e1" font-family="system-ui, sans-serif" font-size="10" font-weight="500">• Create/Join Room</text>
+  <text x="130" y="173" text-anchor="middle" fill="#cbd5e1" font-family="system-ui, sans-serif" font-size="10" font-weight="500">• Send/Receive Msgs</text>
+  <text x="130" y="191" text-anchor="middle" fill="#cbd5e1" font-family="system-ui, sans-serif" font-size="10" font-weight="500">• Settings Page</text>
+  <text x="130" y="209" text-anchor="middle" fill="#cbd5e1" font-family="system-ui, sans-serif" font-size="10" font-weight="500">• Session Resume</text>
+  <text x="130" y="240" text-anchor="middle" fill="#64748b" font-family="system-ui, sans-serif" font-size="9">Destroyed on close</text>
+
+  <!-- Storage Box -->
+  <rect x="280" y="60" width="180" height="95" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+  <rect x="280" y="60" width="180" height="32" rx="10" fill="url(#teal)"/>
+  <text x="370" y="81" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-size="12" font-weight="600">Chrome Storage</text>
+  <text x="370" y="110" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="10">session: room key (memory)</text>
+  <text x="370" y="128" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="10">local: server URL, language</text>
+  <text x="370" y="146" text-anchor="middle" fill="#64748b" font-family="system-ui, sans-serif" font-size="9">Persists across popup open/close</text>
+
+  <!-- Crypto Box -->
+  <rect x="280" y="175" width="180" height="85" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+  <rect x="280" y="175" width="180" height="32" rx="10" fill="url(#purple)"/>
+  <text x="370" y="196" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-size="12" font-weight="600">Web Crypto API</text>
+  <text x="370" y="222" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="10">AES-256-GCM encrypt/decrypt</text>
+  <text x="370" y="240" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="10">Ed25519 sign/verify</text>
+
+  <!-- Server Box -->
+  <rect x="540" y="60" width="220" height="200" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+  <rect x="540" y="60" width="220" height="32" rx="10" fill="url(#blue)"/>
+  <text x="650" y="81" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-size="12" font-weight="600">Arthas Server (Relay)</text>
+  <text x="650" y="110" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="10">WebSocket + MessagePack</text>
+  <text x="650" y="135" text-anchor="middle" fill="#cbd5e1" font-family="system-ui, sans-serif" font-size="10" font-weight="500">• Forward ciphertext blobs</text>
+  <text x="650" y="153" text-anchor="middle" fill="#cbd5e1" font-family="system-ui, sans-serif" font-size="10" font-weight="500">• Room management</text>
+  <text x="650" y="171" text-anchor="middle" fill="#cbd5e1" font-family="system-ui, sans-serif" font-size="10" font-weight="500">• Zero knowledge</text>
+  <text x="650" y="200" text-anchor="middle" fill="#fbbf24" font-family="system-ui, sans-serif" font-size="10" font-weight="500">⚠ Cannot decrypt anything</text>
+  <text x="650" y="225" text-anchor="middle" fill="#64748b" font-family="system-ui, sans-serif" font-size="9">Same server as Web/CLI</text>
+  <text x="650" y="243" text-anchor="middle" fill="#64748b" font-family="system-ui, sans-serif" font-size="9">All clients interoperable</text>
+
+  <!-- Arrows -->
+  <!-- Popup → Storage -->
+  <path d="M220 105 L275 105" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#arrowPurple)"/>
+  <text x="248" y="98" text-anchor="middle" fill="#818cf8" font-family="system-ui, sans-serif" font-size="8">persist</text>
+
+  <!-- Popup → Crypto -->
+  <path d="M220 200 L275 210" stroke="#a855f7" stroke-width="1.5" marker-end="url(#arrowPurple)"/>
+  <text x="248" y="215" text-anchor="middle" fill="#c084fc" font-family="system-ui, sans-serif" font-size="8">encrypt</text>
+
+  <!-- Popup → Server -->
+  <path d="M220 160 L535 160" stroke="#3b82f6" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <text x="378" y="280" text-anchor="middle" fill="#60a5fa" font-family="system-ui, sans-serif" font-size="10">WSS (TLS 1.3) — only ciphertext traverses the network</text>
+
+  <!-- Arrow markers -->
+  <defs>
+    <marker id="arrowPurple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#a855f7"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#3b82f6"/>
+    </marker>
+  </defs>
+
+  <!-- Bottom note -->
+  <text x="400" y="305" text-anchor="middle" fill="#475569" font-family="system-ui, sans-serif" font-size="9">Encryption keys exist only in popup memory — never sent to server, never persisted to disk</text>
+</svg>

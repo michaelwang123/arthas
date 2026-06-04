@@ -9,7 +9,7 @@
 ## 插入内容
 
 ```markdown
-- [Arthas](https://github.com/michaelwang123/arthas) - End-to-end encrypted ephemeral chat with no registration. Features include file sharing, voice messages, self-destruct messages, and CLI client. ([Demo](https://arthas-blush.vercel.app/), [Source Code](https://github.com/michaelwang123/arthas)) `MIT` `Go/Docker`
+- [Arthas](https://github.com/michaelwang123/arthas) - End-to-end encrypted ephemeral chat with no registration. Features include file sharing, voice messages, reply & reactions, self-destruct messages, and CLI client. ([Demo](https://arthas-blush.vercel.app/), [Source Code](https://github.com/michaelwang123/arthas)) `AGPL-3.0` `Go/Docker`
 ```
 
 ## PR 标题
@@ -29,9 +29,12 @@ Arthas is a self-hosted end-to-end encrypted ephemeral chat application.
 - AES-256-GCM + Ed25519 end-to-end encryption
 - No registration required
 - Encrypted file sharing and voice messages
+- Reply & emoji reactions (all encrypted)
 - Self-destruct messages
 - Room passwords and QR code sharing
+- Room expiry timers (1h/24h/7d)
 - CLI client (Go binary, cross-platform)
+- AI Agent Channel plugin (E2EE for AI agent communication)
 - i18n (EN/ZH/JA)
 
 **Self-hosting:**
@@ -42,11 +45,11 @@ Arthas is a self-hosted end-to-end encrypted ephemeral chat application.
 
 **Links:**
 - Demo: https://arthas-blush.vercel.app/
-- Self-hosting docs: https://github.com/michaelwang123/arthas/blob/main/official_doc/self-hosting.md
+- Self-hosting docs: https://github.com/michaelwang123/arthas/blob/main/official_doc/self-hosting.en.md
 
 **Checklist:**
 - [x] Self-hosted / can be hosted on own infrastructure
-- [x] Open source with MIT license
+- [x] Open source with AGPL-3.0 license
 - [x] Working demo available
 - [x] Installation documentation provided
 - [x] Project is actively maintained

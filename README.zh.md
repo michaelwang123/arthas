@@ -47,6 +47,7 @@
 - ✍️ **Ed25519 签名** – 防篡改检测，接收方可验证发送者身份
 - 🤖 **AI Agent 频道** – OpenClaw 插件实现 E2EE AI 对话，服务器无法窥视
 - 🖥️ **CLI 客户端** – 独立 Go 二进制，终端创建/加入加密房间
+- 🧩 **Chrome 扩展** – 浏览器工具栏弹窗中的 E2EE 聊天，与 Web/CLI 使用相同协议
 - 🌐 **国际化** – 英语 / 中文 / 日语，自动检测浏览器语言
 - 🚫 **无需注册** – 无账号体系，打开即用
 - 🏠 **可自托管** – 单二进制零依赖，或 Docker Compose 配合自动 HTTPS
@@ -159,6 +160,16 @@ go build -o arthas-cli ./cmd/arthas-cli/
 
 CLI 是独立的 Go 二进制，实现与 Web 客户端相同的 E2EE 协议 — 完全互通。
 
+### Chrome 扩展
+
+```bash
+cd arthas-extension
+npm install
+npm run build
+```
+
+在 `chrome://extensions/`（开发者模式）中加载 `arthas-extension/dist/` 目录。在设置中配置服务器地址，然后从工具栏弹出窗口创建或加入加密房间。
+
 ---
 
 ## 项目结构
@@ -168,6 +179,7 @@ arthas/
 ├── arthas-client/              # Web 前端（React + TypeScript）
 ├── arthas-server/              # 后端中继服务器（Go）
 ├── arthas-cli/                 # CLI 客户端（独立 Go 二进制）
+├── arthas-extension/           # Chrome 扩展（React + Manifest V3）
 ├── packages/openclaw-channel/  # OpenClaw AI Agent 频道插件（TypeScript）
 ├── deploy/                     # 自托管基础设施（Docker + Caddy）
 ├── website/                    # 项目官网（Astro + Starlight）
