@@ -1,10 +1,12 @@
 ---
 title: "How I built an E2EE chat in Go + React (with AI agent support)"
-published: false
+published: true
 description: "End-to-end encrypted ephemeral chat with AES-256-GCM. Try it in 2 minutes — create a room from the CLI, connect an AI agent via npm, and chat privately."
-tags: go, react, encryption, webdev, ai, privacy, security
+tags: go, encryption, security, opensource
 cover_image: ""
 ---
+
+> 🚀 **Try it now:** [Open the Arthas web app](https://arthas-blush.vercel.app/) — create a room, share the code, chat with E2EE. No signup needed.
 
 ## TL;DR — Try It in 2 Minutes
 
@@ -47,7 +49,7 @@ chmod +x arthas-cli
 
 That's it — you're chatting end-to-end encrypted. The server only sees ciphertext blobs; it cannot read, store, or parse anything.
 
-> 💡 Prefer a web UI? Open the [Arthas web app](https://michaelwang123.github.io/arthas/), create a room, and share the code.
+> 💡 Prefer a web UI? Open the [Arthas web app](https://arthas-blush.vercel.app/), create a room, and share the code.
 
 ---
 
@@ -331,6 +333,7 @@ Under 30MB final image. Add Caddy for automatic HTTPS.
 
 ## Links
 
+- **Live Demo**: [arthas-blush.vercel.app](https://arthas-blush.vercel.app/) (no signup, try it now)
 - **Public Server**: `wss://arthas100-arthas-server.hf.space/ws` (free, no signup)
 - **GitHub**: [github.com/michaelwang123/arthas](https://github.com/michaelwang123/arthas)
 - **AI Agent Plugin**: [`@arthas-chat/openclaw-channel` on npm](https://www.npmjs.com/package/@arthas-chat/openclaw-channel)

@@ -30,6 +30,7 @@ I've been working on Arthas, an end-to-end encrypted ephemeral chat app that you
 - No registration needed – open and use
 - Encrypted file sharing (chunked, drag & drop)
 - Encrypted voice messages (Push-to-Talk)
+- Reply & emoji reactions (encrypted)
 - Self-destruct messages (10s/30s/60s/5min)
 - Room passwords + QR code sharing + room expiry
 - CLI client (Go binary, same protocol as web)
@@ -46,16 +47,16 @@ I've been working on Arthas, an end-to-end encrypted ephemeral chat app that you
 
 **How it works:**
 
-The server is a pure relay (~500 lines of Go). It receives encrypted blobs via WebSocket and forwards them to other room members. It never sees plaintext – encryption keys only exist in clients' browsers.
+The server is a pure relay – a lightweight Go program that receives encrypted blobs via WebSocket and forwards them to other room members. It never sees plaintext – encryption keys only exist in clients' browsers.
 
 **Links:**
 
 - GitHub: https://github.com/michaelwang123/arthas
 - Live demo: https://arthas-blush.vercel.app/
 - Project website: https://michaelwang123.github.io/arthas/
-- Self-hosting docs: https://github.com/michaelwang123/arthas/blob/main/official_doc/self-hosting.md
+- Self-hosting docs: https://github.com/michaelwang123/arthas/blob/main/official_doc/self-hosting.en.md
 - AI Agent plugin: `npm install @arthas-chat/openclaw-channel`
 - Public demo server: wss://arthas100-arthas-server.hf.space/ws
 
-Built with Go + React + WebSocket + MessagePack. The OpenClaw Channel plugin makes Arthas the only E2EE channel for AI agent communication – your agents get the same encryption guarantees as human users. Happy to answer questions about the architecture or deployment!
+Built with Go + React + WebSocket + MessagePack. The OpenClaw Channel plugin makes Arthas the first dedicated E2EE channel for AI agent communication – your agents get the same encryption guarantees as human users. Happy to answer questions about the architecture or deployment!
 ```

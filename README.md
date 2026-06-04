@@ -47,6 +47,7 @@ A minimalist end-to-end encrypted chat application. Create a temporary room, gen
 - ✍️ **Ed25519 Signatures** – Tamper detection, receiver can verify sender identity
 - 🤖 **AI Agent Channel** – OpenClaw plugin for E2EE AI conversations, server sees nothing
 - 🖥️ **CLI Client** – Standalone Go binary, create/join encrypted rooms from terminal
+- 🧩 **Chrome Extension** – E2EE chat in browser toolbar popup, same protocol as web/CLI
 - 🌐 **i18n** – English / Chinese / Japanese, auto-detects browser language
 - 🚫 **No Signup** – No accounts, open and use immediately
 - 🏠 **Self-Hostable** – Single binary zero-dependency, or Docker Compose with auto HTTPS
@@ -159,6 +160,16 @@ go build -o arthas-cli ./cmd/arthas-cli/
 
 The CLI is a standalone Go binary implementing the same E2EE protocol as the web client – fully interoperable.
 
+### Chrome Extension
+
+```bash
+cd arthas-extension
+npm install
+npm run build
+```
+
+Load `arthas-extension/dist/` as an unpacked extension in `chrome://extensions/` (Developer mode). Configure the server URL in Settings, then create or join encrypted rooms from the toolbar popup.
+
 ---
 
 ## Project Structure
@@ -168,6 +179,7 @@ arthas/
 ├── arthas-client/              # Web frontend (React + TypeScript)
 ├── arthas-server/              # Backend relay server (Go)
 ├── arthas-cli/                 # CLI client (standalone Go binary)
+├── arthas-extension/           # Chrome extension (React + Manifest V3)
 ├── packages/openclaw-channel/  # OpenClaw AI agent channel plugin (TypeScript)
 ├── deploy/                     # Self-hosting infrastructure (Docker + Caddy)
 ├── website/                    # Project website (Astro + Starlight)

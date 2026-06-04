@@ -5,6 +5,26 @@
 
 ---
 
+## 当前状态（2026-06-03 更新）
+
+**v1.2.2 — Feature Complete + Production Ready**
+
+所有计划功能已实现，现进入推广执行阶段。资产清单：
+- ✅ README（中/英）完善，含 SVG 架构图
+- ✅ 项目官网上线：michaelwang123.github.io/arthas
+- ✅ Docker 镜像发布至 GHCR（多架构 amd64 + arm64）
+- ✅ CLI 二进制多平台构建（Linux/macOS/Windows）
+- ✅ npm 包 `@arthas-chat/openclaw-channel` 已发布
+- ✅ 所有推广帖子终稿已就绪（docs/show/posts/）
+
+**下一步行动：**
+1. 确认 demo 可访问 + GitHub 仓库 Public
+2. 按时间窗口发布 Show HN（美西周二-周四 8:00-10:00 AM）
+3. Show HN 发布后 24h 内同步发 Reddit（r/selfhosted → r/privacy → r/opensource）
+4. 提交 awesome-selfhosted PR（需等仓库 10+ stars）
+
+---
+
 ## 第一梯队：零成本、高杠杆
 
 ### 1. GitHub / 开源社区
@@ -79,11 +99,12 @@
 
 ---
 
-## 优先级建议（只做 3 件事）
+## 优先级建议（执行阶段）
 
-1. **Show HN + Reddit r/selfhosted 帖子** — 一天搞定，可能带来第一波几百 stars
-2. **提交 awesome-selfhosted PR** — 长期稳定引流
-3. **录一个 GIF/视频 放 README** — 提高所有渠道的转化率
+1. **Show HN 帖子** — 帖子已终稿（docs/show/posts/show-hn.md），按时间窗口直接发
+2. **Reddit r/selfhosted + r/privacy + r/opensource** — Show HN 发布后 24h 内跟进
+3. **提交 awesome-selfhosted PR** — 等 10+ stars 后立即提交，长期稳定引流
+4. **dev.to 技术教程** — 帖子已终稿（devto-e2ee-tutorial.md），Show HN 后 2-3 天发
 
 ---
 

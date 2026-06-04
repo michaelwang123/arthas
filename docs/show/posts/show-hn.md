@@ -35,15 +35,17 @@ Technical highlights:
 - CLI client in Go (same E2EE protocol, interoperates with web client)
 - One-command self-hosting: single binary or Docker Compose + auto HTTPS via Caddy
 
-Also includes: encrypted file sharing (chunked, 64KB per chunk), encrypted voice messages (Push-to-Talk, Opus), QR code room sharing, self-destruct messages, room passwords, and room expiry timers.
+Also includes: encrypted file sharing (chunked, 64KB per chunk), encrypted voice messages (Push-to-Talk, Opus), reply & emoji reactions, QR code room sharing, self-destruct messages, room passwords, and room expiry timers.
 
-New: AI Agent Channel plugin (`@arthas-chat/openclaw-channel` on npm) – makes Arthas the only E2EE channel for AI agent communication. Your AI agents can talk through Arthas with the same encryption guarantees as human users. Public demo server: wss://arthas100-arthas-server.hf.space/ws
+New: AI Agent Channel plugin (`@arthas-chat/openclaw-channel` on npm) – the first dedicated E2EE channel for AI agent communication. Your AI agents can talk through Arthas with the same encryption guarantees as human users. Public demo server: wss://arthas100-arthas-server.hf.space/ws
 
 What it's NOT:
 
 - Not a Signal replacement (Signal is for long-term communication)
 - No accounts, no message history, no social features
 - Not audited by a third party (yet) – I welcome security review
+
+Licensed under AGPL-3.0. The AI agent SDK is MIT-licensed separately for easy integration.
 
 Built as a learning project over ~2 weeks. The codebase is heavily commented explaining design decisions if you're interested in the crypto implementation.
 
@@ -57,6 +59,7 @@ I'd love feedback on the crypto design and UX. Happy to answer questions!
 ## 发布前检查清单
 
 - [ ] 确认 demo 可访问（发布前 30 分钟 ping）
+- [ ] 确认 HF Spaces 公共服务器已唤醒（访问 wss://arthas100-arthas-server.hf.space/ws 触发冷启动）
 - [ ] 确认 GitHub 仓库已 Public
 - [ ] 发布时间：美西周二-周四 8:00-10:00 AM
 - [ ] 发布后 2-3 小时内持续回复评论
@@ -86,7 +89,7 @@ Not yet. The code is open source and uses standard, well-vetted algorithms (AES-
 ### Q: Why not use Matrix/Element?
 
 ```
-Matrix is a federated protocol – powerful but complex. Arthas is intentionally minimal: no federation, no accounts, no persistence. The server is ~500 lines of Go that just forwards encrypted blobs. Different design philosophy for a different use case.
+Matrix is a federated protocol – powerful but complex. Arthas is intentionally minimal: no federation, no accounts, no persistence. The server is a lightweight Go relay that just forwards encrypted blobs. Different design philosophy for a different use case.
 ```
 
 ### Q: Why not use a password manager to share secrets?
@@ -99,4 +102,10 @@ Password managers are great for static secrets. Arthas is for when you need a re
 
 ```
 Designed for small temporary rooms (2-10 people). The server is a stateless relay – it holds rooms in memory, no database. Horizontal scaling would be straightforward (sticky sessions or shared state), but for the "ephemeral chat" use case, a single instance handles thousands of concurrent rooms easily.
+```
+
+### Q: Why AGPL-3.0?
+
+```
+I want anyone running a modified version of Arthas as a network service to share their changes back. The core app is AGPL-3.0 so the community benefits from all improvements. The AI agent SDK (@arthas-chat/openclaw-channel) is MIT-licensed separately, so you can integrate it into proprietary code without restriction.
 ```

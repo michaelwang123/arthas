@@ -17,19 +17,19 @@ I built this to learn Go concurrency (CSP model with channels), Web Crypto API, 
 
 **Technical highlights:**
 
-- Go backend (~500 lines core logic): goroutine-per-client, channel-based hub, zero shared mutable state
+- Go backend (lightweight relay, heavily commented): goroutine-per-client, channel-based hub, zero shared mutable state
 - Web Crypto API: AES-256-GCM encryption, Ed25519 signatures, all in the browser
 - Binary protocol: MessagePack over WebSocket (30-50% smaller than JSON)
 - CLI client in Go: same E2EE protocol, interoperates with web client
 - Self-hosting: single binary with Go embed, or Docker Compose + Caddy auto-HTTPS
 - Property-based testing: fast-check (frontend) + rapid (Go) for crypto invariants
-- AI Agent Channel plugin (`@arthas-chat/openclaw-channel` on npm): E2EE for AI agent communication – the only encrypted channel for agent-to-agent or agent-to-human chat
+- AI Agent Channel plugin (`@arthas-chat/openclaw-channel` on npm): E2EE for AI agent communication – a dedicated encrypted channel for agent-to-agent or agent-to-human chat
 
 **What it does:**
 
 Create temporary encrypted chat rooms. Share a code with someone. Chat with E2EE. Leave and everything disappears. No signup, no accounts, no history.
 
-Also: encrypted file sharing, voice messages, QR codes, self-destruct messages, room passwords, i18n (EN/ZH/JA).
+Also: encrypted file sharing, voice messages, reply & emoji reactions, QR codes, self-destruct messages, room passwords, room expiry, i18n (EN/ZH/JA).
 
 **Stack:** Go 1.23 · React 18 · TypeScript · Zustand · Tailwind · Vite · WebSocket · MessagePack
 
@@ -41,7 +41,7 @@ Also: encrypted file sharing, voice messages, QR codes, self-destruct messages, 
 - AI Agent plugin: `npm install @arthas-chat/openclaw-channel`
 - Public demo server: wss://arthas100-arthas-server.hf.space/ws
 
-MIT licensed. PRs welcome – there's a CONTRIBUTING.md with setup instructions.
+AGPL-3.0 licensed. PRs welcome – there's a CONTRIBUTING.md with setup instructions.
 
 I'd love feedback on code quality, architecture decisions, or anything that could be improved!
 ```

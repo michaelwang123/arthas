@@ -9,7 +9,7 @@ E2EE ephemeral chat – create a room, share the key, chat securely, everything 
 ## Suggested GitHub Topics
 
 ```
-end-to-end-encryption, e2ee, ephemeral-chat, self-hosted, privacy, websocket, go, react, typescript, encrypted-messaging, ai-agent, openclaw, zero-knowledge, real-time-chat, docker, cli
+end-to-end-encryption, e2ee, ephemeral-chat, self-hosted, privacy, websocket, go, react, typescript, encrypted-messaging, ai-agent, openclaw, zero-knowledge, real-time-chat, docker, cli, agpl-3.0
 ```
 
 ## Social Preview Image Text Suggestions (1280×640)
