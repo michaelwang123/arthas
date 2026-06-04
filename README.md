@@ -162,13 +162,21 @@ The CLI is a standalone Go binary implementing the same E2EE protocol as the web
 
 ### Chrome Extension
 
+E2EE chat directly from the browser toolbar — build once, load as unpacked extension.
+
+<p align="center">
+  <img src="docs/diagrams/chrome-extension-flow.svg" alt="Chrome Extension Build Flow" width="900"/>
+</p>
+
 ```bash
 cd arthas-extension
 npm install
 npm run build
 ```
 
-Load `arthas-extension/dist/` as an unpacked extension in `chrome://extensions/` (Developer mode). Configure the server URL in Settings, then create or join encrypted rooms from the toolbar popup.
+Load `arthas-extension/dist/` as an unpacked extension in `chrome://extensions/` (Developer mode). Configure the server URL in Settings, then create or join encrypted rooms from the toolbar popup. Same E2EE protocol — interoperable with web app and CLI.
+
+Full guide: [Chrome Extension Documentation](official_doc/chrome-extension.en.md)
 
 ---
 
@@ -197,6 +205,7 @@ arthas/
 | [Protocol](official_doc/protocol.en.md) | WebSocket message format specification |
 | [Security](official_doc/security.en.md) | E2EE design, trust model, threat analysis |
 | [CLI Guide](official_doc/cli-guide.en.md) | Terminal client usage |
+| [Chrome Extension](official_doc/chrome-extension.en.md) | Browser extension build & usage |
 | [OpenClaw Channel](official_doc/openclaw-channel.en.md) | AI Agent E2EE plugin |
 | [Development](official_doc/development.en.md) | Local dev setup, code structure |
 | [Configuration](official_doc/configuration.en.md) | All configurable parameters |

@@ -4,6 +4,8 @@
 
 > E2EE ephemeral chat in your browser toolbar. Same protocol as the web app and CLI — fully interoperable.
 
+**Quick Start:** `npm install` → `npm run build` → Load `dist/` in Chrome → Set server URL → Chat with E2EE.
+
 ---
 
 ## Architecture
