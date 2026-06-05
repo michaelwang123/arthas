@@ -146,5 +146,27 @@
   "language.switch": "言語を切り替え",
   "language.zh": "中文",
   "language.en": "English",
-  "language.ja": "日本語"
+  "language.ja": "日本語",
+
+  "hub.title": "Arthas Hub",
+  "hub.browseButton": "公開ルームを閲覧",
+  "hub.backHome": "ホームに戻る",
+  "hub.searchPlaceholder": "ルームを検索...",
+  "hub.clearFilters": "フィルターをクリア",
+  "hub.roomCount": "{{count}} 個の公開ルーム",
+  "hub.empty": "公開ルームはまだありません。作成しましょう！",
+  "hub.createFirst": "ルームを作成",
+  "hub.joinRoom": "参加",
+  "hub.ago": "前",
+  "hub.remaining": "残り",
+  "hub.loadMore": "もっと読み込む",
+  "hub.retry": "再試行",
+  "hub.public.toggle": "Arthas Hub に公開する",
+  "hub.public.titlePlaceholder": "ルームタイトル（必須、1-50文字）",
+  "hub.public.titleError": "タイトルは1-50文字で入力してください",
+  "hub.public.descPlaceholder": "ルーム説明（任意、最大200文字）",
+  "hub.public.tagPlaceholder": "タグを追加",
+  "hub.public.tagMaxError": "タグは最大5個まで",
+  "hub.public.tagLengthError": "タグは20文字以内で入力してください",
+  "hub.public.tagFormatError": "タグには英数字とハイフンのみ使用できます"
 }

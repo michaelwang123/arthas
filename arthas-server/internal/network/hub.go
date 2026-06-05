@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arthas/arthas-server/internal/hub"
 	"github.com/arthas/arthas-server/internal/logger"
 	"github.com/arthas/arthas-server/internal/room"
 	gonanoid "github.com/matoous/go-nanoid/v2"
@@ -59,6 +60,7 @@ const (
 // 5. WaitGroup 计数归零 → main() 的 hub.Wait() 返回，继续退出
 type Hub struct {
 	roomManager *room.RoomManager
+	hubRegistry *hub.HubRegistry // public room directory registry (nil = Hub disabled)
 	clients     map[*Client]bool
 	register    chan *Client
 	unregister  chan *Client
@@ -96,6 +98,11 @@ func NewHub() *Hub {
 		done:         make(chan struct{}),
 		warnedExpiry: make(map[string]bool),
 	}
+}
+
+// SetHubRegistry sets the Hub directory registry for public room listing.
+func (h *Hub) SetHubRegistry(registry *hub.HubRegistry) {
+	h.hubRegistry = registry
 }
 
 // Run 启动 Hub 主循环，处理客户端注册/注销事件。
@@ -414,6 +421,60 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 		ExpiresAt:   expiresAt,
 	})
 
+	// --- Hub public listing (optional) ---
+	isPublic, _ := dataMap[FieldPublic].(bool)
+	if isPublic && h.hubRegistry != nil {
+		title, _ := dataMap[FieldTitle].(string)
+		title = hub.SanitizeString(title)
+		description, _ := dataMap[FieldDescription].(string)
+		description = hub.SanitizeString(description)
+
+		// Parse tags array
+		var tags []string
+		if rawTags, ok := dataMap[FieldTags].([]interface{}); ok {
+			for _, t := range rawTags {
+				if s, ok := t.(string); ok {
+					tags = append(tags, s)
+				}
+			}
+		}
+
+		// Parse keyEncoded (base64url-encoded AES key from client)
+		keyEncoded, _ := dataMap[FieldKeyEncoded].(string)
+
+		// Validate listing metadata
+		if err := hub.ValidateListing(title, description, tags); err != nil {
+			// Validation failed — room is still created as private, send error info
+			h.sendError(client, ErrCodeInvalidListing, err.Error())
+			logger.Warn("Hub", "public listing validation failed for room %s: %v", roomId, err)
+		} else if keyEncoded == "" {
+			// keyEncoded is required for public listing
+			h.sendError(client, ErrCodeInvalidListing, "keyEncoded is required for public rooms")
+			logger.Warn("Hub", "public listing missing keyEncoded for room %s", roomId)
+		} else {
+			// Register the room in the Hub directory
+			listing := &hub.RoomListing{
+				RoomID:      roomId,
+				KeyEncoded:  keyEncoded,
+				Title:       title,
+				Description: description,
+				Tags:        tags,
+				MemberCount: 1, // creator is the first member
+				HasPassword: password != "",
+				CreatedAt:   time.Now().Unix(),
+				ExpiresAt:   expiresAt,
+				Ephemeral:   ephemeral,
+			}
+			if err := h.hubRegistry.Register(listing); err != nil {
+				// Hub is full — room still created as private
+				h.sendError(client, ErrCodeHubFull, "hub is full, room created as private")
+				logger.Warn("Hub", "hub registry full, room %s created as private", roomId)
+			} else {
+				logger.Info("Hub", "room %s listed publicly in Hub: %q", roomId, title)
+			}
+		}
+	}
+
 	logger.Info("Hub", "room %s created by client %s (%s), total rooms: %d", roomId, client.ID, name, h.roomManager.RoomCount())
 }
 
@@ -498,6 +559,11 @@ func (h *Hub) handleJoinRoom(client *Client, data interface{}) {
 		client.RoomID = ""
 		h.sendError(client, ErrCodeRoomFull, "room is full")
 		return
+	}
+
+	// Update Hub member count for public rooms
+	if h.hubRegistry != nil {
+		h.hubRegistry.UpdateMemberCount(roomId, r.MemberCount())
 	}
 
 	// Broadcast MemberJoined to all existing members (excluding the new joiner)
@@ -672,6 +738,15 @@ func (h *Hub) handleLeaveRoom(client *Client, data interface{}) {
 	if r != nil {
 		// Remove the client from the room
 		remaining := r.RemoveMember(client.ID)
+
+		// Update Hub member count / unregister for public rooms
+		if h.hubRegistry != nil {
+			if remaining == 0 {
+				h.hubRegistry.Unregister(roomId)
+			} else {
+				h.hubRegistry.UpdateMemberCount(roomId, remaining)
+			}
+		}
 
 		// Broadcast MemberLeft to remaining members
 		memberLeftMsg := Message{
@@ -1166,7 +1241,12 @@ func (h *Hub) cleanupExpiredRooms() {
 		}
 		h.mu.RUnlock()
 
-		// 2f. 从 RoomManager 中移除房间
+		// 2f. Unregister from Hub directory (before removing room)
+		if h.hubRegistry != nil {
+			h.hubRegistry.Unregister(roomId)
+		}
+
+		// 从 RoomManager 中移除房间
 		h.roomManager.RemoveRoom(roomId)
 
 		// 清理过期预警记录

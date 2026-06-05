@@ -120,6 +120,27 @@ go build -o arthas-cli ./cmd/arthas-cli/
 
 The CLI and Web clients are interoperable — rooms created with the Web client can be joined via CLI, and vice versa.
 
+### Option 3: Browse and Join via Arthas Hub
+
+If someone has created a public room, you can browse and join it directly without a share code:
+
+1. Click **"🌐 Browse Public Rooms"** at the bottom of the Home page
+2. Enter the Hub page and browse the public rooms list
+3. Pick a room that interests you, enter your nickname
+4. Click "Join" — you're in the encrypted chat immediately
+
+To create a public room:
+
+1. In the create section on the Home page, toggle **"🌐 List in Arthas Hub (public)"**
+2. Fill in the room title (required), description (optional), and tags (optional)
+3. Click "Create Room" — it automatically appears in the Hub directory
+
+<p align="center">
+  <img src="../docs/diagrams/arthas-hub-flow.svg" alt="Arthas Hub Flow" width="800"/>
+</p>
+
+> **Tip:** Rooms in the Hub still use end-to-end encryption. Public rooms expose their encryption key in the share code to allow anyone to join. For access control, set a room password when creating.
+
 ---
 
 ## Verifying Encryption

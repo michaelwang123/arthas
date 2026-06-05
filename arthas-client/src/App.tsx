@@ -1,7 +1,9 @@
 import { useEffect, Component, type ReactNode } from 'react';
 import { useChatStore } from './stores/chatStore';
+import { usePageStore } from './stores/pageStore';
 import { Home } from './pages/Home';
 import { ChatRoom } from './pages/ChatRoom';
+import { Hub } from './pages/Hub';
 import { useTranslation, useI18nStore, translate } from './i18n';
 
 // ===== ErrorBoundary =====
@@ -67,6 +69,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 function App() {
   const roomId = useChatStore((s) => s.roomId);
   const connect = useChatStore((s) => s.connect);
+  const page = usePageStore((s) => s.page);
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -78,9 +81,19 @@ function App() {
     document.title = t('app.title');
   }, [t]);
 
+  // Determine which view to render:
+  // 1. If in a room → always show ChatRoom
+  // 2. If page === 'hub' → show Hub directory
+  // 3. Otherwise → show Home (create/join)
+  const renderPage = () => {
+    if (roomId !== null) return <ChatRoom />;
+    if (page === 'hub') return <Hub />;
+    return <Home />;
+  };
+
   return (
     <ErrorBoundary>
-      {roomId === null ? <Home /> : <ChatRoom />}
+      {renderPage()}
     </ErrorBoundary>
   );
 }

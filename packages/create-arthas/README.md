@@ -3,7 +3,7 @@
 > Self-host Arthas E2EE chat with one command.
 
 ```bash
-npx create-arthas
+npx @arthas-chat/create-arthas
 ```
 
 ---
@@ -28,7 +28,7 @@ Then optionally starts the containers immediately.
 ### Interactive Mode (default)
 
 ```bash
-npx create-arthas
+npx @arthas-chat/create-arthas
 ```
 
 Prompts for:
@@ -42,7 +42,7 @@ Prompts for:
 ### Non-Interactive Mode
 
 ```bash
-npx create-arthas --defaults
+npx @arthas-chat/create-arthas --defaults
 ```
 
 Uses localhost:8080, no HTTPS, starts immediately.
@@ -61,20 +61,20 @@ Uses localhost:8080, no HTTPS, starts immediately.
 ### Local Development
 
 ```bash
-npx create-arthas --defaults
-# â†’ Arthas running at http://localhost:8080
-# â†’ WebSocket: ws://localhost:8080/ws
+npx @arthas-chat/create-arthas --defaults
+# â†?Arthas running at http://localhost:8080
+# â†?WebSocket: ws://localhost:8080/ws
 ```
 
 ### Production with HTTPS
 
 ```bash
-npx create-arthas
+npx @arthas-chat/create-arthas
 # Domain: chat.example.com
 # HTTPS: Yes
 # Email: admin@example.com
-# â†’ Arthas running at https://chat.example.com
-# â†’ Auto Let's Encrypt certificate
+# â†?Arthas running at https://chat.example.com
+# â†?Auto Let's Encrypt certificate
 ```
 
 ---
@@ -94,7 +94,7 @@ docker compose down
 docker compose pull && docker compose up -d
 
 # Reconfigure
-npx create-arthas  # re-run, overwrites existing files
+npx @arthas-chat/create-arthas  # re-run, overwrites existing files
 ```
 
 ---

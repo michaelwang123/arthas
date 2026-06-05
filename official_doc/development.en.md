@@ -104,6 +104,54 @@ npm run preview
 
 ---
 
+## Production Build (Single Binary Deployment)
+
+Arthas uses Go's `//go:embed` to embed frontend build artifacts into the server binary, enabling single-file deployment. This means after modifying frontend code, you must rebuild the frontend and sync it to Go's embed directory.
+
+### Why is manual sync needed?
+
+In development, the frontend runs independently via Vite dev server (port 5173), and the backend uses `-tags dev` to skip embedding. But in production, users download a single Go binary that includes the frontend. Before release:
+
+1. Build frontend → generates `arthas-client/dist/`
+2. Sync to embed directory → copy to `arthas-server/internal/static/dist/`
+3. Compile Go → `go:embed dist` packages files into the binary
+
+### Using the build script (recommended)
+
+```bash
+# Linux / macOS
+./scripts/build-server-all.sh
+
+# Windows (PowerShell)
+.\scripts\build-server-all.ps1
+```
+
+Script options:
+
+| Option | Description |
+|--------|-------------|
+| (no args) | Full pipeline: npm build → sync → go build |
+| `--sync-only` / `-SyncOnly` | Skip npm build, only sync existing dist/ |
+| `--no-go` / `-NoGo` | Build frontend + sync, skip Go compilation |
+
+### Manual steps
+
+```bash
+# 1. Build frontend
+cd arthas-client && npm run build && cd ..
+
+# 2. Sync to Go embed directory
+rm -rf arthas-server/internal/static/dist
+cp -r arthas-client/dist arthas-server/internal/static/dist
+
+# 3. Compile (with embedded frontend)
+cd arthas-server && go build -ldflags "-s -w" -o server ./cmd/server
+```
+
+> **Note:** If only backend code changed, no need to rebuild frontend. Just `go build` (uses existing dist/).
+
+---
+
 ## Code Architecture Details
 
 ### Backend Core Modules

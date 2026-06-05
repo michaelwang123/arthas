@@ -4,7 +4,7 @@
 
 > 一行命令自托管 Arthas E2EE 聊天。无需手动配置。
 
-**快速开始：** `npx create-arthas` → 回答问题 → 30 秒内实例运行。
+**快速开始：** `npx @arthas-chat/create-arthas` → 回答问题 → 30 秒内实例运行。
 
 ---
 
@@ -33,7 +33,7 @@
 ### 交互模式
 
 ```bash
-npx create-arthas
+npx @arthas-chat/create-arthas
 ```
 
 会依次询问：
@@ -47,7 +47,7 @@ npx create-arthas
 ### 非交互模式
 
 ```bash
-npx create-arthas --defaults
+npx @arthas-chat/create-arthas --defaults
 ```
 
 跳过所有提示。使用：localhost:8080、无 HTTPS、立即启动。

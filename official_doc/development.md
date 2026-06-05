@@ -126,6 +126,64 @@ npm run preview
 
 ---
 
+## 生产构建（单二进制部署）
+
+Arthas 使用 Go 的 `//go:embed` 将前端构建产物嵌入服务器二进制，实现单文件部署。这意味着前端代码修改后需要重新构建并同步到 Go 的 embed 目录。
+
+### 为什么需要手动同步？
+
+开发模式下，前端使用 Vite dev server 独立运行（端口 5173），后端使用 `-tags dev` 跳过 embed。但生产部署时，用户下载的是一个包含前端的 Go 二进制。因此发布前必须：
+
+1. 构建前端 → 生成 `arthas-client/dist/`
+2. 同步到 embed 目录 → 复制到 `arthas-server/internal/static/dist/`
+3. 编译 Go → `go:embed dist` 将文件打包进二进制
+
+### 使用构建脚本（推荐）
+
+```bash
+# Linux / macOS
+./scripts/build-server-all.sh
+
+# Windows (PowerShell)
+.\scripts\build-server-all.ps1
+```
+
+脚本选项：
+
+| 选项 | 说明 |
+|------|------|
+| (无参数) | 完整流程：npm build → 同步 → go build |
+| `--sync-only` / `-SyncOnly` | 跳过 npm build，仅同步已有的 dist/ |
+| `--no-go` / `-NoGo` | 构建前端 + 同步，不编译 Go |
+
+### 手动执行
+
+```bash
+# 1. 构建前端
+cd arthas-client && npm run build && cd ..
+
+# 2. 同步到 Go embed 目录
+rm -rf arthas-server/internal/static/dist
+cp -r arthas-client/dist arthas-server/internal/static/dist
+
+# 3. 编译（含嵌入的前端）
+cd arthas-server && go build -ldflags "-s -w" -o server ./cmd/server
+```
+
+### 验证
+
+```bash
+# 启动单二进制服务器
+cd arthas-server && ./server
+
+# 浏览器访问 http://localhost:8080 应该看到完整前端 UI
+# 访问 http://localhost:8080/api/hub 应该返回 JSON
+```
+
+> **重要提示：** 如果只修改了后端代码，不需要重新构建前端。直接 `go build` 即可（使用已有的 dist/）。只有前端代码变更后才需要重新运行构建脚本。
+
+---
+
 ## 代码架构详解
 
 ### 后端核心模块

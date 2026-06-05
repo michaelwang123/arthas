@@ -116,6 +116,13 @@ export interface CreateRoomData {
   ephemeral?: number;
   /** 房间有效期（秒）。0=永不过期，负数服务器视为0，>604800服务器截断为604800 */
   expiry?: number;
+  /** Hub 公开展示相关字段（可选，仅当 public=true 时发送） */
+  public?: boolean;
+  title?: string;
+  description?: string;
+  tags?: string[];
+  /** base64url 编码的 AES-256 密钥，服务器用于构建完整 shareCode */
+  keyEncoded?: string;
 }
 
 export interface JoinRoomData {

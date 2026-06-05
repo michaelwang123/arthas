@@ -61,6 +61,27 @@ The share code contains the room ID and encryption key. If leaked, anyone can jo
 
 ## Usage
 
+### What is Arthas Hub?
+
+Arthas Hub is a public room directory. When creating a room, you can opt to "List in Arthas Hub," making it visible to all visitors on the Hub page without needing a share code. Ideal for open-source project discussions, AMAs, and ad-hoc technical exchanges.
+
+### Are public rooms less secure?
+
+Public rooms still use end-to-end encryption (AES-256-GCM). The difference is that the encryption key is exposed alongside the share code in the Hub directory, allowing anyone to obtain it and join. This means:
+- ✅ The server still cannot decrypt messages (zero-knowledge relay)
+- ✅ Transport is still encrypted (prevents network eavesdropping)
+- ❌ You cannot prevent Hub visitors from joining and reading messages (that's the point of public rooms)
+
+If you need access control, set a password on the public room. It will display a 🔒 icon in Hub and visitors must enter the password to join.
+
+### Are Hub rooms preserved after server restart?
+
+**No.** The Hub directory, like all rooms, is stored in memory. A server restart clears everything. This is consistent with Arthas's "use and discard" product design.
+
+### How many rooms can the Hub display?
+
+Default maximum is 200 public rooms (configurable via `--max-public-rooms` flag or `MAX_PUBLIC_ROOMS` environment variable). When the limit is reached, new public room creation requests fall back to private rooms.
+
 ### How do I create a room?
 
 1. Open the Arthas web app

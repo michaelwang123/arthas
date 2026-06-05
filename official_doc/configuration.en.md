@@ -30,6 +30,15 @@ The following parameters are defined in code and require recompilation to modify
 | Ping interval | 25s | `internal/network/client.go` | Heartbeat send interval |
 | NanoID length | 21 chars | `internal/network/hub.go` | Room ID length |
 
+### Arthas Hub Parameters
+
+| Parameter | Default | CLI Flag / Env Var | Description |
+|-----------|---------|-------------------|-------------|
+| Max public rooms | 200 | `--max-public-rooms` / `MAX_PUBLIC_ROOMS` | Hub directory room capacity |
+| Hub API rate limit | 30/min | `internal/hub/ratelimit.go` | Max requests per IP per minute |
+| Hub poll interval (frontend) | 30s | `arthas-client/src/hub/hubStore.ts` | Client refresh frequency |
+| Search debounce delay (frontend) | 300ms | `arthas-client/src/hub/hubStore.ts` | Delay before triggering search |
+
 ---
 
 ## Frontend Configuration

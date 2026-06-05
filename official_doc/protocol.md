@@ -79,12 +79,72 @@ MessagePack 编码后以 WebSocket Binary Frame 发送。
 {
   "type": 1,
   "data": {
-    "name": "Alice"        // 创建者昵称 (1-20 字符)
+    "name": "Alice",           // 创建者昵称 (1-20 字符)
+    "password": "",            // 房间密码哈希 (SHA-256 hex, 可选)
+    "ephemeral": 0,            // 阅后即焚秒数 (0=关闭)
+    "expiry": 0,               // 有效期秒数 (0=永不过期)
+    "public": true,            // [Hub] 是否公开展示 (可选, 默认 false)
+    "title": "Golang AMA",     // [Hub] 房间标题 (1-50 字符, public=true 时必填)
+    "description": "Ask me...",// [Hub] 房间描述 (0-200 字符, 可选)
+    "tags": ["golang", "ama"], // [Hub] 标签 (0-5 个, 每个 1-20 字符, 可选)
+    "keyEncoded": "base64url"  // [Hub] AES-256 密钥 base64url 编码 (public=true 时必填)
   }
 }
 ```
 
+> **Hub 字段说明：** 当 `public=true` 时，服务器会将房间注册到 Hub 目录。`keyEncoded` 是客户端生成的 AES-256 密钥，服务器用它与 roomId 组合构建完整的 shareCode 供 Hub 访客使用。服务器不解密任何消息 — 它只是把密钥作为不透明字符串传递给 Hub API。
+
 **响应：** RoomCreated (0x10) + RoomJoined (0x11)
+
+---
+
+## Hub REST API
+
+Arthas Hub 通过独立的 HTTP REST 端点提供公开房间目录查询，与 WebSocket 协议互补。
+
+### GET /api/hub — 查询公开房间目录
+
+**查询参数：**
+
+| 参数 | 类型 | 默认值 | 约束 |
+|------|------|--------|------|
+| `tag` | string | (无) | 按标签筛选（大小写不敏感） |
+| `q` | string | (无) | 搜索标题+描述（大小写不敏感 contains） |
+| `limit` | int | 50 | 1-100，超过 100 返回 400 |
+| `offset` | int | 0 | ≥ 0，负数返回 400 |
+
+**成功响应 (200)：**
+```json
+{
+  "rooms": [
+    {
+      "roomId": "VzlX4rliTuhBhboXaTzHt",
+      "shareCode": "VzlX4rliTuhBhboXaTzHt:base64key:0:0",
+      "title": "Golang AMA",
+      "description": "Ask me anything about Go",
+      "tags": ["golang", "ama"],
+      "memberCount": 5,
+      "hasPassword": false,
+      "createdAt": 1700000000,
+      "expiresAt": 0
+    }
+  ],
+  "total": 42,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+**排序规则：** `memberCount` 降序，相同时按 `createdAt` 降序。
+
+**错误响应：**
+
+| 状态码 | 条件 | 响应体 |
+|--------|------|--------|
+| 400 | limit > 100 或 offset < 0 | `{"error": "descriptive message"}` |
+| 429 | 频率限制（30 req/min/IP） | `{"error": "rate limited, try again later"}` + `Retry-After` 头 |
+
+**CORS：** 根据服务器 `ALLOWED_ORIGINS` 配置设置 `Access-Control-Allow-Origin`，支持 OPTIONS 预检请求。
 
 ---
 

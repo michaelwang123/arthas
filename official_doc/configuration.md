@@ -39,6 +39,15 @@
 | Ping 间隔　　　　　 | 25s　　　　| `internal/network/client.go` | 心跳发送间隔　　　　　|
 | NanoID 长度　　　　 | 21 chars　 | `internal/network/hub.go`　　| 房间 ID 长度　　　　　|
 
+### Arthas Hub 参数
+
+| 参数　　　　　　　　　　| 默认值 | CLI Flag / 环境变量　　　　　　　　　　 | 说明　　　　　　　　　　　　|
+| -------------------------| --------| -----------------------------------------| -----------------------------|
+| 最大公开房间数　　　　　| 200　　| `--max-public-rooms` / `MAX_PUBLIC_ROOMS`| Hub 目录房间上限　　　　　　|
+| Hub API 频率限制　　　　| 30/min | `internal/hub/ratelimit.go`　　　　　　　| 每 IP 每分钟最大请求数　　　|
+| Hub 轮询间隔（前端）　　| 30s　　| `arthas-client/src/hub/hubStore.ts`　　　| 客户端刷新频率　　　　　　　|
+| 搜索防抖延迟（前端）　　| 300ms　| `arthas-client/src/hub/hubStore.ts`　　　| 输入后延迟触发搜索　　　　　|
+
 ---
 
 ## 前端配置

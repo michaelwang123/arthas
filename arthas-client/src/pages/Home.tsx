@@ -19,9 +19,11 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useChatStore } from '../stores/chatStore';
+import { usePageStore } from '../stores/pageStore';
 import { decodeShareKey } from '../crypto/shareKey';
 import { useTranslation } from '../i18n';
 import { LanguageSwitcher } from '../i18n/components/LanguageSwitcher';
+import { CreateRoomPublicFields, type PublicFieldsData } from '../components/CreateRoomPublicFields';
 
 /**
  * 解析 URL hash 中的 join 路由，提取分享码。
@@ -77,6 +79,17 @@ export function Home() {
   // Join room: password
   const [joinPassword, setJoinPassword] = useState('');
 
+  // Create room: public listing fields
+  const [publicFields, setPublicFields] = useState<PublicFieldsData>({
+    isPublic: false,
+    title: '',
+    description: '',
+    tags: [],
+  });
+
+  // Page navigation
+  const setPage = usePageStore((s) => s.setPage);
+
   // URL hash route validation messages
   const [hashError, setHashError] = useState('');
   const [hashWarning, setHashWarning] = useState('');
@@ -129,7 +142,8 @@ export function Home() {
   // Validation
   const nicknameValid = nickname.length >= 1 && nickname.length <= 20;
   const passwordValid = createPassword.length === 0 || (createPassword.length >= 4 && createPassword.length <= 20);
-  const canCreate = nicknameValid && passwordValid;
+  const publicFieldsValid = !publicFields.isPublic || (publicFields.title.trim().length >= 1 && publicFields.title.trim().length <= 50);
+  const canCreate = nicknameValid && passwordValid && publicFieldsValid;
   const canJoin = nicknameValid && shareCode.trim().length > 0;
 
   const handleCreate = () => {
@@ -139,6 +153,11 @@ export function Home() {
       createPassword.length > 0 ? createPassword : undefined,
       ephemeralEnabled ? ephemeralTime : undefined,
       expiryDuration > 0 ? expiryDuration : undefined,
+      publicFields.isPublic ? {
+        title: publicFields.title.trim(),
+        description: publicFields.description.trim(),
+        tags: publicFields.tags,
+      } : undefined,
     );
   };
 
@@ -268,6 +287,9 @@ export function Home() {
             </select>
           </div>
 
+          {/* Create Room: Public listing fields */}
+          <CreateRoomPublicFields value={publicFields} onChange={setPublicFields} />
+
           {/* Create button */}
           <button
             onClick={handleCreate}
@@ -336,6 +358,16 @@ export function Home() {
             className="w-full py-3 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
           >
             {t('home.join.button')}
+          </button>
+        </div>
+
+        {/* Hub navigation */}
+        <div className="pt-2">
+          <button
+            onClick={() => setPage('hub')}
+            className="w-full py-2.5 text-sm text-gray-300 hover:text-white bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            🌐 {t('hub.browseButton')}
           </button>
         </div>
       </div>

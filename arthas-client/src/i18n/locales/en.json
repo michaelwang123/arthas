@@ -146,5 +146,27 @@
   "language.switch": "Switch language",
   "language.zh": "中文",
   "language.en": "English",
-  "language.ja": "日本語"
+  "language.ja": "日本語",
+
+  "hub.title": "Arthas Hub",
+  "hub.browseButton": "Browse Public Rooms",
+  "hub.backHome": "Back to Home",
+  "hub.searchPlaceholder": "Search rooms...",
+  "hub.clearFilters": "Clear filters",
+  "hub.roomCount": "{{count}} public rooms available",
+  "hub.empty": "No public rooms yet. Create one!",
+  "hub.createFirst": "Create a Room",
+  "hub.joinRoom": "Join",
+  "hub.ago": "ago",
+  "hub.remaining": "left",
+  "hub.loadMore": "Load more",
+  "hub.retry": "Retry",
+  "hub.public.toggle": "List in Arthas Hub (public)",
+  "hub.public.titlePlaceholder": "Room title (required, 1-50 chars)",
+  "hub.public.titleError": "Title must be 1-50 characters",
+  "hub.public.descPlaceholder": "Room description (optional, max 200 chars)",
+  "hub.public.tagPlaceholder": "Add a tag",
+  "hub.public.tagMaxError": "Maximum 5 tags allowed",
+  "hub.public.tagLengthError": "Tag must be 20 characters or less",
+  "hub.public.tagFormatError": "Tags can only contain letters, numbers, and hyphens"
 }

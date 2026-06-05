@@ -4,7 +4,7 @@
 
 > Self-host Arthas E2EE chat with one command. No manual configuration needed.
 
-**Quick Start:** `npx create-arthas` → answer prompts → instance running in 30 seconds.
+**Quick Start:** `npx @arthas-chat/create-arthas` → answer prompts → instance running in 30 seconds.
 
 ---
 
@@ -33,7 +33,7 @@
 ### Interactive Mode
 
 ```bash
-npx create-arthas
+npx @arthas-chat/create-arthas
 ```
 
 You'll be asked:
@@ -47,7 +47,7 @@ You'll be asked:
 ### Non-Interactive Mode
 
 ```bash
-npx create-arthas --defaults
+npx @arthas-chat/create-arthas --defaults
 ```
 
 Skips all prompts. Uses: localhost:8080, no HTTPS, starts immediately.

@@ -81,12 +81,72 @@ Create a new chat room.
 {
   "type": 1,
   "data": {
-    "name": "Alice"        // Creator nickname (1-20 characters)
+    "name": "Alice",           // Creator nickname (1-20 characters)
+    "password": "",            // Room password hash (SHA-256 hex, optional)
+    "ephemeral": 0,            // Self-destruct seconds (0=disabled)
+    "expiry": 0,               // Room TTL in seconds (0=never expires)
+    "public": true,            // [Hub] List in public directory (optional, default false)
+    "title": "Golang AMA",     // [Hub] Room title (1-50 chars, required if public=true)
+    "description": "Ask me...",// [Hub] Room description (0-200 chars, optional)
+    "tags": ["golang", "ama"], // [Hub] Tags (0-5 items, each 1-20 chars, optional)
+    "keyEncoded": "base64url"  // [Hub] AES-256 key base64url-encoded (required if public=true)
   }
 }
 ```
 
+> **Hub fields:** When `public=true`, the server registers the room in the Hub directory. `keyEncoded` is the client-generated AES-256 key that the server combines with roomId to construct the full shareCode for Hub visitors. The server never decrypts messages — it treats the key as an opaque string passed through to the Hub API.
+
 **Response:** RoomCreated (0x10) + RoomJoined (0x11)
+
+---
+
+## Hub REST API
+
+Arthas Hub provides a public room directory via a standalone HTTP REST endpoint, complementing the WebSocket protocol.
+
+### GET /api/hub — Query Public Room Directory
+
+**Query Parameters:**
+
+| Param | Type | Default | Constraint |
+|-------|------|---------|------------|
+| `tag` | string | (none) | Filter by tag (case-insensitive) |
+| `q` | string | (none) | Search title + description (case-insensitive contains) |
+| `limit` | int | 50 | 1-100; values > 100 return HTTP 400 |
+| `offset` | int | 0 | ≥ 0; negative values return HTTP 400 |
+
+**Success Response (200):**
+```json
+{
+  "rooms": [
+    {
+      "roomId": "VzlX4rliTuhBhboXaTzHt",
+      "shareCode": "VzlX4rliTuhBhboXaTzHt:base64key:0:0",
+      "title": "Golang AMA",
+      "description": "Ask me anything about Go",
+      "tags": ["golang", "ama"],
+      "memberCount": 5,
+      "hasPassword": false,
+      "createdAt": 1700000000,
+      "expiresAt": 0
+    }
+  ],
+  "total": 42,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+**Sorting:** `memberCount` descending, then `createdAt` descending (newest first for ties).
+
+**Error Responses:**
+
+| Status | Condition | Body |
+|--------|-----------|------|
+| 400 | limit > 100 or offset < 0 | `{"error": "descriptive message"}` |
+| 429 | Rate limit exceeded (30 req/min/IP) | `{"error": "rate limited, try again later"}` + `Retry-After` header |
+
+**CORS:** Sets `Access-Control-Allow-Origin` based on server `ALLOWED_ORIGINS` config. Handles OPTIONS preflight requests.
 
 ---
 

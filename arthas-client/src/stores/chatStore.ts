@@ -41,9 +41,9 @@ import {
   type MemberTypingData,
   type RoomClosedData,
   type ErrorData,
+  type CreateRoomData,
 } from '../network/protocol';
-import { generateRoomKey } from '../crypto/keys';
-import { importRoomKey } from '../crypto/keys';
+import { generateRoomKey, exportRoomKey, importRoomKey } from '../crypto/keys';
 import { encryptMessage } from '../crypto/encrypt';
 import { decryptMessage } from '../crypto/decrypt';
 import { encodeShareKey, decodeShareKey } from '../crypto/shareKey';
@@ -160,7 +160,7 @@ export interface ChatState {
 
   // Actions
   connect: () => void;
-  createRoom: (name: string, password?: string, ephemeral?: number, expiry?: number) => Promise<void>;
+  createRoom: (name: string, password?: string, ephemeral?: number, expiry?: number, publicData?: { title: string; description: string; tags: string[] }) => Promise<void>;
   joinRoom: (shareCode: string, name: string, password?: string) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   setTyping: (typing: boolean) => Promise<void>;
@@ -293,7 +293,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setInterval(checkConnection, 500);
   },
 
-  createRoom: async (name: string, password?: string, ephemeral?: number, expiry?: number) => {
+  createRoom: async (name: string, password?: string, ephemeral?: number, expiry?: number, publicData?: { title: string; description: string; tags: string[] }) => {
     const roomKey = await generateRoomKey();
     const hashedPwd = await hashPassword(password ?? '');
 
@@ -304,7 +304,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const keyPair = await generateSigningKeyPair();
 
     set({ myName: name, roomKey, ephemeral: ephemeral ?? 0, signingKeyPair: keyPair, publicKeyMap: new Map() });
-    ws.send(MSG_CREATE_ROOM, { name, password: hashedPwd, ephemeral: ephemeral ?? 0, expiry: expiry ?? 0 });
+
+    // Build create room payload with proper type
+    const payload: CreateRoomData = {
+      name,
+      password: hashedPwd,
+      ephemeral: ephemeral ?? 0,
+      expiry: expiry ?? 0,
+    };
+
+    // If public listing requested, include public fields + exported key
+    if (publicData) {
+      const keyEncoded = await exportRoomKey(roomKey);
+      payload.public = true;
+      payload.title = publicData.title;
+      payload.description = publicData.description;
+      payload.tags = publicData.tags;
+      payload.keyEncoded = keyEncoded;
+    }
+
+    ws.send(MSG_CREATE_ROOM, payload);
   },
 
   joinRoom: async (shareCode: string, name: string, password?: string) => {

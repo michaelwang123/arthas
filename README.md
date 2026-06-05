@@ -49,6 +49,7 @@ A minimalist end-to-end encrypted chat application. Create a temporary room, gen
 - 🖥️ **CLI Client** – Standalone Go binary, create/join encrypted rooms from terminal
 - 🧩 **Chrome Extension** – E2EE chat in browser toolbar popup, same protocol as web/CLI
 - 🌐 **i18n** – English / Chinese / Japanese, auto-detects browser language
+- 🌐 **Arthas Hub** – Public room directory, browse & join rooms without sharing codes
 - 🚫 **No Signup** – No accounts, open and use immediately
 - 🏠 **Self-Hostable** – Single binary zero-dependency, or Docker Compose with auto HTTPS
 
@@ -83,18 +84,18 @@ A minimalist end-to-end encrypted chat application. Create a temporary room, gen
 
 ## Tech Stack
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| Crypto | Web Crypto API | AES-256-GCM E2EE, native hardware acceleration |
-| Frontend | React 18 + TypeScript | Component-based UI, type-safe |
-| State | Zustand | Minimal state management |
-| Styling | Tailwind CSS | Utility-first CSS |
-| Build | Vite 6 | ESBuild pre-bundling, sub-second HMR |
-| Protocol | WebSocket (WSS/TLS 1.3) | Full-duplex real-time, TLS transport encryption |
-| Serialization | MessagePack | Binary encoding, 30-50% smaller than JSON |
-| Backend | Go 1.23 + gorilla/websocket | Goroutine concurrency, pure message relay |
-| Deploy | Vercel + HF Spaces (Docker) | Frontend/backend split, zero-cost start |
-| Self-Host | Go embed + Caddy + Docker | Single binary or Docker Compose, one-click deploy |
+| Layer         | Technology                  | Purpose                                           |
+| ---------------| -----------------------------| ---------------------------------------------------|
+| Crypto        | Web Crypto API              | AES-256-GCM E2EE, native hardware acceleration    |
+| Frontend      | React 18 + TypeScript       | Component-based UI, type-safe                     |
+| State         | Zustand                     | Minimal state management                          |
+| Styling       | Tailwind CSS                | Utility-first CSS                                 |
+| Build         | Vite 6                      | ESBuild pre-bundling, sub-second HMR              |
+| Protocol      | WebSocket (WSS/TLS 1.3)     | Full-duplex real-time, TLS transport encryption   |
+| Serialization | MessagePack                 | Binary encoding, 30-50% smaller than JSON         |
+| Backend       | Go 1.23 + gorilla/websocket | Goroutine concurrency, pure message relay         |
+| Deploy        | Vercel + HF Spaces (Docker) | Frontend/backend split, zero-cost start           |
+| Self-Host     | Go embed + Caddy + Docker   | Single binary or Docker Compose, one-click deploy |
 
 ---
 
@@ -113,6 +114,9 @@ docker run -d -p 8080:8080 ghcr.io/michaelwang123/arthas:latest
 
 # Tier 3: Docker Compose (auto HTTPS for production)
 cd deploy && ./deploy.sh
+
+# Tier 4: One-command scaffolding (interactive setup)
+npx @arthas-chat/create-arthas
 ```
 
 > **Important:** The project has two Dockerfiles for different purposes:
@@ -178,6 +182,27 @@ Load `arthas-extension/dist/` as an unpacked extension in `chrome://extensions/`
 
 Full guide: [Chrome Extension Documentation](official_doc/chrome-extension.en.md)
 
+### Arthas Hub (Public Room Directory)
+
+Arthas Hub lets room creators opt-in to listing their rooms publicly. Visitors can browse, search, and join public rooms without needing a share code.
+
+<p align="center">
+  <img src="docs/diagrams/arthas-hub-flow.svg" alt="Arthas Hub Flow" width="900"/>
+</p>
+
+**As a room creator:**
+1. On the Home page, toggle **"🌐 List in Arthas Hub (public)"**
+2. Set a title, optional description, and tags
+3. Click "Create Room" — your room appears in the Hub directory
+
+**As a visitor:**
+1. Click **"🌐 Browse Public Rooms"** on the Home page
+2. Browse the Hub directory (search by keyword, filter by tag)
+3. Pick a room, enter your nickname, click "Join"
+4. You're in — messages are still E2EE encrypted
+
+> **Security note:** Public rooms deliberately expose their encryption key so anyone can join. For access control, set a password — the room shows 🔒 in Hub and requires the password to enter.
+
 ---
 
 ## Project Structure
@@ -217,7 +242,7 @@ arthas/
 
 **v1.2.2** — Feature Complete + Production Ready (2026-06-02)
 
-All planned features implemented: E2EE chat • encrypted file sharing • encrypted voice messages • QR code sharing • room expiry • reply & reactions • password protection • self-destruct messages • Ed25519 signatures • CLI client • AI Agent channel • i18n • self-hosted deployment (3 tiers).
+All planned features implemented: E2EE chat • encrypted file sharing • encrypted voice messages • QR code sharing • room expiry • reply & reactions • password protection • self-destruct messages • Ed25519 signatures • CLI client • AI Agent channel • Arthas Hub • i18n • self-hosted deployment (3 tiers).
 
 See [Roadmap](docs/roadmap.md) for future plans.
 

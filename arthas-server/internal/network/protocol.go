@@ -67,6 +67,18 @@ const (
 	// 此检查在密码验证和容量检查之前执行，提供实时过期拒绝能力，
 	// 即使 Expiry_Checker 尚未运行其周期性扫描也能立即拒绝过期房间。
 	ErrCodeRoomExpired = "E007"
+
+	ErrCodeHubFull        = "E010" // max public rooms reached
+	ErrCodeInvalidListing = "E011" // invalid title/description/tags
+)
+
+// Hub listing field names (used in handleCreateRoom dataMap parsing)
+const (
+	FieldPublic      = "public"
+	FieldTitle       = "title"
+	FieldDescription = "description"
+	FieldTags        = "tags"
+	FieldKeyEncoded  = "keyEncoded" // Client sends base64url-encoded key for public listing
 )
 
 // Message 通用消息信封，使用 MessagePack 二进制序列化。

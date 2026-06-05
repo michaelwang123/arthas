@@ -146,5 +146,27 @@
   "language.switch": "切换语言",
   "language.zh": "中文",
   "language.en": "English",
-  "language.ja": "日本語"
+  "language.ja": "日本語",
+
+  "hub.title": "Arthas Hub",
+  "hub.browseButton": "浏览公开房间",
+  "hub.backHome": "返回首页",
+  "hub.searchPlaceholder": "搜索房间...",
+  "hub.clearFilters": "清除筛选",
+  "hub.roomCount": "共 {{count}} 个公开房间",
+  "hub.empty": "暂无公开房间，快去创建一个吧！",
+  "hub.createFirst": "创建房间",
+  "hub.joinRoom": "加入",
+  "hub.ago": "前",
+  "hub.remaining": "剩余",
+  "hub.loadMore": "加载更多",
+  "hub.retry": "重试",
+  "hub.public.toggle": "在 Arthas Hub 公开展示",
+  "hub.public.titlePlaceholder": "房间标题（必填，1-50字）",
+  "hub.public.titleError": "标题需要 1-50 个字符",
+  "hub.public.descPlaceholder": "房间描述（选填，最多200字）",
+  "hub.public.tagPlaceholder": "添加标签",
+  "hub.public.tagMaxError": "最多 5 个标签",
+  "hub.public.tagLengthError": "标签最长 20 个字符",
+  "hub.public.tagFormatError": "标签只能包含字母、数字和连字符"
 }

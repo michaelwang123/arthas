@@ -30,9 +30,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
+	"github.com/arthas/arthas-server/internal/hub"
 	"github.com/arthas/arthas-server/internal/logger"
 	"github.com/arthas/arthas-server/internal/network"
 	"github.com/arthas/arthas-server/internal/static"
@@ -98,6 +100,22 @@ func resolveOrigins(flagVal string, envVal string, defaultVal string) string {
 	return defaultVal
 }
 
+// resolveMaxPublicRooms 根据两层优先级解析 Hub 最大公开房间数。
+//
+// 优先级：环境变量 > flag 默认值
+// 由于 flag 默认值就是 200，无法区分"用户显式传了 200"和"未设置"，
+// 因此策略是：如果环境变量设置了有效正整数则使用它，否则使用 flag 值。
+// flagVal: --max-public-rooms 命令行参数值
+// envVal: MAX_PUBLIC_ROOMS 环境变量的值
+func resolveMaxPublicRooms(flagVal int, envVal string) int {
+	if envVal != "" {
+		if v, err := strconv.Atoi(envVal); err == nil && v > 0 {
+			return v
+		}
+	}
+	return flagVal
+}
+
 // main 是服务器入口函数，负责初始化所有组件并启动 HTTP 服务器。
 //
 // 执行流程：
@@ -127,6 +145,7 @@ func main() {
 	versionFlag := flag.Bool("version", false, "Print version and exit")
 	portFlag := flag.Int("port", 0, "HTTP listen port (default: $PORT or 8080)")
 	originsFlag := flag.String("allowed-origins", "", "Comma-separated allowed origins (default: $ALLOWED_ORIGINS or *)")
+	maxPublicRoomsFlag := flag.Int("max-public-rooms", 200, "Maximum number of public rooms in Hub (default: $MAX_PUBLIC_ROOMS or 200)")
 	flag.Parse()
 
 	if *versionFlag {
@@ -171,8 +190,16 @@ func main() {
 	// - 客户端注册（register channel）
 	// - 客户端注销（unregister channel）
 	// - 关闭信号（done channel）
-	hub := network.NewHub()
-	go hub.Run()
+	wsHub := network.NewHub()
+	go wsHub.Run()
+
+	// ─── Hub Directory (Public Room Listing) ─────────────────────────────────
+	maxPublicRooms := resolveMaxPublicRooms(*maxPublicRoomsFlag, os.Getenv("MAX_PUBLIC_ROOMS"))
+	hubRegistry := hub.NewHubRegistry(maxPublicRooms)
+	wsHub.SetHubRegistry(hubRegistry)
+
+	hubRateLimiter := hub.NewRateLimiter(30, time.Minute)
+	hubHandler := hub.NewHubHandler(hubRegistry, hubRateLimiter, origins)
 
 	// ─── Step 4: 注册 HTTP 路由 ─────────────────────────────────────────────
 	//
@@ -199,8 +226,12 @@ func main() {
 	// 所有客户端通过此端点建立 WebSocket 连接。
 	// ServeWs 内部处理：Origin 验证 → HTTP Upgrade → 创建 Client → 启动读写 goroutine
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		network.ServeWs(hub, w, r)
+		network.ServeWs(wsHub, w, r)
 	})
+
+	// /api/hub — Hub directory API endpoint
+	// Returns paginated list of public rooms as JSON. Rate-limited per IP.
+	mux.Handle("/api/hub", hubHandler)
 
 	// / — 前端静态文件服务（SPA fallback）
 	//
@@ -359,7 +390,7 @@ func main() {
 	//
 	// 这个级联关闭确保每个客户端都能收到 Close 帧（如果网络允许），
 	// 实现了「优雅断开」而非「粗暴切断」。
-	hub.Stop()
+	wsHub.Stop()
 
 	// Phase 3: 等待所有客户端 goroutine 退出（带超时保护）
 	//
@@ -375,7 +406,7 @@ func main() {
 	// 加上超时保护确保进程在 5 秒内一定退出（满足容器编排器的要求）。
 	done := make(chan struct{})
 	go func() {
-		hub.Wait()
+		wsHub.Wait()
 		close(done)
 	}()
 
