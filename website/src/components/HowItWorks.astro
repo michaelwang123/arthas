@@ -328,25 +328,25 @@ const steps = [
 <script>
 ;(function initStepAnimations() {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const cards = document.querySelectorAll<HTMLElement>('[data-animate-step]');
+  var cards = document.querySelectorAll('[data-animate-step]');
   if (!cards.length) return;
-  const STAGGER_MS = 150;
-  cards.forEach((card) => {
-    const index = Number(card.dataset.stepIndex) || 0;
-    card.style.transitionDelay = `${index * STAGGER_MS}ms`;
+  var STAGGER_MS = 150;
+  cards.forEach(function(card) {
+    var index = Number(card.dataset.stepIndex) || 0;
+    card.style.transitionDelay = index * STAGGER_MS + 'ms';
     card.classList.add('animate-ready');
   });
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
+  var observer = new IntersectionObserver(
+    function(entries) {
+      entries.forEach(function(entry) {
         if (entry.isIntersecting) {
-          (entry.target as HTMLElement).classList.add('visible');
+          entry.target.classList.add('visible');
           observer.unobserve(entry.target);
         }
       });
     },
     { threshold: 0.1 }
   );
-  cards.forEach((card) => observer.observe(card));
+  cards.forEach(function(card) { observer.observe(card); });
 })();
 </script>

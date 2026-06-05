@@ -789,7 +789,14 @@ func (h *Hub) handleLeaveRoom(client *Client, data interface{}) {
 		// Update Hub member count / unregister for public rooms
 		if h.hubRegistry != nil {
 			if remaining == 0 {
-				h.hubRegistry.Unregister(roomId)
+				// 每日话题房间空了不删除 listing（保留在 Hub 目录中直到过期）
+				// 普通公开房间空了则从目录移除
+				listing := h.hubRegistry.GetListing(roomId)
+				if listing == nil || !listing.IsDailyTopic {
+					h.hubRegistry.Unregister(roomId)
+				} else {
+					h.hubRegistry.UpdateMemberCount(roomId, 0)
+				}
 			} else {
 				h.hubRegistry.UpdateMemberCount(roomId, remaining)
 			}
@@ -809,10 +816,21 @@ func (h *Hub) handleLeaveRoom(client *Client, data interface{}) {
 			r.Broadcast(client.ID, broadcastData)
 		}
 
-		// If room is now empty, remove it
+		// If room is now empty, remove it (but keep daily topic rooms alive)
 		if remaining == 0 {
-			h.roomManager.RemoveRoom(roomId)
-			logger.Info("Hub", "room %s destroyed (empty), total rooms: %d", roomId, h.roomManager.RoomCount())
+			if h.hubRegistry != nil {
+				listing := h.hubRegistry.GetListing(roomId)
+				if listing != nil && listing.IsDailyTopic {
+					// Daily topic room: keep the room alive in RoomManager (don't destroy)
+					logger.Info("Hub", "daily topic room %s now empty, keeping alive", roomId)
+				} else {
+					h.roomManager.RemoveRoom(roomId)
+					logger.Info("Hub", "room %s destroyed (empty), total rooms: %d", roomId, h.roomManager.RoomCount())
+				}
+			} else {
+				h.roomManager.RemoveRoom(roomId)
+				logger.Info("Hub", "room %s destroyed (empty), total rooms: %d", roomId, h.roomManager.RoomCount())
+			}
 		}
 	}
 
