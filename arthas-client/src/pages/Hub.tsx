@@ -51,15 +51,10 @@ export function Hub() {
 
   /** Join a daily topic room using the stored Hub nickname. */
   const handleJoinDailyTopic = useCallback((shareCode: string) => {
-    const storedNickname = localStorage.getItem('arthas_hub_nickname')?.trim() ?? '';
-    if (!storedNickname) {
-      // No nickname yet — show inline prompt instead of failing silently
-      setPendingDailyShareCode(shareCode);
-      setShowDailyNicknamePrompt(true);
-      return;
-    }
-    joinRoom(shareCode, storedNickname);
-  }, [joinRoom]);
+    // Always show nickname prompt so user can review/change before joining
+    setPendingDailyShareCode(shareCode);
+    setShowDailyNicknamePrompt(true);
+  }, []);
 
   /** Confirm nickname and join daily topic room. */
   const handleConfirmDailyJoin = useCallback(() => {

@@ -14,7 +14,7 @@
 | 🟡 中 | Architecture 图 | 静态 SVG | 虚线流动（WebSocket 连接线）+ 脉冲发光（Server 节点） | ✅ |
 | 🟡 中 | Feature 卡片网格 | 静态网格 | 悬停卡片交互（上浮 + 边框高亮 + 阴影）+ 滚动揭示入场 | ✅ |
 | 🟡 中 | Encryption Flow 图 | 静态 SVG | 移动粒子（密钥→加密→传输→解密）+ Shimmer 光线扫过 | ✅ |
-| 🟢 低 | Self-hosting Tiers | 静态卡片 | 淡入上浮（三个方案卡片依次出现） | 待定 |
+| 🟢 低 | Self-hosting Tiers | 静态卡片 | 淡入上浮（三个方案卡片依次出现） | ✅ |
 | 🟢 低 | Arthas Hub Flow 图 | 静态 SVG | 虚线流动 + 移动粒子（Creator → Hub → Visitor） | 待定 |
 
 ---
@@ -47,4 +47,4 @@
 - [x] How it Works 步骤动画（箭头脉冲 + 滚动揭示 + 交错入场）
 - [x] Architecture 图动画（虚线流动 + Server 节点发光）— inline SVG 组件
 - [x] Encryption Flow 图动画（移动粒子 + 虚线流动 + Shimmer 发光）— inline SVG 组件
-- [ ] Self-hosting Tiers 淡入上浮 — 优先级低
+- [x] Self-hosting / Trust Section 滚动揭示（卡片交错淡入）
