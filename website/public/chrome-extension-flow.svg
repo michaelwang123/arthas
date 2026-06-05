@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 240" fill="none">
+  <defs>
+    <linearGradient id="bgCE" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a"/>
+      <stop offset="100%" style="stop-color:#1e293b"/>
+    </linearGradient>
+    <linearGradient id="step1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#6d28d9"/>
+    </linearGradient>
+    <linearGradient id="step2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563eb"/>
+      <stop offset="100%" style="stop-color:#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="step3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d9488"/>
+      <stop offset="100%" style="stop-color:#0f766e"/>
+    </linearGradient>
+    <linearGradient id="step4" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#d97706"/>
+      <stop offset="100%" style="stop-color:#b45309"/>
+    </linearGradient>
+    <marker id="arrowW" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="240" rx="12" fill="url(#bgCE)"/>
+
+  <!-- Title -->
+  <text x="450" y="30" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600">Chrome Extension — Build &amp; Install Flow</text>
+
+  <!-- Step 1: Clone & Install -->
+  <rect x="30" y="55" width="180" height="140" rx="10" fill="url(#step1)" opacity="0.15"/>
+  <rect x="30" y="55" width="180" height="30" rx="10" fill="url(#step1)"/>
+  <text x="120" y="75" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-size="11" font-weight="600">① Clone &amp; Install</text>
+  <text x="120" y="105" text-anchor="middle" fill="#c4b5fd" font-family="monospace" font-size="9">git clone ...arthas.git</text>
+  <text x="120" y="122" text-anchor="middle" fill="#c4b5fd" font-family="monospace" font-size="9">cd arthas-extension</text>
+  <text x="120" y="139" text-anchor="middle" fill="#c4b5fd" font-family="monospace" font-size="9">npm install</text>
+  <text x="120" y="165" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9">Node.js 18+ required</text>
+
+  <!-- Arrow 1→2 -->
+  <path d="M215 125 L245 125" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowW)"/>
+
+  <!-- Step 2: Build -->
+  <rect x="250" y="55" width="180" height="140" rx="10" fill="url(#step2)" opacity="0.15"/>
+  <rect x="250" y="55" width="180" height="30" rx="10" fill="url(#step2)"/>
+  <text x="340" y="75" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-size="11" font-weight="600">② Build</text>
+  <text x="340" y="105" text-anchor="middle" fill="#93c5fd" font-family="monospace" font-size="9">npm run build</text>
+  <text x="340" y="128" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9">TypeScript → JavaScript</text>
+  <text x="340" y="143" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9">Vite bundles to dist/</text>
+  <text x="340" y="165" text-anchor="middle" fill="#60a5fa" font-family="system-ui, sans-serif" font-size="9" font-weight="500">Output: dist/ (~210KB)</text>
+
+  <!-- Arrow 2→3 -->
+  <path d="M435 125 L465 125" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowW)"/>
+
+  <!-- Step 3: Load in Chrome -->
+  <rect x="470" y="55" width="180" height="140" rx="10" fill="url(#step3)" opacity="0.15"/>
+  <rect x="470" y="55" width="180" height="30" rx="10" fill="url(#step3)"/>
+  <text x="560" y="75" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-size="11" font-weight="600">③ Load in Chrome</text>
+  <text x="560" y="103" text-anchor="middle" fill="#5eead4" font-family="system-ui, sans-serif" font-size="9">chrome://extensions/</text>
+  <text x="560" y="120" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9">Developer mode → ON</text>
+  <text x="560" y="137" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9">Load unpacked → dist/</text>
+  <text x="560" y="165" text-anchor="middle" fill="#14b8a6" font-family="system-ui, sans-serif" font-size="9" font-weight="500">Extension appears in toolbar</text>
+
+  <!-- Arrow 3→4 -->
+  <path d="M655 125 L685 125" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowW)"/>
+
+  <!-- Step 4: Configure & Chat -->
+  <rect x="690" y="55" width="180" height="140" rx="10" fill="url(#step4)" opacity="0.15"/>
+  <rect x="690" y="55" width="180" height="30" rx="10" fill="url(#step4)"/>
+  <text x="780" y="75" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-size="11" font-weight="600">④ Configure &amp; Chat</text>
+  <text x="780" y="103" text-anchor="middle" fill="#fcd34d" font-family="system-ui, sans-serif" font-size="9">Settings → Server URL</text>
+  <text x="780" y="120" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9">Enter nickname</text>
+  <text x="780" y="137" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9">Create or Join room</text>
+  <text x="780" y="165" text-anchor="middle" fill="#f59e0b" font-family="system-ui, sans-serif" font-size="9" font-weight="500">E2EE chat from toolbar!</text>
+
+  <!-- Bottom note -->
+  <text x="450" y="220" text-anchor="middle" fill="#475569" font-family="system-ui, sans-serif" font-size="9">All encryption happens locally in the popup — the server only sees ciphertext blobs</text>
+</svg>
