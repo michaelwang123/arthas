@@ -30,6 +30,7 @@ export interface FetchHubOptions {
   filters: HubFilters;
   limit?: number;
   offset?: number;
+  isDailyTopic?: boolean;
 }
 
 /**
@@ -37,12 +38,13 @@ export interface FetchHubOptions {
  * @throws Error on non-200 responses
  */
 export async function fetchHubRooms(options: FetchHubOptions): Promise<HubListResponse> {
-  const { filters, limit, offset } = options;
+  const { filters, limit, offset, isDailyTopic } = options;
   const params = new URLSearchParams();
   if (filters.tag) params.set('tag', filters.tag);
   if (filters.query) params.set('q', filters.query);
   if (limit !== undefined) params.set('limit', String(limit));
   if (offset !== undefined && offset > 0) params.set('offset', String(offset));
+  if (isDailyTopic !== undefined) params.set('isDailyTopic', String(isDailyTopic));
 
   const base = getHubApiBase();
   const url = `${base}${HUB_API_PATH}${params.toString() ? '?' + params.toString() : ''}`;

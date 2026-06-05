@@ -47,6 +47,7 @@ func NewHubHandler(registry *HubRegistry, rateLimiter *RateLimiter, allowedOrigi
 		query := r.URL.Query()
 		tag := query.Get("tag")
 		q := query.Get("q")
+		isDailyTopicStr := query.Get("isDailyTopic")
 
 		limitStr := query.Get("limit")
 		offsetStr := query.Get("offset")
@@ -85,6 +86,16 @@ func NewHubHandler(registry *HubRegistry, rateLimiter *RateLimiter, allowedOrigi
 			Limit:  limit,
 			Offset: offset,
 		}
+
+		// Apply isDailyTopic filter when explicitly specified
+		if isDailyTopicStr == "true" {
+			v := true
+			opts.IsDailyTopic = &v
+		} else if isDailyTopicStr == "false" {
+			v := false
+			opts.IsDailyTopic = &v
+		}
+
 		result := registry.List(opts)
 
 		// JSON response

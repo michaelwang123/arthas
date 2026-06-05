@@ -187,14 +187,15 @@ const features = [
      * 浏览器可以将其交给 GPU 合成层处理，性能远优于改变 top/left/margin。
      * will-change: transform 提示浏览器提前创建合成层（但不要滥用）。
      */
-    transition: transform 250ms ease-out, box-shadow 250ms ease-out;
+    transition: transform 250ms ease-out, box-shadow 250ms ease-out, border-color 250ms ease-out;
   }
 
-  /* 卡片悬停效果 — 微妙的上浮 + 阴影 */
+  /* 卡片悬停效果 — 上浮 + 阴影 + 边框高亮 */
   .feature-card:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 24px rgba(255, 215, 0, 0.08),
                 0 2px 8px rgba(0, 0, 0, 0.3);
+    border-color: rgba(255, 215, 0, 0.3);
   }
 
   /* 特性图标 — 大尺寸装饰性 emoji */

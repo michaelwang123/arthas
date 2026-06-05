@@ -29,10 +29,11 @@ type RoomListing struct {
 
 // ListOptions defines query parameters for directory listing.
 type ListOptions struct {
-	Tag    string // filter by tag (case-insensitive match)
-	Query  string // search in title + description (case-insensitive contains)
-	Limit  int    // max results, default 50, max 100
-	Offset int    // pagination offset, default 0
+	Tag          string // filter by tag (case-insensitive match)
+	Query        string // search in title + description (case-insensitive contains)
+	IsDailyTopic *bool  // filter by isDailyTopic: nil = no filter, true/false = exact match
+	Limit        int    // max results, default 50, max 100
+	Offset       int    // pagination offset, default 0
 }
 
 // ListResult wraps paginated query results.
@@ -113,6 +114,13 @@ func (r *HubRegistry) List(opts ListOptions) *ListResult {
 	queryLower := strings.ToLower(opts.Query)
 
 	for _, l := range all {
+		// Filter by isDailyTopic (exact match when specified)
+		if opts.IsDailyTopic != nil {
+			if l.IsDailyTopic != *opts.IsDailyTopic {
+				continue
+			}
+		}
+
 		// Filter by tag (case-insensitive)
 		if tagLower != "" {
 			matched := false

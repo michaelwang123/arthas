@@ -55,13 +55,15 @@ export const useHubStore = create<HubState>((set, get) => ({
 
   fetchDailyTopic: async () => {
     try {
+      // Use server-side isDailyTopic filter — only returns the daily topic room (if any)
       const response = await fetchHubRooms({
         filters: { tag: '', query: '' },
-        limit: PAGE_SIZE,
+        limit: 1,
         offset: 0,
+        isDailyTopic: true,
       });
-      const allRooms = response.rooms ?? [];
-      const daily = allRooms.find((r) => r.isDailyTopic) ?? null;
+      const rooms = response.rooms ?? [];
+      const daily = rooms.length > 0 ? rooms[0] : null;
       set({ dailyTopic: daily });
     } catch {
       // Daily topic fetch failure is non-critical; keep existing value
@@ -71,20 +73,19 @@ export const useHubStore = create<HubState>((set, get) => ({
   fetchRooms: async () => {
     set({ loading: true, error: null });
     try {
+      // Use server-side isDailyTopic=false filter — excludes daily topic from results
       const response = await fetchHubRooms({
         filters: get().filters,
         limit: PAGE_SIZE,
         offset: 0,
+        isDailyTopic: false,
       });
-      const allRooms = response.rooms ?? [];
-      const rooms = allRooms.filter((r) => !r.isDailyTopic);
-      const dailyTopicCount = allRooms.length - rooms.length;
-      const adjustedTotal = response.total - dailyTopicCount;
+      const rooms = response.rooms ?? [];
       set({
         rooms,
-        total: adjustedTotal,
+        total: response.total,
         loading: false,
-        hasMore: rooms.length < adjustedTotal,
+        hasMore: rooms.length < response.total,
       });
     } catch (err) {
       set({
@@ -104,16 +105,14 @@ export const useHubStore = create<HubState>((set, get) => ({
         filters,
         limit: PAGE_SIZE,
         offset: rooms.length,
+        isDailyTopic: false,
       });
-      const allNewRooms = response.rooms ?? [];
-      const newRooms = allNewRooms.filter((r) => !r.isDailyTopic);
-      const dailyTopicCount = allNewRooms.length - newRooms.length;
-      const adjustedTotal = response.total - dailyTopicCount;
+      const newRooms = response.rooms ?? [];
       set({
         rooms: [...rooms, ...newRooms],
-        total: adjustedTotal,
+        total: response.total,
         loadingMore: false,
-        hasMore: rooms.length + newRooms.length < adjustedTotal,
+        hasMore: rooms.length + newRooms.length < response.total,
       });
     } catch (err) {
       set({

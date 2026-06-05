@@ -7,7 +7,7 @@
  * @module pages/Hub
  */
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useHubStore } from '../hub/hubStore';
 import { useChatStore } from '../stores/chatStore';
 import { usePageStore } from '../stores/pageStore';
@@ -28,6 +28,13 @@ export function Hub() {
   const setPage = usePageStore((s) => s.setPage);
   const joinRoom = useChatStore((s) => s.joinRoom);
 
+  // Daily topic nickname prompt state
+  const [showDailyNicknamePrompt, setShowDailyNicknamePrompt] = useState(false);
+  const [dailyNickname, setDailyNickname] = useState(
+    () => localStorage.getItem('arthas_hub_nickname') ?? ''
+  );
+  const [pendingDailyShareCode, setPendingDailyShareCode] = useState<string | null>(null);
+
   // Polling lifecycle: start on mount, stop on unmount.
   useEffect(() => {
     useHubStore.getState().startPolling();
@@ -44,13 +51,25 @@ export function Hub() {
 
   /** Join a daily topic room using the stored Hub nickname. */
   const handleJoinDailyTopic = useCallback((shareCode: string) => {
-    const nickname = localStorage.getItem('arthas_hub_nickname')?.trim() ?? '';
-    if (!nickname) {
-      // If no nickname yet, scroll to first room card where user can set one,
-      // or fall through — joinRoom validates and shows error if name is empty.
+    const storedNickname = localStorage.getItem('arthas_hub_nickname')?.trim() ?? '';
+    if (!storedNickname) {
+      // No nickname yet — show inline prompt instead of failing silently
+      setPendingDailyShareCode(shareCode);
+      setShowDailyNicknamePrompt(true);
+      return;
     }
-    joinRoom(shareCode, nickname);
+    joinRoom(shareCode, storedNickname);
   }, [joinRoom]);
+
+  /** Confirm nickname and join daily topic room. */
+  const handleConfirmDailyJoin = useCallback(() => {
+    const name = dailyNickname.trim();
+    if (!name || !pendingDailyShareCode) return;
+    localStorage.setItem('arthas_hub_nickname', name);
+    setShowDailyNicknamePrompt(false);
+    setPendingDailyShareCode(null);
+    joinRoom(pendingDailyShareCode, name);
+  }, [dailyNickname, pendingDailyShareCode, joinRoom]);
 
   return (
     <div className="min-h-screen bg-gray-900 p-4 md:p-8">
@@ -71,6 +90,37 @@ export function Hub() {
 
         {/* Daily Topic — always above filters, not affected by search */}
         {dailyTopic && <DailyTopicCard room={dailyTopic} onJoin={handleJoinDailyTopic} />}
+
+        {/* Inline nickname prompt for daily topic join (shown when user has no stored nickname) */}
+        {showDailyNicknamePrompt && (
+          <div className="flex items-center gap-2 p-3 bg-gray-800 rounded-lg border border-amber-700/50">
+            <input
+              type="text"
+              maxLength={20}
+              value={dailyNickname}
+              onChange={(e) => setDailyNickname(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmDailyJoin(); }}
+              placeholder={t('home.nickname.placeholder')}
+              aria-label={t('home.nickname')}
+              autoFocus
+              className="flex-1 px-3 py-2 bg-gray-700 text-white text-sm rounded-lg border border-gray-600 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none placeholder-gray-500 transition-colors"
+            />
+            <button
+              onClick={handleConfirmDailyJoin}
+              disabled={!dailyNickname.trim()}
+              className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-all"
+            >
+              {t('hub.dailyTopic.join')} →
+            </button>
+            <button
+              onClick={() => { setShowDailyNicknamePrompt(false); setPendingDailyShareCode(null); }}
+              className="px-2 py-2 text-gray-400 hover:text-white transition-colors"
+              aria-label="Cancel"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Filters */}
         <HubFilters />

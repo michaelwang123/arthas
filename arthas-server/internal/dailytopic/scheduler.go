@@ -13,10 +13,12 @@ import (
 // Any fixed date works; using 2026-01-01 for readability.
 var topicEpoch = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
-// retryInterval is the shorter interval used when room creation fails.
-// This ensures the daily topic appears quickly after transient failures,
-// rather than waiting the full hourly tick.
+// retryInterval is the initial shorter interval used when room creation fails.
+// Subsequent failures use exponential backoff: 5min → 10min → 20min → 30min (capped).
 const retryInterval = 5 * time.Minute
+
+// maxRetryInterval caps the exponential backoff to prevent excessively long waits.
+const maxRetryInterval = 30 * time.Minute
 
 // normalInterval is the standard check interval for daily topic creation.
 const normalInterval = 1 * time.Hour
@@ -42,12 +44,13 @@ type Scheduler struct {
 	creator RoomCreator
 	nowFunc func() time.Time // 可注入的时间函数，默认 time.Now
 
-	mu              sync.Mutex
-	lastCreatedDate string // "2006-01-02" 格式，幂等控制
-	activeRoomID    string // 当前活跃房间 ID
-	stopCh          chan struct{}
-	stopOnce        sync.Once // 防止重复关闭 stopCh 导致 panic
-	running         bool      // 防止重复 Start 导致 goroutine 泄漏
+	mu               sync.Mutex
+	lastCreatedDate  string // "2006-01-02" 格式，幂等控制
+	activeRoomID     string // 当前活跃房间 ID
+	consecutiveFails int    // 连续失败次数，用于指数退避
+	stopCh           chan struct{}
+	stopOnce         sync.Once // 防止重复关闭 stopCh 导致 panic
+	running          bool      // 防止重复 Start 导致 goroutine 泄漏
 }
 
 // NewScheduler creates a new daily topic Scheduler.
@@ -96,11 +99,14 @@ func (s *Scheduler) Start() {
 			select {
 			case <-ticker.C:
 				if s.tryCreateToday() {
-					// 创建成功或已存在，切换到正常间隔
+					// 创建成功或已存在，重置退避计数，切换到正常间隔
+					s.mu.Lock()
+					s.consecutiveFails = 0
+					s.mu.Unlock()
 					ticker.Reset(normalInterval)
 				} else {
-					// 创建失败，使用短间隔重试
-					ticker.Reset(retryInterval)
+					// 创建失败，使用指数退避重试
+					ticker.Reset(s.nextRetryInterval())
 				}
 			case <-s.stopCh:
 				return
@@ -152,15 +158,35 @@ func (s *Scheduler) tryCreateToday() bool {
 
 	roomID, err := s.creator.CreateDailyTopicRoom(params)
 	if err != nil {
-		logger.Error("DailyTopic", "failed to create daily topic room: %v", err)
+		s.consecutiveFails++
+		logger.Error("DailyTopic", "failed to create daily topic room (attempt %d): %v",
+			s.consecutiveFails, err)
 		return false
 	}
 
 	s.lastCreatedDate = today
 	s.activeRoomID = roomID
+	s.consecutiveFails = 0
 	logger.Info("DailyTopic", "created room %s, topic: %q, expires: %s",
 		roomID, topic.Title, tomorrow.Format(time.RFC3339))
 	return true
+}
+
+// nextRetryInterval returns the next retry interval using exponential backoff.
+// Sequence: 5min → 10min → 20min → 30min (capped at maxRetryInterval).
+func (s *Scheduler) nextRetryInterval() time.Duration {
+	s.mu.Lock()
+	fails := s.consecutiveFails
+	s.mu.Unlock()
+
+	interval := retryInterval
+	for i := 1; i < fails; i++ {
+		interval *= 2
+		if interval >= maxRetryInterval {
+			return maxRetryInterval
+		}
+	}
+	return interval
 }
 
 // topicForDate returns the topic for a given date using deterministic indexing.
