@@ -232,6 +232,35 @@ function stripLanguageSwitcher(content) {
 }
 
 /**
+ * 转换图片路径：将 official_doc 中的相对路径转换为 Starlight 可用的绝对路径。
+ *
+ * 📚 学习要点: 图片路径不兼容问题
+ * - 源文档使用相对路径（如 `../docs/diagrams/xxx.svg`），在 GitHub 上直接浏览时正确
+ * - Starlight 构建后，这些相对路径无法解析（目录结构不同）
+ * - 解决方案：将所有 SVG/PNG 放入 website/public/，同步时将路径转换为 /arthas/filename
+ *
+ * 匹配模式：
+ * - HTML img: <img src="../docs/diagrams/xxx.svg" ...>
+ * - Markdown img: ![alt](../docs/diagrams/xxx.svg)
+ *
+ * @param {string} content - Markdown 内容
+ * @returns {string} 转换后的内容
+ */
+function transformImagePaths(content) {
+  // Transform HTML <img src="..."> tags
+  content = content.replace(
+    /(<img\s[^>]*src=")\.\.\/docs\/diagrams\/([^"]+)(")/g,
+    '$1/arthas/$2$3'
+  );
+  // Transform Markdown ![alt](path) images
+  content = content.replace(
+    /!\[([^\]]*)\]\(\.\.\/docs\/diagrams\/([^)]+)\)/g,
+    '![$1](/arthas/$2)'
+  );
+  return content;
+}
+
+/**
  * 复制文件并注入 Starlight frontmatter。
  *
  * @param {string} srcPath - 源文件路径
@@ -243,7 +272,8 @@ function copyWithFrontmatter(srcPath, destPath, filename, locale = 'en') {
   const content = readFileSync(srcPath, 'utf-8');
   const withoutSwitcher = stripLanguageSwitcher(content);
   const withLinks = transformInternalLinks(withoutSwitcher, locale);
-  const withLangs = normalizeCodeBlockLanguages(withLinks);
+  const withImages = transformImagePaths(withLinks);
+  const withLangs = normalizeCodeBlockLanguages(withImages);
   const processed = injectFrontmatter(withLangs, filename);
   writeFileSync(destPath, processed, 'utf-8');
 }

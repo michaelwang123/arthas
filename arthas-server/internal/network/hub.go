@@ -5,12 +5,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arthas/arthas-server/internal/dailytopic"
 	"github.com/arthas/arthas-server/internal/hub"
 	"github.com/arthas/arthas-server/internal/logger"
 	"github.com/arthas/arthas-server/internal/room"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/vmihailenco/msgpack/v5"
 )
+
+// Compile-time interface check: Hub must satisfy dailytopic.RoomCreator.
+var _ dailytopic.RoomCreator = (*Hub)(nil)
 
 // 📚 学习要点: 服务器端传输超时 — 兜底清理机制
 // 正常流程中，文件传输通过 MSG_SEND_FILE_COMPLETE 或 MSG_SEND_FILE_CANCEL 消息结束，
@@ -103,6 +107,44 @@ func NewHub() *Hub {
 // SetHubRegistry sets the Hub directory registry for public room listing.
 func (h *Hub) SetHubRegistry(registry *hub.HubRegistry) {
 	h.hubRegistry = registry
+}
+
+// CreateDailyTopicRoom creates a room internally (no WebSocket client involved)
+// and registers it as a daily topic in the Hub directory.
+// Called by the DailyTopic scheduler.
+func (h *Hub) CreateDailyTopicRoom(params dailytopic.DailyRoomParams) (string, error) {
+	// 1. 生成 NanoID 作为房间 ID
+	roomID, err := gonanoid.New()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate room ID: %w", err)
+	}
+
+	// 2. 创建房间（无密码、非阅后即焚、指定过期时间）
+	h.roomManager.CreateRoom(roomID, "", 0, params.ExpiresAt)
+
+	// 3. 构建 RoomListing 并注册到 Hub Registry
+	listing := &hub.RoomListing{
+		RoomID:       roomID,
+		KeyEncoded:   params.KeyEncoded,
+		Title:        params.Title,
+		Description:  params.Description,
+		Tags:         params.Tags,
+		MemberCount:  0,
+		HasPassword:  false,
+		CreatedAt:    time.Now().Unix(),
+		ExpiresAt:    params.ExpiresAt,
+		Ephemeral:    0,
+		IsDailyTopic: true,
+	}
+
+	if err := h.hubRegistry.Register(listing); err != nil {
+		// 注册失败时清理已创建的房间，避免资源泄漏
+		h.roomManager.RemoveRoom(roomID)
+		return "", fmt.Errorf("failed to register daily topic room: %w", err)
+	}
+
+	logger.Info("Hub", "daily topic room %s created: %q", roomID, params.Title)
+	return roomID, nil
 }
 
 // Run 启动 Hub 主循环，处理客户端注册/注销事件。

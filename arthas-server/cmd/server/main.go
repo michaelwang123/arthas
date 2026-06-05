@@ -34,6 +34,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/arthas/arthas-server/internal/dailytopic"
 	"github.com/arthas/arthas-server/internal/hub"
 	"github.com/arthas/arthas-server/internal/logger"
 	"github.com/arthas/arthas-server/internal/network"
@@ -146,6 +147,7 @@ func main() {
 	portFlag := flag.Int("port", 0, "HTTP listen port (default: $PORT or 8080)")
 	originsFlag := flag.String("allowed-origins", "", "Comma-separated allowed origins (default: $ALLOWED_ORIGINS or *)")
 	maxPublicRoomsFlag := flag.Int("max-public-rooms", 200, "Maximum number of public rooms in Hub (default: $MAX_PUBLIC_ROOMS or 200)")
+	disableDailyTopic := flag.Bool("disable-daily-topic", false, "Disable daily topic room feature (env: DISABLE_DAILY_TOPIC)")
 	flag.Parse()
 
 	if *versionFlag {
@@ -200,6 +202,21 @@ func main() {
 
 	hubRateLimiter := hub.NewRateLimiter(30, time.Minute)
 	hubHandler := hub.NewHubHandler(hubRegistry, hubRateLimiter, origins)
+
+	// ─── Daily Topic Scheduler ───────────────────────────────────────────────
+	//
+	// 条件启动每日话题调度器：仅在未被 flag 或环境变量禁用时启动。
+	// LoadTopics 失败时仅记录错误，不阻止服务器启动（graceful degradation）。
+	if !*disableDailyTopic && os.Getenv("DISABLE_DAILY_TOPIC") != "true" {
+		topics, err := dailytopic.LoadTopics()
+		if err != nil {
+			logger.Error("Server", "failed to load daily topics: %v", err)
+		} else {
+			scheduler := dailytopic.NewScheduler(topics, wsHub, nil)
+			scheduler.Start()
+			defer scheduler.Stop()
+		}
+	}
 
 	// ─── Step 4: 注册 HTTP 路由 ─────────────────────────────────────────────
 	//

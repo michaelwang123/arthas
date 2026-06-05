@@ -13,17 +13,18 @@ var ErrHubFull = errors.New("hub: maximum number of public rooms reached")
 
 // RoomListing represents a public room's metadata in the Hub directory.
 type RoomListing struct {
-	RoomID      string   `json:"roomId"`
-	KeyEncoded  string   `json:"-"`           // base64url key from client (internal, not in JSON)
-	ShareCode   string   `json:"shareCode"`   // Full share code, constructed by server: roomId:key:ephemeral:expiresAt
-	Title       string   `json:"title"`       // 1-50 chars, room display name
-	Description string   `json:"description"` // 0-200 chars, optional
-	Tags        []string `json:"tags"`        // 0-5 tags, each 1-20 chars
-	MemberCount int      `json:"memberCount"` // Live count from Room.MemberCount()
-	HasPassword bool     `json:"hasPassword"` // True if room requires password
-	CreatedAt   int64    `json:"createdAt"`   // Unix seconds
-	ExpiresAt   int64    `json:"expiresAt"`   // Unix seconds, 0 = never
-	Ephemeral   int      `json:"-"`           // Ephemeral mode (internal, used for share code construction)
+	RoomID       string   `json:"roomId"`
+	KeyEncoded   string   `json:"-"`                      // base64url key from client (internal, not in JSON)
+	ShareCode    string   `json:"shareCode"`              // Full share code, constructed by server: roomId:key:ephemeral:expiresAt
+	Title        string   `json:"title"`                  // 1-50 chars, room display name
+	Description  string   `json:"description"`            // 0-200 chars, optional
+	Tags         []string `json:"tags"`                   // 0-5 tags, each 1-20 chars
+	MemberCount  int      `json:"memberCount"`            // Live count from Room.MemberCount()
+	HasPassword  bool     `json:"hasPassword"`            // True if room requires password
+	CreatedAt    int64    `json:"createdAt"`              // Unix seconds
+	ExpiresAt    int64    `json:"expiresAt"`              // Unix seconds, 0 = never
+	Ephemeral    int      `json:"-"`                      // Ephemeral mode (internal, used for share code construction)
+	IsDailyTopic bool     `json:"isDailyTopic,omitempty"` // true = system daily topic room
 }
 
 // ListOptions defines query parameters for directory listing.
@@ -59,11 +60,13 @@ func NewHubRegistry(maxRooms int) *HubRegistry {
 }
 
 // Register adds a public room listing. Returns ErrHubFull if at capacity.
+// Daily topic rooms bypass the capacity limit (system-created, reserved slot).
 // Before storing, it constructs the full share code from the listing fields.
 func (r *HubRegistry) Register(listing *RoomListing) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if len(r.listings) >= r.maxRooms {
+	// Daily topic rooms are not subject to the capacity limit
+	if !listing.IsDailyTopic && len(r.listings) >= r.maxRooms {
 		return ErrHubFull
 	}
 	// Construct the full share code: roomId:keyEncoded:ephemeral:expiresAt

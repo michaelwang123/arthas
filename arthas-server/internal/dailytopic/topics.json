@@ -1,0 +1,162 @@
+[
+  {
+    "title": "📅 推荐一个你离不开的 CLI 工具",
+    "description": "分享你日常开发中最常用的命令行工具，说说为什么喜欢它",
+    "tags": ["dev", "tools"]
+  },
+  {
+    "title": "📅 What open source project impressed you recently?",
+    "description": "Share a project you discovered recently and what makes it special",
+    "tags": ["opensource"]
+  },
+  {
+    "title": "📅 如果只能保留 3 个 App，你选哪些？",
+    "description": "手机上只留三个应用，你的选择是什么？说说理由",
+    "tags": ["life", "apps"]
+  },
+  {
+    "title": "📅 Share your unpopular tech opinion",
+    "description": "What's a tech opinion you hold that most people disagree with?",
+    "tags": ["tech", "opinion"]
+  },
+  {
+    "title": "📅 你写过最满意的一段代码是什么？",
+    "description": "可以是优雅的算法、巧妙的设计模式，或者让你自豪的项目",
+    "tags": ["dev", "career"]
+  },
+  {
+    "title": "📅 What's your ideal development setup?",
+    "description": "Share your IDE, terminal, OS, keyboard, monitor setup and why you chose it",
+    "tags": ["tools", "dev"]
+  },
+  {
+    "title": "📅 最近学到的一个新概念或技术",
+    "description": "分享你最近新学的东西，可以是编程语言、框架、或者任何技术概念",
+    "tags": ["tech", "career"]
+  },
+  {
+    "title": "📅 What programming language would you learn next?",
+    "description": "If you had time to learn a new language, which would it be and why?",
+    "tags": ["dev", "career"]
+  },
+  {
+    "title": "📅 聊聊你的 side project",
+    "description": "你正在做什么业余项目？进度如何？遇到什么困难？",
+    "tags": ["dev", "opensource"]
+  },
+  {
+    "title": "📅 Best debugging story you have",
+    "description": "Share a bug that took you forever to find, and how you finally fixed it",
+    "tags": ["dev", "fun"]
+  },
+  {
+    "title": "📅 你最喜欢的技术博客或播客",
+    "description": "推荐一个你经常看/听的技术内容来源",
+    "tags": ["tech", "tools"]
+  },
+  {
+    "title": "📅 What's a technology that's overhyped right now?",
+    "description": "Is there something getting too much attention relative to its actual value?",
+    "tags": ["tech", "opinion"]
+  },
+  {
+    "title": "📅 你用过最好的开发者体验(DX)是什么？",
+    "description": "哪个工具/框架/服务的开发者体验让你印象深刻？",
+    "tags": ["dev", "tools"]
+  },
+  {
+    "title": "📅 How do you stay focused while coding?",
+    "description": "Share your productivity tips, focus techniques, or work environment setup",
+    "tags": ["life", "career"]
+  },
+  {
+    "title": "📅 推荐一本改变你思维方式的书",
+    "description": "不限于技术书，任何让你有新认知的书都可以",
+    "tags": ["life", "career"]
+  },
+  {
+    "title": "📅 What's the most underrated programming concept?",
+    "description": "A concept that more developers should know about but rarely discuss",
+    "tags": ["dev", "opinion"]
+  },
+  {
+    "title": "📅 你对远程办公有什么看法？",
+    "description": "远程办公的优缺点，你更喜欢哪种工作方式？",
+    "tags": ["life", "career"]
+  },
+  {
+    "title": "📅 Show off your terminal prompt / shell config",
+    "description": "What does your terminal look like? Share your dotfiles or config highlights",
+    "tags": ["tools", "fun"]
+  },
+  {
+    "title": "📅 你怎么管理你的知识/笔记？",
+    "description": "用什么工具做笔记？怎么组织信息？有什么好的方法论？",
+    "tags": ["tools", "life"]
+  },
+  {
+    "title": "📅 What's a feature you wish your favorite language had?",
+    "description": "If you could add one feature to your primary language, what would it be?",
+    "tags": ["dev", "opinion"]
+  },
+  {
+    "title": "📅 分享一个让你效率翻倍的工作习惯",
+    "description": "不限于编程，任何提升效率的习惯或方法都可以分享",
+    "tags": ["life", "career"]
+  },
+  {
+    "title": "📅 What's the best tech talk or conference video you've watched?",
+    "description": "Share a talk that changed how you think about software",
+    "tags": ["tech", "career"]
+  },
+  {
+    "title": "📅 你觉得 AI 会怎样改变软件开发？",
+    "description": "AI 编程助手、代码生成、自动化测试... 你怎么看未来的开发工作？",
+    "tags": ["tech", "opinion"]
+  },
+  {
+    "title": "📅 What's your go-to stack for a new project?",
+    "description": "When starting something from scratch, what's your default tech stack?",
+    "tags": ["dev", "tools"]
+  },
+  {
+    "title": "📅 聊聊你踩过的最大的坑",
+    "description": "技术选型失误、架构设计错误、或者任何让你后悔的决定",
+    "tags": ["dev", "career"]
+  },
+  {
+    "title": "📅 What open source contribution are you most proud of?",
+    "description": "Share a PR, issue, or project where you made a meaningful impact",
+    "tags": ["opensource", "career"]
+  },
+  {
+    "title": "📅 你的桌面/工位长什么样？",
+    "description": "分享你的工作环境，有什么好物推荐？",
+    "tags": ["life", "fun"]
+  },
+  {
+    "title": "📅 What's a dying technology you'll miss?",
+    "description": "Is there something being phased out that you think still has value?",
+    "tags": ["tech", "opinion"]
+  },
+  {
+    "title": "📅 你是怎么入门编程的？",
+    "description": "第一次接触编程是什么时候？什么契机让你开始写代码？",
+    "tags": ["career", "fun"]
+  },
+  {
+    "title": "📅 What does your CI/CD pipeline look like?",
+    "description": "Share your deployment workflow, tools, and any hard-won lessons",
+    "tags": ["dev", "tools"]
+  },
+  {
+    "title": "📅 推荐一个你觉得被低估的开源项目",
+    "description": "有没有很好用但知名度不高的开源项目？帮它宣传一下",
+    "tags": ["opensource", "tools"]
+  },
+  {
+    "title": "📅 How do you handle technical debt?",
+    "description": "Strategies for managing and paying down tech debt in your projects",
+    "tags": ["dev", "career"]
+  }
+]
