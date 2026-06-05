@@ -11,7 +11,7 @@
 |--------|-----------|----------|-------------|------|
 | 🔴 高 | Hero 首页 | 静态文字 + 按钮 | 虚线流动（加密数据流）+ 脉冲发光（锁图标）+ 淡入上浮（文字依次出现）+ 粒子背景 | ✅ |
 | 🔴 高 | "How it Works" 流程图 | 静态步骤 | 箭头脉冲动画 + IntersectionObserver 滚动揭示 + 交错入场 | ✅ |
-| 🟡 中 | Architecture 图 | 静态 SVG | 虚线流动（WebSocket 连接线）+ 脉冲发光（Server 节点） | 待定 |
+| 🟡 中 | Architecture 图 | 静态 SVG | 虚线流动（WebSocket 连接线）+ 脉冲发光（Server 节点） | ✅ |
 | 🟡 中 | Feature 卡片网格 | 静态网格 | 悬停卡片交互（上浮 + 边框高亮 + 阴影）+ 滚动揭示入场 | ✅ |
 | 🟡 中 | Encryption Flow 图 | 静态 SVG | 移动粒子（密钥→加密→传输→解密）+ Shimmer 光线扫过 | 待定 |
 | 🟢 低 | Self-hosting Tiers | 静态卡片 | 淡入上浮（三个方案卡片依次出现） | 待定 |
@@ -45,6 +45,6 @@
 - [x] Hero 首页动画实现（淡入上浮 + Logo 脉冲发光 + SVG 虚线流动 + 粒子背景）
 - [x] Feature 卡片悬停交互（上浮 + 阴影 + 边框高亮 + IntersectionObserver 滚动揭示）
 - [x] How it Works 步骤动画（箭头脉冲 + 滚动揭示 + 交错入场）
-- [ ] Architecture 图动画（虚线流动 + Server 节点发光）— 需改为 inline SVG
+- [x] Architecture 图动画（虚线流动 + Server 节点发光）— inline SVG 组件
 - [ ] Encryption Flow 图动画（粒子流动 + Shimmer）— 需改为 inline SVG
 - [ ] Self-hosting Tiers 淡入上浮 — 优先级低

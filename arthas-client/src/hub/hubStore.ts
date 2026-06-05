@@ -142,25 +142,25 @@ export const useHubStore = create<HubState>((set, get) => ({
   },
 
   startPolling: () => {
-    // 初始加载：合并为单次请求，同时获取 dailyTopic 和 rooms
-    // 后续轮询分离（rooms 30s，dailyTopic 5min）
+    // 初始加载：两次请求（dailyTopic 和 rooms 使用服务端过滤，各自精确获取）
     const initLoad = async () => {
       try {
-        const response = await fetchHubRooms({
-          filters: { tag: '', query: '' },
-          limit: PAGE_SIZE,
-          offset: 0,
-        });
-        const allRooms = response.rooms ?? [];
-        const daily = allRooms.find((r) => r.isDailyTopic) ?? null;
-        const rooms = allRooms.filter((r) => !r.isDailyTopic);
-        const adjustedTotal = response.total - (daily ? 1 : 0);
+        // Parallel fetch: dailyTopic (limit=1) and rooms (isDailyTopic=false)
+        const [dailyRes, roomsRes] = await Promise.all([
+          fetchHubRooms({ filters: { tag: '', query: '' }, limit: 1, offset: 0, isDailyTopic: true }),
+          fetchHubRooms({ filters: { tag: '', query: '' }, limit: PAGE_SIZE, offset: 0, isDailyTopic: false }),
+        ]);
+
+        const dailyRooms = dailyRes.rooms ?? [];
+        const daily = dailyRooms.length > 0 ? dailyRooms[0] : null;
+        const rooms = roomsRes.rooms ?? [];
+
         set({
           dailyTopic: daily,
           rooms,
-          total: adjustedTotal,
+          total: roomsRes.total,
           loading: false,
-          hasMore: rooms.length < adjustedTotal,
+          hasMore: rooms.length < roomsRes.total,
         });
       } catch (err) {
         set({

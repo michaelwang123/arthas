@@ -125,8 +125,8 @@ describe('hubStore', () => {
       useHubStore.getState().setTagFilter('golang');
 
       expect(useHubStore.getState().filters.tag).toBe('golang');
-      // fetchRooms was called
-      expect(mockFetchHubRooms).toHaveBeenCalledWith({ filters: { tag: 'golang', query: '' }, limit: 50, offset: 0 });
+      // fetchRooms was called with isDailyTopic=false for server-side filtering
+      expect(mockFetchHubRooms).toHaveBeenCalledWith({ filters: { tag: 'golang', query: '' }, limit: 50, offset: 0, isDailyTopic: false });
     });
   });
 
@@ -142,7 +142,7 @@ describe('hubStore', () => {
       // Advance time by 300ms
       vi.advanceTimersByTime(300);
 
-      expect(mockFetchHubRooms).toHaveBeenCalledWith({ filters: { tag: '', query: 'react' }, limit: 50, offset: 0 });
+      expect(mockFetchHubRooms).toHaveBeenCalledWith({ filters: { tag: '', query: 'react' }, limit: 50, offset: 0, isDailyTopic: false });
     });
 
     it('cancels previous debounce on rapid input', () => {
@@ -157,47 +157,47 @@ describe('hubStore', () => {
 
       // Only the final value should trigger a fetch
       expect(mockFetchHubRooms).toHaveBeenCalledTimes(1);
-      expect(mockFetchHubRooms).toHaveBeenCalledWith({ filters: { tag: '', query: 'rea' }, limit: 50, offset: 0 });
+      expect(mockFetchHubRooms).toHaveBeenCalledWith({ filters: { tag: '', query: 'rea' }, limit: 50, offset: 0, isDailyTopic: false });
     });
   });
 
   describe('polling lifecycle', () => {
-    it('startPolling fetches rooms once on init (merged request), then rooms every 30s', async () => {
+    it('startPolling fetches dailyTopic + rooms in parallel, then rooms every 30s', async () => {
       mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
 
       useHubStore.getState().startPolling();
 
-      // Immediate merged fetch: single request for dailyTopic + rooms
-      expect(mockFetchHubRooms).toHaveBeenCalledTimes(1);
+      // Immediate parallel fetch: dailyTopic (isDailyTopic=true) + rooms (isDailyTopic=false) = 2 calls
+      expect(mockFetchHubRooms).toHaveBeenCalledTimes(2);
 
       // Advance 30s: rooms poll fires (+1)
       vi.advanceTimersByTime(30_000);
-      expect(mockFetchHubRooms).toHaveBeenCalledTimes(2);
+      expect(mockFetchHubRooms).toHaveBeenCalledTimes(3);
 
       // Another 30s (+1)
       vi.advanceTimersByTime(30_000);
-      expect(mockFetchHubRooms).toHaveBeenCalledTimes(3);
+      expect(mockFetchHubRooms).toHaveBeenCalledTimes(4);
     });
 
     it('stopPolling clears all intervals', () => {
       mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
 
       useHubStore.getState().startPolling();
-      // Single merged initial fetch
-      expect(mockFetchHubRooms).toHaveBeenCalledTimes(1);
+      // Parallel initial fetch: 2 calls
+      expect(mockFetchHubRooms).toHaveBeenCalledTimes(2);
 
       useHubStore.getState().stopPolling();
 
       vi.advanceTimersByTime(300_000);
-      // No additional calls after stop (neither rooms nor dailyTopic)
-      expect(mockFetchHubRooms).toHaveBeenCalledTimes(1);
+      // No additional calls after stop
+      expect(mockFetchHubRooms).toHaveBeenCalledTimes(2);
     });
 
     it('dailyTopic refreshes every 5 minutes', () => {
       mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
 
       useHubStore.getState().startPolling();
-      const initialCalls = mockFetchHubRooms.mock.calls.length; // 1 (merged initial request)
+      const initialCalls = mockFetchHubRooms.mock.calls.length; // 2 (parallel dailyTopic + rooms)
 
       // Advance 5 minutes: dailyTopic interval fires (+1), rooms polls fire (+10 at 30s intervals)
       vi.advanceTimersByTime(300_000);
@@ -325,7 +325,7 @@ describe('hubStore', () => {
   });
 
   describe('fetchDailyTopic', () => {
-    it('extracts isDailyTopic room from response', async () => {
+    it('extracts daily topic room from server-filtered response', async () => {
       const dailyRoom = {
         roomId: 'daily-1',
         shareCode: 'daily-1:key:0:0',
@@ -338,10 +338,11 @@ describe('hubStore', () => {
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
         isDailyTopic: true,
       };
+      // Server returns only the daily topic room (isDailyTopic=true filter applied server-side)
       mockFetchHubRooms.mockResolvedValueOnce({
-        rooms: [...MOCK_ROOMS, dailyRoom],
-        total: 3,
-        limit: 50,
+        rooms: [dailyRoom],
+        total: 1,
+        limit: 1,
         offset: 0,
       });
 
@@ -350,11 +351,12 @@ describe('hubStore', () => {
       expect(useHubStore.getState().dailyTopic).toEqual(dailyRoom);
     });
 
-    it('sets dailyTopic to null when no isDailyTopic room exists', async () => {
+    it('sets dailyTopic to null when server returns no daily topic room', async () => {
+      // Server returns empty list (no daily topic exists)
       mockFetchHubRooms.mockResolvedValueOnce({
-        rooms: MOCK_ROOMS,
-        total: 2,
-        limit: 50,
+        rooms: [],
+        total: 0,
+        limit: 1,
         offset: 0,
       });
 
@@ -363,12 +365,12 @@ describe('hubStore', () => {
       expect(useHubStore.getState().dailyTopic).toBeNull();
     });
 
-    it('uses empty filters (not affected by search/tag)', async () => {
+    it('uses isDailyTopic=true server-side filter (not affected by search/tag)', async () => {
       useHubStore.setState({ filters: { tag: 'golang', query: 'test' } });
       mockFetchHubRooms.mockResolvedValueOnce({
         rooms: [],
         total: 0,
-        limit: 50,
+        limit: 1,
         offset: 0,
       });
 
@@ -376,8 +378,9 @@ describe('hubStore', () => {
 
       expect(mockFetchHubRooms).toHaveBeenCalledWith({
         filters: { tag: '', query: '' },
-        limit: 50,
+        limit: 1,
         offset: 0,
+        isDailyTopic: true,
       });
     });
 
@@ -403,23 +406,12 @@ describe('hubStore', () => {
     });
   });
 
-  describe('fetchRooms excludes isDailyTopic', () => {
-    it('filters out isDailyTopic rooms from the rooms list', async () => {
-      const dailyRoom = {
-        roomId: 'daily-1',
-        shareCode: 'daily-1:key:0:0',
-        title: '📅 Daily Topic',
-        description: 'desc',
-        tags: ['daily-topic'],
-        memberCount: 0,
-        hasPassword: false,
-        createdAt: 1000,
-        expiresAt: Math.floor(Date.now() / 1000) + 3600,
-        isDailyTopic: true,
-      };
+  describe('fetchRooms uses server-side isDailyTopic filter', () => {
+    it('passes isDailyTopic=false to server, does not need client-side filtering', async () => {
+      // Server already filters out daily topic rooms (isDailyTopic=false)
       mockFetchHubRooms.mockResolvedValueOnce({
-        rooms: [...MOCK_ROOMS, dailyRoom],
-        total: 3,
+        rooms: MOCK_ROOMS,
+        total: 2,
         limit: 50,
         offset: 0,
       });
@@ -428,7 +420,10 @@ describe('hubStore', () => {
 
       const state = useHubStore.getState();
       expect(state.rooms).toHaveLength(2);
-      expect(state.rooms.every((r) => !r.isDailyTopic)).toBe(true);
+      // Verify the isDailyTopic=false parameter was sent
+      expect(mockFetchHubRooms).toHaveBeenCalledWith(
+        expect.objectContaining({ isDailyTopic: false })
+      );
     });
   });
 });
