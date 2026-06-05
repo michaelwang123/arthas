@@ -309,7 +309,7 @@ const trustItems = [
   }
 </style>
 
-<script>
+<script is:inline>
 ;(function initTrustAnimations() {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   var cards = document.querySelectorAll('[data-animate-trust]');

@@ -325,7 +325,7 @@ const steps = [
   }
 </style>
 
-<script>
+<script is:inline>
 ;(function initStepAnimations() {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   var cards = document.querySelectorAll('[data-animate-step]');

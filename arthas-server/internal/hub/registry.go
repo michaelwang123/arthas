@@ -94,6 +94,13 @@ func (r *HubRegistry) UpdateMemberCount(roomID string, count int) {
 	}
 }
 
+// GetListing returns the listing for a room, or nil if not registered.
+func (r *HubRegistry) GetListing(roomID string) *RoomListing {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.listings[roomID]
+}
+
 // List returns a filtered, sorted, paginated slice of listings.
 // Sorting: memberCount DESC, then createdAt DESC.
 // Filtering: tag match (case-insensitive), query search in title+description (case-insensitive contains).
