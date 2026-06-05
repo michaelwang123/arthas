@@ -13,6 +13,14 @@ import (
 // Any fixed date works; using 2026-01-01 for readability.
 var topicEpoch = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
+// retryInterval is the shorter interval used when room creation fails.
+// This ensures the daily topic appears quickly after transient failures,
+// rather than waiting the full hourly tick.
+const retryInterval = 5 * time.Minute
+
+// normalInterval is the standard check interval for daily topic creation.
+const normalInterval = 1 * time.Hour
+
 // RoomCreator is the interface the scheduler uses to create rooms.
 // Implemented by network.Hub.
 type RoomCreator interface {
@@ -38,6 +46,8 @@ type Scheduler struct {
 	lastCreatedDate string // "2006-01-02" 格式，幂等控制
 	activeRoomID    string // 当前活跃房间 ID
 	stopCh          chan struct{}
+	stopOnce        sync.Once // 防止重复关闭 stopCh 导致 panic
+	running         bool      // 防止重复 Start 导致 goroutine 泄漏
 }
 
 // NewScheduler creates a new daily topic Scheduler.
@@ -55,35 +65,63 @@ func NewScheduler(topics []Topic, creator RoomCreator, nowFunc func() time.Time)
 }
 
 // Start begins the scheduling loop.
-// Immediately checks if today's room needs creation, then ticks every hour.
+// Immediately checks if today's room needs creation, then ticks periodically.
+// Safe to call only once; subsequent calls are no-ops.
 func (s *Scheduler) Start() {
-	s.tryCreateToday()
+	s.mu.Lock()
+	if s.running {
+		s.mu.Unlock()
+		return
+	}
+	s.running = true
+	s.mu.Unlock()
 
-	ticker := time.NewTicker(1 * time.Hour)
+	logger.Info("DailyTopic", "scheduler started, %d topics loaded", len(s.topics))
+
+	// 立即尝试创建今日房间
+	created := s.tryCreateToday()
+
+	// 根据首次创建结果决定初始检查间隔：
+	// 成功 → 1 小时后再检查；失败 → 5 分钟后重试
+	initialInterval := normalInterval
+	if !created {
+		initialInterval = retryInterval
+	}
+
 	go func() {
+		ticker := time.NewTicker(initialInterval)
+		defer ticker.Stop()
+
 		for {
 			select {
 			case <-ticker.C:
-				s.tryCreateToday()
+				if s.tryCreateToday() {
+					// 创建成功或已存在，切换到正常间隔
+					ticker.Reset(normalInterval)
+				} else {
+					// 创建失败，使用短间隔重试
+					ticker.Reset(retryInterval)
+				}
 			case <-s.stopCh:
-				ticker.Stop()
 				return
 			}
 		}
 	}()
-
-	logger.Info("DailyTopic", "scheduler started, %d topics loaded", len(s.topics))
 }
 
 // Stop stops the scheduler gracefully.
+// Safe to call multiple times; only the first call has effect.
 func (s *Scheduler) Stop() {
-	close(s.stopCh)
-	logger.Info("DailyTopic", "scheduler stopped")
+	s.stopOnce.Do(func() {
+		close(s.stopCh)
+		logger.Info("DailyTopic", "scheduler stopped")
+	})
 }
 
 // tryCreateToday checks if today's room already exists; if not, creates it.
-// This method is idempotent: calling it multiple times on the same UTC day is safe.
-func (s *Scheduler) tryCreateToday() {
+// Returns true if today's room exists (already created or just created successfully).
+// Returns false if creation was attempted but failed (caller should retry).
+func (s *Scheduler) tryCreateToday() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -92,7 +130,7 @@ func (s *Scheduler) tryCreateToday() {
 
 	// 幂等检查：今天已创建则跳过
 	if s.lastCreatedDate == today {
-		return
+		return true
 	}
 
 	// 确定性话题选择
@@ -115,19 +153,24 @@ func (s *Scheduler) tryCreateToday() {
 	roomID, err := s.creator.CreateDailyTopicRoom(params)
 	if err != nil {
 		logger.Error("DailyTopic", "failed to create daily topic room: %v", err)
-		return
+		return false
 	}
 
 	s.lastCreatedDate = today
 	s.activeRoomID = roomID
 	logger.Info("DailyTopic", "created room %s, topic: %q, expires: %s",
 		roomID, topic.Title, tomorrow.Format(time.RFC3339))
+	return true
 }
 
 // topicForDate returns the topic for a given date using deterministic indexing.
 // Same date always returns same topic, regardless of restarts.
+// Uses integer day arithmetic (truncated to midnight) to avoid floating point precision issues.
 func (s *Scheduler) topicForDate(t time.Time) Topic {
-	days := int(t.Sub(topicEpoch).Hours() / 24)
+	// 截断到 UTC 午夜，避免浮点除法精度问题
+	d := t.UTC().Truncate(24 * time.Hour)
+	e := topicEpoch.Truncate(24 * time.Hour)
+	days := int(d.Sub(e) / (24 * time.Hour))
 	if days < 0 {
 		days = -days
 	}
@@ -137,6 +180,7 @@ func (s *Scheduler) topicForDate(t time.Time) Topic {
 
 // generateAESKey generates a random 256-bit key and returns base64url encoding (no padding).
 // Output is 43 characters (32 bytes → 43 base64url chars without padding).
+// Panics if crypto/rand fails, which indicates a catastrophic system failure.
 func generateAESKey() string {
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {

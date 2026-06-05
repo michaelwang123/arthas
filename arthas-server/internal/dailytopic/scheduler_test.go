@@ -112,11 +112,17 @@ func TestTryCreateToday_Idempotent(t *testing.T) {
 	})
 
 	// Call tryCreateToday twice with the same date.
-	s.tryCreateToday()
-	s.tryCreateToday()
+	result1 := s.tryCreateToday()
+	result2 := s.tryCreateToday()
 
 	if creator.getCallCount() != 1 {
 		t.Errorf("expected creator called once (idempotent), got %d", creator.getCallCount())
+	}
+	if !result1 {
+		t.Error("first call should return true (created)")
+	}
+	if !result2 {
+		t.Error("second call should return true (already exists)")
 	}
 }
 
@@ -162,8 +168,11 @@ func TestTryCreateToday_CreatorError(t *testing.T) {
 		return fixedTime
 	})
 
-	// Should not panic.
-	s.tryCreateToday()
+	// Should not panic, and should return false (failed).
+	result := s.tryCreateToday()
+	if result {
+		t.Error("expected false when creator returns error")
+	}
 
 	if creator.getCallCount() != 1 {
 		t.Errorf("expected creator called once, got %d", creator.getCallCount())
@@ -183,6 +192,41 @@ func TestTryCreateToday_CreatorError(t *testing.T) {
 	if creator.getCallCount() != 2 {
 		t.Errorf("expected creator called again on retry, got %d", creator.getCallCount())
 	}
+}
+
+// --- Stop safety tests ---
+
+func TestStop_CanBeCalledMultipleTimes(t *testing.T) {
+	topics := testTopics()
+	creator := &mockRoomCreator{}
+	s := NewScheduler(topics, creator, nil)
+
+	// Should not panic when called multiple times.
+	s.Stop()
+	s.Stop()
+	s.Stop()
+}
+
+// --- Start safety tests ---
+
+func TestStart_DoubleStartIsNoop(t *testing.T) {
+	topics := testTopics()
+	creator := &mockRoomCreator{}
+
+	fixedTime := time.Date(2026, 6, 10, 15, 0, 0, 0, time.UTC)
+	s := NewScheduler(topics, creator, func() time.Time {
+		return fixedTime
+	})
+
+	s.Start()
+	s.Start() // second call should be no-op, no extra goroutine
+
+	// Only one creation should have happened
+	if creator.getCallCount() != 1 {
+		t.Errorf("expected creator called once even after double Start, got %d", creator.getCallCount())
+	}
+
+	s.Stop()
 }
 
 // --- generateAESKey tests ---

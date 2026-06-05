@@ -37,6 +37,9 @@
 - [ ] 帖子模板在 `docs/show/posts/awesome-selfhosted-pr.md`
 - [ ] 提交 PR
 
+
+### 8. 发布 producthunt
+- docs\show\posts\producthunt.md
 ---
 
 ## 其他待办

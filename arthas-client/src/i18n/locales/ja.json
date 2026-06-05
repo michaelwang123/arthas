@@ -168,5 +168,11 @@
   "hub.public.tagPlaceholder": "タグを追加",
   "hub.public.tagMaxError": "タグは最大5個まで",
   "hub.public.tagLengthError": "タグは20文字以内で入力してください",
-  "hub.public.tagFormatError": "タグには英数字とハイフンのみ使用できます"
+  "hub.public.tagFormatError": "タグには英数字とハイフンのみ使用できます",
+
+  "hub.dailyTopic.title": "今日话题 · Daily Topic",
+  "hub.dailyTopic.join": "ディスカッションに参加",
+  "hub.dailyTopic.publicRoom": "公開ルーム",
+  "hub.dailyTopic.discussing": "人が議論中",
+  "hub.dailyTopic.refreshingSoon": "まもなく更新"
 }

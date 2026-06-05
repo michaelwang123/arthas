@@ -113,6 +113,11 @@ func (h *Hub) SetHubRegistry(registry *hub.HubRegistry) {
 // and registers it as a daily topic in the Hub directory.
 // Called by the DailyTopic scheduler.
 func (h *Hub) CreateDailyTopicRoom(params dailytopic.DailyRoomParams) (string, error) {
+	// 防御性检查：hubRegistry 未初始化时拒绝操作
+	if h.hubRegistry == nil {
+		return "", fmt.Errorf("hub registry not initialized, cannot create daily topic room")
+	}
+
 	// 1. 生成 NanoID 作为房间 ID
 	roomID, err := gonanoid.New()
 	if err != nil {

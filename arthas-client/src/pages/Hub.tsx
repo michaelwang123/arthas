@@ -7,22 +7,26 @@
  * @module pages/Hub
  */
 
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useHubStore } from '../hub/hubStore';
+import { useChatStore } from '../stores/chatStore';
 import { usePageStore } from '../stores/pageStore';
 import { useTranslation } from '../i18n';
 import { HubRoomCard } from '../components/HubRoomCard';
 import { HubFilters } from '../components/HubFilters';
+import { DailyTopicCard } from '../components/DailyTopicCard';
 
 export function Hub() {
   const { t } = useTranslation();
   const rooms = useHubStore((s) => s.rooms);
+  const dailyTopic = useHubStore((s) => s.dailyTopic);
   const total = useHubStore((s) => s.total);
   const loading = useHubStore((s) => s.loading);
   const loadingMore = useHubStore((s) => s.loadingMore);
   const error = useHubStore((s) => s.error);
   const hasMore = useHubStore((s) => s.hasMore);
   const setPage = usePageStore((s) => s.setPage);
+  const joinRoom = useChatStore((s) => s.joinRoom);
 
   // Polling lifecycle: start on mount, stop on unmount.
   useEffect(() => {
@@ -37,6 +41,16 @@ export function Hub() {
   const handleLoadMore = () => {
     useHubStore.getState().loadMore();
   };
+
+  /** Join a daily topic room using the stored Hub nickname. */
+  const handleJoinDailyTopic = useCallback((shareCode: string) => {
+    const nickname = localStorage.getItem('arthas_hub_nickname')?.trim() ?? '';
+    if (!nickname) {
+      // If no nickname yet, scroll to first room card where user can set one,
+      // or fall through — joinRoom validates and shows error if name is empty.
+    }
+    joinRoom(shareCode, nickname);
+  }, [joinRoom]);
 
   return (
     <div className="min-h-screen bg-gray-900 p-4 md:p-8">
@@ -54,6 +68,9 @@ export function Hub() {
             ← {t('hub.backHome')}
           </button>
         </div>
+
+        {/* Daily Topic — always above filters, not affected by search */}
+        {dailyTopic && <DailyTopicCard room={dailyTopic} onJoin={handleJoinDailyTopic} />}
 
         {/* Filters */}
         <HubFilters />

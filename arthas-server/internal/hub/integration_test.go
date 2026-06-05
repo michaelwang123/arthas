@@ -318,8 +318,8 @@ func TestHubIntegration_DailyTopicJSON(t *testing.T) {
 		t.Errorf("expected JSON to contain \"isDailyTopic\":true, body: %s", body)
 	}
 
-	// The regular room should NOT have isDailyTopic in JSON (omitempty)
-	// Parse individual rooms to verify
+	// The regular room should NOT have isDailyTopic in JSON (omitempty).
+	// Verify at raw JSON level: extract each room's JSON object and confirm omission.
 	var result ListResult
 	json.Unmarshal([]byte(body), &result)
 
@@ -330,5 +330,29 @@ func TestHubIntegration_DailyTopicJSON(t *testing.T) {
 		if room.RoomID == "daily-room" && !room.IsDailyTopic {
 			t.Error("daily room should have isDailyTopic=true")
 		}
+	}
+
+	// Verify raw JSON omission: marshal a regular RoomListing and confirm no isDailyTopic key
+	regularListing := &RoomListing{
+		RoomID:    "test-regular",
+		Title:     "Test",
+		CreatedAt: 1700000000,
+	}
+	rawJSON, _ := json.Marshal(regularListing)
+	rawStr := string(rawJSON)
+	if strings.Contains(rawStr, "isDailyTopic") {
+		t.Errorf("regular room JSON should NOT contain isDailyTopic key, got: %s", rawStr)
+	}
+
+	// Confirm daily topic room DOES include the field
+	dailyListing := &RoomListing{
+		RoomID:       "test-daily",
+		Title:        "Daily",
+		IsDailyTopic: true,
+	}
+	dailyJSON, _ := json.Marshal(dailyListing)
+	dailyStr := string(dailyJSON)
+	if !strings.Contains(dailyStr, `"isDailyTopic":true`) {
+		t.Errorf("daily topic room JSON should contain isDailyTopic:true, got: %s", dailyStr)
 	}
 }

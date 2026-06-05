@@ -8,6 +8,7 @@ export interface RoomListing {
   hasPassword: boolean;
   createdAt: number;
   expiresAt: number;
+  isDailyTopic?: boolean; // true = system daily topic room
 }
 
 export interface HubListResponse {

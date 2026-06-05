@@ -36,40 +36,32 @@ const locale = propLocale ?? getLocaleFromUrl(Astro.url);
 
 <section class="hero" aria-label="Product introduction">
   <div class="hero-content">
-    {/* 📚 学习要点: 品牌标识层次
-        Logo emoji + 产品名构成视觉锚点，
-        tagline 紧随其后提供价值主张，
-        CTA 按钮是唯一的行动引导。 */}
-    <span class="hero-logo" aria-hidden="true">🔒</span>
-    <h1 class="hero-title">{t('hero.title', locale)}</h1>
-    <p class="hero-tagline">{t('hero.tagline', locale)}</p>
+    <span class="hero-logo animate-glow" aria-hidden="true">🔒</span>
+    <h1 class="hero-title animate-fade-up" style="animation-delay: 0.1s">{t('hero.title', locale)}</h1>
+    <p class="hero-tagline animate-fade-up" style="animation-delay: 0.3s">{t('hero.tagline', locale)}</p>
 
-    {/* 📚 学习要点: CTA 按钮安全属性
-        target="_blank" 在新标签页打开，避免用户离开官网。
-        rel="noopener" 阻止新页面通过 window.opener 访问原页面，
-        防止 tabnabbing 攻击。
-        最小触摸目标 44x44px 确保移动端可用性（WCAG 2.5.5）。 */}
     <a
       href="https://arthas-blush.vercel.app"
       target="_blank"
       rel="noopener"
-      class="hero-cta"
+      class="hero-cta animate-fade-up"
+      style="animation-delay: 0.5s"
     >
       {t('hero.launch', locale)} →
     </a>
   </div>
 
-  {/* 📚 学习要点: CSS-only 加密粒子动画（Phase B 增强版）
-      使用多层视觉元素模拟加密数据流的效果：
-      - 圆形粒子（.particle）代表加密数据包在网络中流动
-      - 字符粒子（.cipher-char）显示十六进制字符，暗示加密过程
-      - 连接线（.connection-line）模拟节点间的加密通道
-      - 脉冲环（.pulse-ring）模拟加密握手/密钥交换的脉冲信号
-      - 所有动画使用 GPU 加速属性（transform, opacity）避免重排
-      - animation-delay 分布确保首个动画在 <1s 内开始播放
-      aria-hidden="true" 确保屏幕阅读器跳过纯装饰内容 */}
+  {/* 加密数据流 SVG — 虚线流动效果 */}
+  <div class="hero-flow-lines" aria-hidden="true">
+    <svg class="flow-svg" viewBox="0 0 1200 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path class="flow-line flow-line-1" d="M 0 200 Q 300 150, 600 200 T 1200 180" />
+      <path class="flow-line flow-line-2" d="M 0 400 Q 400 350, 700 420 T 1200 380" />
+      <path class="flow-line flow-line-3" d="M 100 500 Q 350 450, 600 520 T 1100 480" />
+    </svg>
+  </div>
+
+  {/* CSS-only 加密粒子动画 */}
   <div class="hero-animation" aria-hidden="true">
-    {/* 圆形粒子 — 模拟加密数据包 */}
     <span class="particle particle-1"></span>
     <span class="particle particle-2"></span>
     <span class="particle particle-3"></span>
@@ -78,18 +70,15 @@ const locale = propLocale ?? getLocaleFromUrl(Astro.url);
     <span class="particle particle-6"></span>
     <span class="particle particle-7"></span>
     <span class="particle particle-8"></span>
-    {/* 字符粒子 — 十六进制/二进制字符暗示加密 */}
     <span class="cipher-char cipher-char-1">0x</span>
     <span class="cipher-char cipher-char-2">FF</span>
     <span class="cipher-char cipher-char-3">01</span>
     <span class="cipher-char cipher-char-4">A7</span>
     <span class="cipher-char cipher-char-5">E2</span>
     <span class="cipher-char cipher-char-6">9B</span>
-    {/* 连接线 — 模拟加密通道 */}
     <span class="connection-line connection-line-1"></span>
     <span class="connection-line connection-line-2"></span>
     <span class="connection-line connection-line-3"></span>
-    {/* 脉冲环 — 模拟加密握手信号 */}
     <span class="pulse-ring pulse-ring-1"></span>
     <span class="pulse-ring pulse-ring-2"></span>
     <span class="pulse-ring pulse-ring-3"></span>
@@ -597,6 +586,98 @@ const locale = propLocale ?? getLocaleFromUrl(Astro.url);
     .hero-cta {
       font-size: 1rem;
       padding: 0.75rem 1.75rem;
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+     入场动画 — 内容淡入上浮 + Logo 脉冲发光
+     -------------------------------------------------------------------------- */
+
+  .animate-fade-up {
+    opacity: 0;
+    animation: hero-fade-up 0.8s ease-out forwards;
+  }
+
+  @keyframes hero-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-glow {
+    animation: hero-glow 3s ease-in-out infinite;
+  }
+
+  @keyframes hero-glow {
+    0%, 100% {
+      filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.3));
+      transform: scale(1);
+    }
+    50% {
+      filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.6)) drop-shadow(0 0 40px rgba(255, 215, 0, 0.2));
+      transform: scale(1.05);
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+     SVG 数据流虚线动画
+     -------------------------------------------------------------------------- */
+
+  .hero-flow-lines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .flow-svg {
+    width: 100%;
+    height: 100%;
+    opacity: 0.4;
+  }
+
+  .flow-line {
+    stroke: rgba(255, 215, 0, 0.3);
+    stroke-width: 1;
+    stroke-dasharray: 8 6;
+    fill: none;
+    animation: dash-flow 2s linear infinite;
+  }
+
+  .flow-line-2 {
+    stroke: rgba(99, 102, 241, 0.25);
+    animation-duration: 2.5s;
+    animation-delay: 0.3s;
+  }
+
+  .flow-line-3 {
+    stroke: rgba(139, 92, 246, 0.2);
+    stroke-dasharray: 5 8;
+    animation-duration: 3s;
+    animation-delay: 0.7s;
+  }
+
+  @keyframes dash-flow {
+    to {
+      stroke-dashoffset: -28;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-fade-up {
+      opacity: 1;
+      animation: none;
+    }
+    .animate-glow {
+      animation: none;
+    }
+    .flow-line {
+      animation: none;
     }
   }
 </style>

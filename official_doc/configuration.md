@@ -12,6 +12,7 @@
 |------|--------|------|
 | `--port` | `8080`（或 `$PORT` 环境变量） | HTTP 监听端口 |
 | `--allowed-origins` | `*`（允许所有来源） | WebSocket CORS 白名单，多个用逗号分隔 |
+| `--disable-daily-topic` | `false`（启用） | 禁用每日话题功能 |
 | `--version` | — | 打印版本号并退出 |
 
 配置优先级：`--port` flag > `PORT` 环境变量 > 默认值 `8080`
@@ -22,6 +23,7 @@
 |--------|--------|------|
 | `PORT` | `8080` | HTTP/WebSocket 服务器监听端口 |
 | `ALLOWED_ORIGINS` | 空（允许所有来源） | WebSocket CORS 白名单，多个用逗号分隔。设置后仅允许指定 Origin 的连接 |
+| `DISABLE_DAILY_TOPIC` | `false` | 设为 `true` 禁用每日话题功能，Hub 不会自动创建每日话题房间 |
 
 ### 内置常量
 
@@ -47,6 +49,27 @@
 | Hub API 频率限制　　　　| 30/min | `internal/hub/ratelimit.go`　　　　　　　| 每 IP 每分钟最大请求数　　　|
 | Hub 轮询间隔（前端）　　| 30s　　| `arthas-client/src/hub/hubStore.ts`　　　| 客户端刷新频率　　　　　　　|
 | 搜索防抖延迟（前端）　　| 300ms　| `arthas-client/src/hub/hubStore.ts`　　　| 输入后延迟触发搜索　　　　　|
+
+### --disable-daily-topic
+
+禁用每日话题功能。设置后 Hub 不会自动创建每日话题房间。
+
+- Flag: `--disable-daily-topic`
+- 环境变量: `DISABLE_DAILY_TOPIC=true`
+- 默认值: `false`（启用）
+
+每日话题功能默认启用，服务器启动时自动加载话题池并按日创建公开房间（24h 过期）。如果不需要此功能（例如纯私有部署），可通过此参数关闭。
+
+```bash
+# 通过 flag 禁用
+./arthas-server --disable-daily-topic
+
+# 通过环境变量禁用
+DISABLE_DAILY_TOPIC=true ./arthas-server
+
+# Docker 部署时禁用
+docker run -d -p 8080:8080 -e DISABLE_DAILY_TOPIC=true arthas-server
+```
 
 ---
 

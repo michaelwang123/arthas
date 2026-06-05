@@ -168,5 +168,11 @@
   "hub.public.tagPlaceholder": "Add a tag",
   "hub.public.tagMaxError": "Maximum 5 tags allowed",
   "hub.public.tagLengthError": "Tag must be 20 characters or less",
-  "hub.public.tagFormatError": "Tags can only contain letters, numbers, and hyphens"
+  "hub.public.tagFormatError": "Tags can only contain letters, numbers, and hyphens",
+
+  "hub.dailyTopic.title": "今日话题 · Daily Topic",
+  "hub.dailyTopic.join": "Join Discussion",
+  "hub.dailyTopic.publicRoom": "Public Room",
+  "hub.dailyTopic.discussing": "people discussing",
+  "hub.dailyTopic.refreshingSoon": "Refreshing soon"
 }

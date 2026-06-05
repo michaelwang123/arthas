@@ -74,7 +74,7 @@
   - 条件启动：非 disabled 时 LoadTopics → NewScheduler → Start
   - defer scheduler.Stop()（在 graceful shutdown 之前）
   - LoadTopics 失败时 logger.Error 但不阻止服务器启动
-- [-] 集成验证：
+- [x] 集成验证：
   - 启动服务器 → `curl /api/hub` → 验证返回包含 `isDailyTopic: true` 的条目
   - 验证 shareCode 格式正确（4 段）
   - 验证 expiresAt 是下一个 UTC 0:00 的时间戳
@@ -85,8 +85,8 @@
 
 ## Task 4: 前端展示 — DailyTopicCard 组件
 
-- [~] `src/hub/types.ts`: RoomListing 接口新增 `isDailyTopic?: boolean`
-- [~] 创建 `src/components/DailyTopicCard.tsx`
+- [x] `src/hub/types.ts`: RoomListing 接口新增 `isDailyTopic?: boolean`
+- [x] 创建 `src/components/DailyTopicCard.tsx`
   - Props: `{ room: RoomListing; onJoin: (shareCode: string) => void }`
   - 渲染内容：
     - 📅 图标 + "今日话题 · Daily Topic" 双语标题
@@ -110,7 +110,7 @@
     - aria-label on 卡片容器
     - button role on 加入按钮
     - 倒计时 aria-live="polite"
-- [~] i18n keys（如项目已有 i18n 系统）：
+- [x] i18n keys（如项目已有 i18n 系统）：
   - `hub.dailyTopic.title`: "今日话题 · Daily Topic"
   - `hub.dailyTopic.join`: "加入讨论" / "Join Discussion"
   - `hub.dailyTopic.publicRoom`: "公开房间" / "Public Room"
@@ -123,7 +123,7 @@
 
 ## Task 5: Hub 页面集成
 
-- [~] `src/hub/hubStore.ts`:
+- [x] `src/hub/hubStore.ts`:
   - 新增 state: `dailyTopic: RoomListing | null`
   - 新增 action: `fetchDailyTopic()`：无 filter 请求 API，提取 isDailyTopic 项
   - 修改 `fetchRooms()`：带 filter 请求 API，结果中排除 isDailyTopic
@@ -131,12 +131,12 @@
   - `startPolling()`：初始化时调用 fetchDailyTopic() + fetchRooms()；30s 轮询只刷新 rooms
   - dailyTopic 刷新策略：每 5 分钟检查一次（检测过期/新话题），非 30s 频率
   - 过期检测：`expiresAt < Date.now()/1000` 时清除 dailyTopic 并重新获取
-- [~] `src/pages/Hub.tsx`:
+- [x] `src/pages/Hub.tsx`:
   - 在 HubFilters 组件**上方**条件渲染 DailyTopicCard
   - `{dailyTopic && <DailyTopicCard room={dailyTopic} onJoin={handleJoin} />}`
   - onJoin 复用现有 join 流程：`chatStore.joinRoom(shareCode)`
   - dailyTopic 为 null 时不渲染该区域（无空白）
-- [ ] 验证：
+- [x] 验证：
   - Hub 页面正确展示置顶的今日话题卡片
   - 搜索/标签过滤不影响 dailyTopic 显示（独立请求验证）
   - 用户输入搜索词 → 普通房间列表更新 → dailyTopic 保持不变
@@ -150,20 +150,20 @@
 
 ## Task 6: 端到端验证 + 文档更新
 
-- [~] 端到端测试场景：
+- [x] 端到端测试场景：
   - 场景1：冷启动 → Hub 出现每日话题 → 前端显示正确
   - 场景2：点击加入 → 成功进入房间 → 收发消息正常（E2EE）
   - 场景3：重启服务器 → 新的每日话题房间创建（旧的已丢失）
   - 场景4：`--disable-daily-topic` → Hub 无每日话题
   - 场景5：验证话题每天切换（调整系统时间或修改 nowFunc 测试）
-- [~] 验证前端兼容性：
+- [x] 验证前端兼容性：
   - isDailyTopic 字段 omitempty：旧客户端不受影响
   - 不支持 isDailyTopic 的前端仍能看到房间（作为普通公开房间）
-- [~] 文档更新：
+- [x] 文档更新：
   - `docs/roadmap.md`：每日话题状态标记为 ✅
   - `docs/arthas-hub-roadmap.md`：每日话题状态更新
   - `official_doc/configuration.md`：新增 `--disable-daily-topic` 说明
-- [~] 代码清理：
+- [x] 代码清理：
   - 确认无 TODO/FIXME 遗留
   - 确认日志级别合理（无多余 debug 日志在 production）
 

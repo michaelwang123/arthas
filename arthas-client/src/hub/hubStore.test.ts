@@ -162,34 +162,72 @@ describe('hubStore', () => {
   });
 
   describe('polling lifecycle', () => {
-    it('startPolling fetches immediately and then every 30s', async () => {
+    it('startPolling fetches rooms once on init (merged request), then rooms every 30s', async () => {
       mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
 
       useHubStore.getState().startPolling();
 
-      // Immediate fetch
+      // Immediate merged fetch: single request for dailyTopic + rooms
       expect(mockFetchHubRooms).toHaveBeenCalledTimes(1);
 
-      // Advance 30s
+      // Advance 30s: rooms poll fires (+1)
       vi.advanceTimersByTime(30_000);
       expect(mockFetchHubRooms).toHaveBeenCalledTimes(2);
 
-      // Another 30s
+      // Another 30s (+1)
       vi.advanceTimersByTime(30_000);
       expect(mockFetchHubRooms).toHaveBeenCalledTimes(3);
     });
 
-    it('stopPolling clears interval', () => {
+    it('stopPolling clears all intervals', () => {
       mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
 
       useHubStore.getState().startPolling();
+      // Single merged initial fetch
       expect(mockFetchHubRooms).toHaveBeenCalledTimes(1);
 
       useHubStore.getState().stopPolling();
 
-      vi.advanceTimersByTime(60_000);
-      // No additional calls after stop
+      vi.advanceTimersByTime(300_000);
+      // No additional calls after stop (neither rooms nor dailyTopic)
       expect(mockFetchHubRooms).toHaveBeenCalledTimes(1);
+    });
+
+    it('dailyTopic refreshes every 5 minutes', () => {
+      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
+
+      useHubStore.getState().startPolling();
+      const initialCalls = mockFetchHubRooms.mock.calls.length; // 1 (merged initial request)
+
+      // Advance 5 minutes: dailyTopic interval fires (+1), rooms polls fire (+10 at 30s intervals)
+      vi.advanceTimersByTime(300_000);
+      // rooms: 10 polls (30s * 10 = 300s), dailyTopic: 1 refresh
+      expect(mockFetchHubRooms).toHaveBeenCalledTimes(initialCalls + 10 + 1);
+    });
+
+    it('dailyTopic expiry clears state before refetch', () => {
+      const expiredTopic = {
+        roomId: 'daily-1',
+        shareCode: 'daily-1:key:0:0',
+        title: 'Expired Topic',
+        description: 'desc',
+        tags: ['daily-topic'],
+        memberCount: 0,
+        hasPassword: false,
+        createdAt: 1000,
+        expiresAt: Math.floor(Date.now() / 1000) - 60, // expired 60s ago
+        isDailyTopic: true,
+      };
+      useHubStore.setState({ dailyTopic: expiredTopic });
+      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
+
+      useHubStore.getState().startPolling();
+      // Advance to 5-minute mark to trigger dailyTopic interval
+      vi.advanceTimersByTime(300_000);
+
+      // dailyTopic should have been cleared (set to null) before refetch
+      // Since mockFetchHubRooms returns no isDailyTopic room, it stays null
+      expect(useHubStore.getState().dailyTopic).toBeNull();
     });
   });
 
@@ -276,12 +314,121 @@ describe('hubStore', () => {
   });
 
   describe('retry', () => {
-    it('retry calls fetchRooms', async () => {
+    it('retry calls fetchDailyTopic and fetchRooms', async () => {
       mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
 
       useHubStore.getState().retry();
 
-      expect(mockFetchHubRooms).toHaveBeenCalledTimes(1);
+      // fetchDailyTopic + fetchRooms = 2 calls
+      expect(mockFetchHubRooms).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('fetchDailyTopic', () => {
+    it('extracts isDailyTopic room from response', async () => {
+      const dailyRoom = {
+        roomId: 'daily-1',
+        shareCode: 'daily-1:key:0:0',
+        title: '📅 Daily Topic',
+        description: 'Today topic',
+        tags: ['daily-topic'],
+        memberCount: 3,
+        hasPassword: false,
+        createdAt: 1000,
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+        isDailyTopic: true,
+      };
+      mockFetchHubRooms.mockResolvedValueOnce({
+        rooms: [...MOCK_ROOMS, dailyRoom],
+        total: 3,
+        limit: 50,
+        offset: 0,
+      });
+
+      await useHubStore.getState().fetchDailyTopic();
+
+      expect(useHubStore.getState().dailyTopic).toEqual(dailyRoom);
+    });
+
+    it('sets dailyTopic to null when no isDailyTopic room exists', async () => {
+      mockFetchHubRooms.mockResolvedValueOnce({
+        rooms: MOCK_ROOMS,
+        total: 2,
+        limit: 50,
+        offset: 0,
+      });
+
+      await useHubStore.getState().fetchDailyTopic();
+
+      expect(useHubStore.getState().dailyTopic).toBeNull();
+    });
+
+    it('uses empty filters (not affected by search/tag)', async () => {
+      useHubStore.setState({ filters: { tag: 'golang', query: 'test' } });
+      mockFetchHubRooms.mockResolvedValueOnce({
+        rooms: [],
+        total: 0,
+        limit: 50,
+        offset: 0,
+      });
+
+      await useHubStore.getState().fetchDailyTopic();
+
+      expect(mockFetchHubRooms).toHaveBeenCalledWith({
+        filters: { tag: '', query: '' },
+        limit: 50,
+        offset: 0,
+      });
+    });
+
+    it('keeps existing dailyTopic on fetch failure', async () => {
+      const existingTopic = {
+        roomId: 'daily-1',
+        shareCode: 'daily-1:key:0:0',
+        title: '📅 Daily Topic',
+        description: 'desc',
+        tags: ['daily-topic'],
+        memberCount: 0,
+        hasPassword: false,
+        createdAt: 1000,
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+        isDailyTopic: true,
+      };
+      useHubStore.setState({ dailyTopic: existingTopic });
+      mockFetchHubRooms.mockRejectedValueOnce(new Error('Network error'));
+
+      await useHubStore.getState().fetchDailyTopic();
+
+      expect(useHubStore.getState().dailyTopic).toEqual(existingTopic);
+    });
+  });
+
+  describe('fetchRooms excludes isDailyTopic', () => {
+    it('filters out isDailyTopic rooms from the rooms list', async () => {
+      const dailyRoom = {
+        roomId: 'daily-1',
+        shareCode: 'daily-1:key:0:0',
+        title: '📅 Daily Topic',
+        description: 'desc',
+        tags: ['daily-topic'],
+        memberCount: 0,
+        hasPassword: false,
+        createdAt: 1000,
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+        isDailyTopic: true,
+      };
+      mockFetchHubRooms.mockResolvedValueOnce({
+        rooms: [...MOCK_ROOMS, dailyRoom],
+        total: 3,
+        limit: 50,
+        offset: 0,
+      });
+
+      await useHubStore.getState().fetchRooms();
+
+      const state = useHubStore.getState();
+      expect(state.rooms).toHaveLength(2);
+      expect(state.rooms.every((r) => !r.isDailyTopic)).toBe(true);
     });
   });
 });

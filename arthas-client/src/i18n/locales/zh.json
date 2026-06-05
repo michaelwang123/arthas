@@ -168,5 +168,11 @@
   "hub.public.tagPlaceholder": "添加标签",
   "hub.public.tagMaxError": "最多 5 个标签",
   "hub.public.tagLengthError": "标签最长 20 个字符",
-  "hub.public.tagFormatError": "标签只能包含字母、数字和连字符"
+  "hub.public.tagFormatError": "标签只能包含字母、数字和连字符",
+
+  "hub.dailyTopic.title": "今日话题 · Daily Topic",
+  "hub.dailyTopic.join": "加入讨论",
+  "hub.dailyTopic.publicRoom": "公开房间",
+  "hub.dailyTopic.discussing": "人正在讨论",
+  "hub.dailyTopic.refreshingSoon": "即将刷新"
 }
