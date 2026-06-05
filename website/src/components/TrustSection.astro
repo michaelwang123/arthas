@@ -72,8 +72,8 @@ const trustItems = [
   </h2>
 
   <div class="trust-grid">
-    {trustItems.map((item, index) => (
-      <article class="trust-card" data-animate-trust data-trust-index={index}>
+    {trustItems.map((item) => (
+      <article class="trust-card">
         <span class="trust-icon" aria-hidden="true">{item.icon}</span>
         <h3 class="trust-title">{t(item.titleKey, locale)}</h3>
         <p class="trust-description">{t(item.descKey, locale)}</p>
@@ -285,52 +285,4 @@ const trustItems = [
       font-size: 1rem;
     }
   }
-
-  /* --------------------------------------------------------------------------
-     滚动揭示动画
-     -------------------------------------------------------------------------- */
-
-  .trust-card.animate-ready {
-    opacity: 0;
-    transform: translateY(20px);
-    transition: opacity 500ms ease-out, transform 500ms ease-out;
-  }
-
-  .trust-card.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .trust-card.animate-ready {
-      opacity: 1;
-      transform: none;
-    }
-  }
 </style>
-
-<script is:inline>
-;(function initTrustAnimations() {
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  var cards = document.querySelectorAll('[data-animate-trust]');
-  if (!cards.length) return;
-  var STAGGER_MS = 120;
-  cards.forEach(function(card) {
-    var index = Number(card.dataset.trustIndex) || 0;
-    card.style.transitionDelay = index * STAGGER_MS + 'ms';
-    card.classList.add('animate-ready');
-  });
-  var observer = new IntersectionObserver(
-    function(entries) {
-      entries.forEach(function(entry) {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
-          observer.unobserve(entry.target);
-        }
-      });
-    },
-    { threshold: 0.1 }
-  );
-  cards.forEach(function(card) { observer.observe(card); });
-})();
-</script>
