@@ -47,8 +47,11 @@ Copy-Item -Recurse $ServerDir $TmpDir
 # 3. 清理编译产物和不需要的文件
 Write-Host "[3/5] Removing build artifacts..." -ForegroundColor Yellow
 Push-Location $TmpDir
+# 删除所有编译产物（跨平台 build 目录、可执行文件、测试二进制）
+if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
 Remove-Item -Force -ErrorAction SilentlyContinue `
-    server.exe, server, `
+    server, server.exe, `
+    arthas-server.exe, `
     network.test, network.test.exe, `
     *.test, *.test.exe
 # 清理误创建的 dev/null 目录（Windows 上 2>$null 可能产生）
@@ -60,7 +63,8 @@ Write-Host "[4/5] Creating git commit..." -ForegroundColor Yellow
 Push-Location $TmpDir
 git init --quiet
 git add -A
-git commit --quiet -m "deploy: arthas production server v1.0.0"
+$timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+git commit --quiet -m "deploy: arthas server @ $timestamp"
 
 # 5. 推送到 HF Space
 Write-Host "[5/5] Pushing to HF Space..." -ForegroundColor Yellow
