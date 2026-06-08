@@ -174,5 +174,27 @@
   "hub.dailyTopic.join": "Join Discussion",
   "hub.dailyTopic.publicRoom": "Public Room",
   "hub.dailyTopic.discussing": "people discussing",
-  "hub.dailyTopic.refreshingSoon": "Refreshing soon"
+  "hub.dailyTopic.refreshingSoon": "Refreshing soon",
+
+  "hub.templates.sectionTitle": "Quick Create",
+  "hub.templates.interviewPrep.name": "Interview Prep",
+  "hub.templates.interviewPrep.desc": "Practice mock interviews with ephemeral messages that auto-delete",
+  "hub.templates.debugHelp.name": "Debug Help",
+  "hub.templates.debugHelp.desc": "Get help debugging code in a persistent room",
+  "hub.templates.teamRetro.name": "Team Retro",
+  "hub.templates.teamRetro.desc": "Run a team retrospective with optional password protection",
+  "hub.templates.anonymousFeedback.name": "Anonymous Feedback",
+  "hub.templates.anonymousFeedback.desc": "Collect honest feedback with ephemeral, time-limited messages",
+  "hub.templates.studyRoom.name": "Study Room",
+  "hub.templates.studyRoom.desc": "Focused study session with a 2-hour time limit",
+  "hub.templates.coffeeChat.name": "Coffee Chat",
+  "hub.templates.coffeeChat.desc": "Quick casual conversation, 30-minute room",
+  "hub.templates.gameNight.name": "Game Night",
+  "hub.templates.gameNight.desc": "Hang out and play games with no time limit",
+  "hub.templates.badge.expiry": "{{time}} expiry",
+  "hub.templates.badge.ephemeral": "Ephemeral",
+  "hub.templates.badge.password": "Password",
+  "hub.templates.createButton": "Create",
+  "hub.templates.cancel": "Cancel",
+  "hub.templates.error.timeout": "Creation timed out. Please try again."
 }

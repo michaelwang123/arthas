@@ -7,7 +7,7 @@
  * @module pages/Hub
  */
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useHubStore } from '../hub/hubStore';
 import { useChatStore } from '../stores/chatStore';
 import { usePageStore } from '../stores/pageStore';
@@ -15,6 +15,8 @@ import { useTranslation } from '../i18n';
 import { HubRoomCard } from '../components/HubRoomCard';
 import { HubFilters } from '../components/HubFilters';
 import { DailyTopicCard } from '../components/DailyTopicCard';
+import { TemplateGrid } from '../hub/templates/TemplateGrid';
+import type { TemplateConfig } from '../hub/templates/templateConfig';
 
 export function Hub() {
   const { t } = useTranslation();
@@ -27,19 +29,59 @@ export function Hub() {
   const hasMore = useHubStore((s) => s.hasMore);
   const setPage = usePageStore((s) => s.setPage);
   const joinRoom = useChatStore((s) => s.joinRoom);
+  const createRoom = useChatStore((s) => s.createRoom);
+  const roomId = useChatStore((s) => s.roomId);
+  const messages = useChatStore((s) => s.messages);
 
   // Daily topic nickname prompt state
   const [showDailyNicknamePrompt, setShowDailyNicknamePrompt] = useState(false);
-  const [dailyNickname, setDailyNickname] = useState(
-    () => localStorage.getItem('arthas_hub_nickname') ?? ''
-  );
+  const [dailyNickname, setDailyNickname] = useState(() => {
+    try { return localStorage.getItem('arthas_hub_nickname') ?? ''; }
+    catch { return ''; }
+  });
   const [pendingDailyShareCode, setPendingDailyShareCode] = useState<string | null>(null);
+
+  // Template creation state
+  const [isCreating, setIsCreating] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const creationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const creationStartRef = useRef<number>(0);
 
   // Polling lifecycle: start on mount, stop on unmount.
   useEffect(() => {
     useHubStore.getState().startPolling();
     return () => useHubStore.getState().stopPolling();
   }, []);
+
+  // Cleanup creation timeout on unmount to prevent setState on unmounted component
+  useEffect(() => {
+    return () => {
+      if (creationTimeoutRef.current) clearTimeout(creationTimeoutRef.current);
+    };
+  }, []);
+
+  // Navigate to chat when room is created (success path)
+  // App.tsx auto-renders ChatRoom when roomId is non-null;
+  // this effect cleans up creation state when that transition happens.
+  useEffect(() => {
+    if (roomId && isCreating) {
+      setIsCreating(false);
+      setTemplateError(null);
+      if (creationTimeoutRef.current) clearTimeout(creationTimeoutRef.current);
+    }
+  }, [roomId, isCreating]);
+
+  // Detect error from chatStore system messages (failure path)
+  // Only detect messages created after our creation request started
+  useEffect(() => {
+    if (!isCreating) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg?.isSystem && lastMsg.timestamp > creationStartRef.current) {
+      setTemplateError(lastMsg.text);
+      setIsCreating(false);
+      if (creationTimeoutRef.current) clearTimeout(creationTimeoutRef.current);
+    }
+  }, [messages, isCreating]);
 
   const handleRetry = () => {
     useHubStore.getState().retry();
@@ -65,6 +107,35 @@ export function Hub() {
     setPendingDailyShareCode(null);
     joinRoom(pendingDailyShareCode, name);
   }, [dailyNickname, pendingDailyShareCode, joinRoom]);
+
+  /** Create a room from a template with the given nickname and optional password. */
+  const handleCreateFromTemplate = useCallback((
+    template: TemplateConfig,
+    nickname: string,
+    password?: string
+  ) => {
+    setIsCreating(true);
+    setTemplateError(null);
+    creationStartRef.current = Date.now();
+
+    // Timeout safety net: reset after 10s if no response
+    creationTimeoutRef.current = setTimeout(() => {
+      setIsCreating(false);
+      setTemplateError(t('hub.templates.error.timeout'));
+    }, 10_000);
+
+    createRoom(
+      nickname,
+      password,
+      template.ephemeralSeconds,
+      template.expirySeconds,
+      {
+        title: t(template.nameKey),
+        description: t(template.descriptionKey),
+        tags: template.tags,
+      }
+    );
+  }, [createRoom, t]);
 
   return (
     <div className="min-h-screen bg-gray-900 p-4 md:p-8">
@@ -116,6 +187,13 @@ export function Hub() {
             </button>
           </div>
         )}
+
+        {/* Quick Create — Room Templates */}
+        <TemplateGrid
+          onCreateFromTemplate={handleCreateFromTemplate}
+          isCreating={isCreating}
+          createError={templateError}
+        />
 
         {/* Filters */}
         <HubFilters />

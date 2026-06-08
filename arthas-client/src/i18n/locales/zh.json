@@ -174,5 +174,27 @@
   "hub.dailyTopic.join": "加入讨论",
   "hub.dailyTopic.publicRoom": "公开房间",
   "hub.dailyTopic.discussing": "人正在讨论",
-  "hub.dailyTopic.refreshingSoon": "即将刷新"
+  "hub.dailyTopic.refreshingSoon": "即将刷新",
+
+  "hub.templates.sectionTitle": "快速创建",
+  "hub.templates.interviewPrep.name": "面试模拟",
+  "hub.templates.interviewPrep.desc": "使用阅后即焚消息进行模拟面试练习",
+  "hub.templates.debugHelp.name": "Debug 求助",
+  "hub.templates.debugHelp.desc": "在持久房间中获取代码调试帮助",
+  "hub.templates.teamRetro.name": "团队回顾",
+  "hub.templates.teamRetro.desc": "进行团队复盘，支持密码保护",
+  "hub.templates.anonymousFeedback.name": "匿名反馈",
+  "hub.templates.anonymousFeedback.desc": "通过阅后即焚和限时消息收集真实反馈",
+  "hub.templates.studyRoom.name": "学习空间",
+  "hub.templates.studyRoom.desc": "专注学习，2小时限时房间",
+  "hub.templates.coffeeChat.name": "闲聊时间",
+  "hub.templates.coffeeChat.desc": "轻松闲聊，30分钟快速对话",
+  "hub.templates.gameNight.name": "游戏之夜",
+  "hub.templates.gameNight.desc": "一起玩游戏，无时间限制",
+  "hub.templates.badge.expiry": "{{time}} 后过期",
+  "hub.templates.badge.ephemeral": "阅后即焚",
+  "hub.templates.badge.password": "密码保护",
+  "hub.templates.createButton": "创建",
+  "hub.templates.cancel": "取消",
+  "hub.templates.error.timeout": "创建超时，请重试"
 }
