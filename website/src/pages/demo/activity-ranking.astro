@@ -1,0 +1,407 @@
+---
+/**
+ * Activity Ranking Demo — Interactive CSS animation showcase
+ *
+ * Demonstrates the Arthas Hub room activity ranking feature using
+ * CSS animations from docs/beta/css-animation-guide.md.
+ *
+ * Page sections:
+ * 1. Header — Title + description
+ * 2. Sort Mode Tabs — 4 interactive tabs (Active/People/Newest/All)
+ * 3. Room Cards — Simulated card reordering with fade-in-up animation
+ * 4. Activity Indicator — Pulse-glow effect on active rooms
+ * 5. Online Count — Shimmer number glow effect
+ *
+ * Animations: fade-in-up, pulse-glow, shimmer
+ * Accessibility: prefers-reduced-motion disables all animations
+ * Responsive: min-width 320px
+ *
+ * @see docs/beta/css-animation-guide.md — Animation primitives reference
+ * @see src/pages/zh/demo/activity-ranking.astro — Chinese version
+ */
+
+import Landing from '../../layouts/Landing.astro';
+import Footer from '../../components/Footer.astro';
+---
+
+<Landing
+  title="Activity Ranking Demo"
+  description="Interactive demo of Arthas Hub room activity ranking feature"
+>
+  <section class="demo-container">
+    <header class="demo-header">
+      <h1 class="demo-title">Room Activity Ranking</h1>
+      <p class="demo-description">
+        Sort Hub rooms by activity, members, or recency. The 5-minute sliding window
+        tracks room activity in real time with a global online count indicator.
+      </p>
+    </header>
+
+    <!-- Sort Mode Tabs -->
+    <nav class="sort-tabs" aria-label="Sort mode selection">
+      <button class="tab active" data-sort="active" aria-pressed="true">🔥 Active</button>
+      <button class="tab" data-sort="people" aria-pressed="false">👥 People</button>
+      <button class="tab" data-sort="newest" aria-pressed="false">🆕 Newest</button>
+      <button class="tab" data-sort="all" aria-pressed="false">All</button>
+    </nav>
+
+    <!-- Room Cards -->
+    <div class="room-cards" aria-live="polite" aria-label="Sorted room list">
+      <article class="room-card animate-fade-in-up" style="animation-delay: 0s">
+        <div class="card-header">
+          <span class="room-name">General Chat</span>
+          <span class="activity-badge animate-pulse-glow">🔥 45</span>
+        </div>
+        <p class="card-description">Open discussion about anything</p>
+        <div class="card-footer">
+          <span class="member-count">👥 12 members</span>
+          <span class="created-time">🆕 2min ago</span>
+        </div>
+      </article>
+
+      <article class="room-card animate-fade-in-up" style="animation-delay: 0.2s">
+        <div class="card-header">
+          <span class="room-name">Dev Corner</span>
+          <span class="activity-badge animate-pulse-glow">🔥 32</span>
+        </div>
+        <p class="card-description">Programming and tech discussions</p>
+        <div class="card-footer">
+          <span class="member-count">👥 8 members</span>
+          <span class="created-time">🆕 5min ago</span>
+        </div>
+      </article>
+
+      <article class="room-card animate-fade-in-up" style="animation-delay: 0.4s">
+        <div class="card-header">
+          <span class="room-name">Music Lounge</span>
+          <span class="activity-badge animate-pulse-glow">🔥 18</span>
+        </div>
+        <p class="card-description">Share and discover music together</p>
+        <div class="card-footer">
+          <span class="member-count">👥 5 members</span>
+          <span class="created-time">🆕 12min ago</span>
+        </div>
+      </article>
+
+      <article class="room-card animate-fade-in-up" style="animation-delay: 0.6s">
+        <div class="card-header">
+          <span class="room-name">Gaming Hub</span>
+          <span class="activity-badge animate-pulse-glow">🔥 12</span>
+        </div>
+        <p class="card-description">Find teammates and chat about games</p>
+        <div class="card-footer">
+          <span class="member-count">👥 3 members</span>
+          <span class="created-time">🆕 20min ago</span>
+        </div>
+      </article>
+    </div>
+
+    <!-- Online Count Indicator -->
+    <div class="online-section">
+      <div class="online-indicator">
+        <span class="online-dot"></span>
+        <span class="online-count animate-shimmer">42 people online</span>
+      </div>
+      <p class="online-note">5-minute sliding window · Updated every 30s</p>
+    </div>
+  </section>
+
+  <Footer slot="footer" />
+</Landing>
+
+<style>
+  /* === Base Layout === */
+  .demo-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem;
+    min-height: 100vh;
+  }
+
+  /* === Header === */
+  .demo-header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+
+  .demo-title {
+    font-size: 2.25rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    margin-bottom: 0.75rem;
+  }
+
+  .demo-description {
+    font-size: 1.1rem;
+    color: #94a3b8;
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* === Sort Tabs === */
+  .sort-tabs {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .tab {
+    padding: 0.6rem 1.2rem;
+    border-radius: 9999px;
+    border: 1px solid #374151;
+    background: #1e293b;
+    color: #94a3b8;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease-out;
+  }
+
+  .tab:hover {
+    border-color: #6366f1;
+    color: #e2e8f0;
+  }
+
+  .tab.active {
+    background: #6366f1;
+    border-color: #6366f1;
+    color: #ffffff;
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+  }
+
+  /* === Room Cards === */
+  .room-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .room-card {
+    background: linear-gradient(180deg, #2d2f45 0%, #1e2035 100%);
+    border: 1px solid #374151;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    transition: all 0.3s ease-out;
+  }
+
+  .room-card:hover {
+    border-color: #6366f1;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .room-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #e2e8f0;
+  }
+
+  .activity-badge {
+    padding: 0.25rem 0.6rem;
+    border-radius: 9999px;
+    background: #1e293b;
+    border: 1px solid #374151;
+    font-size: 0.8rem;
+    color: #a5b4fc;
+  }
+
+  .card-description {
+    color: #94a3b8;
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .card-footer {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.8rem;
+    color: #64748b;
+  }
+
+  /* === Online Count === */
+  .online-section {
+    text-align: center;
+    padding: 1.5rem;
+    background: linear-gradient(180deg, #2d2f45 0%, #1e2035 100%);
+    border: 1px solid #374151;
+    border-radius: 12px;
+  }
+
+  .online-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .online-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+    animation: pulse-glow-dot 2s ease-in-out infinite;
+  }
+
+  .online-count {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #e2e8f0;
+  }
+
+  .online-note {
+    font-size: 0.8rem;
+    color: #64748b;
+  }
+
+  /* === Animations === */
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 8px rgba(99, 102, 241, 0.3),
+                  0 0 16px rgba(99, 102, 241, 0.1);
+    }
+    50% {
+      box-shadow: 0 0 16px rgba(99, 102, 241, 0.6),
+                  0 0 32px rgba(99, 102, 241, 0.3);
+    }
+  }
+
+  @keyframes pulse-glow-dot {
+    0%, 100% {
+      box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+    }
+    50% {
+      box-shadow: 0 0 12px rgba(34, 197, 94, 0.8),
+                  0 0 20px rgba(34, 197, 94, 0.4);
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% center;
+    }
+    100% {
+      background-position: 200% center;
+    }
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.8s ease-out forwards;
+    opacity: 0;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2.5s ease-in-out infinite;
+  }
+
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      #e2e8f0 0%,
+      #a5b4fc 50%,
+      #e2e8f0 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 3s ease-in-out infinite;
+  }
+
+  /* === Accessibility: Reduced Motion === */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+
+    .animate-fade-in-up {
+      opacity: 1;
+    }
+  }
+
+  /* === Responsive === */
+  @media (max-width: 640px) {
+    .demo-container {
+      padding: 2rem 1rem;
+    }
+
+    .demo-title {
+      font-size: 1.75rem;
+    }
+
+    .demo-description {
+      font-size: 1rem;
+    }
+
+    .sort-tabs {
+      gap: 0.35rem;
+    }
+
+    .tab {
+      padding: 0.5rem 0.9rem;
+      font-size: 0.8rem;
+    }
+
+    .room-card {
+      padding: 1rem 1.25rem;
+    }
+
+    .card-footer {
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+  }
+</style>
+
+<script>
+  // Interactive tab switching with card re-animation
+  document.addEventListener('DOMContentLoaded', () => {
+    const tabs = document.querySelectorAll('.tab');
+    const cards = document.querySelectorAll('.room-card');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        // Update active tab
+        tabs.forEach(t => {
+          t.classList.remove('active');
+          t.setAttribute('aria-pressed', 'false');
+        });
+        tab.classList.add('active');
+        tab.setAttribute('aria-pressed', 'true');
+
+        // Re-trigger card animations
+        cards.forEach((card, index) => {
+          card.classList.remove('animate-fade-in-up');
+          // Force reflow
+          void (card as HTMLElement).offsetWidth;
+          card.classList.add('animate-fade-in-up');
+          (card as HTMLElement).style.animationDelay = `${index * 0.15}s`;
+        });
+      });
+    });
+  });
+</script>

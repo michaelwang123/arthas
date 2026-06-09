@@ -1,0 +1,647 @@
+---
+/**
+ * Random Match Demo — 中文版
+ *
+ * 随机配对功能的交互式 CSS 动画演示页面：
+ * 等待配对 → 配对成功 → 加密通信 → 下一位（循环）
+ *
+ * 动画复用自 docs/beta/css-animation-guide.md：
+ * - dot-move: 配对中的轨道粒子
+ * - pulse-glow: 等待状态发光
+ * - dash-flow: 加密数据流动可视化
+ * - fade-in-up: 成功提示出现
+ *
+ * @see website/src/pages/demo/random-match.astro — English version
+ */
+
+import Landing from '../../../layouts/Landing.astro';
+import Footer from '../../../components/Footer.astro';
+---
+
+<Landing
+  title="随机配对 演示"
+  description="Arthas 加密随机配对功能的交互式演示"
+>
+  <section class="demo-container">
+    <!-- Header -->
+    <div class="demo-header">
+      <h1 class="demo-title">🎲 随机配对</h1>
+      <p class="demo-subtitle">加密版 Omegle 随机配对 — 零知识，端到端加密</p>
+    </div>
+
+    <!-- Step 1: Waiting / Matching Animation -->
+    <div class="demo-section">
+      <h2 class="section-title">1. 等待配对</h2>
+      <p class="section-desc">正在搜索兴趣匹配的对象...</p>
+      <div class="matching-area">
+        <div class="orbit-container">
+          <div class="orbit-center pulse-glow-el">
+            <span class="orbit-icon">🔍</span>
+            <span class="orbit-label">配对中...</span>
+          </div>
+          <!-- Orbital particles -->
+          <div class="orbit-particle particle-1"></div>
+          <div class="orbit-particle particle-2"></div>
+          <div class="orbit-particle particle-3"></div>
+        </div>
+        <div class="interest-tags">
+          <span class="tag tag-active">🏷️ 科技</span>
+          <span class="tag tag-active">🏷️ 音乐</span>
+          <span class="tag">🏷️ 游戏</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Match Found -->
+    <div class="demo-section">
+      <h2 class="section-title">2. 配对成功!</h2>
+      <p class="section-desc">已找到兴趣匹配的对象，正在建立加密连接...</p>
+      <div class="match-found-area">
+        <div class="match-card fade-in-up-el" style="--delay: 0s">
+          <div class="match-avatar">👤</div>
+          <span class="match-status">已找到对象</span>
+        </div>
+        <div class="match-success fade-in-up-el" style="--delay: 0.3s">
+          <span class="success-icon">✅</span>
+          <span class="success-text">配对成功!</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Encrypted Communication -->
+    <div class="demo-section">
+      <h2 class="section-title">3. 加密通信</h2>
+      <p class="section-desc">消息端到端加密，服务器仅中转不读取内容。</p>
+      <div class="encryption-area">
+        <div class="comm-party party-a">
+          <div class="party-icon">🔑</div>
+          <span class="party-label">你</span>
+          <span class="party-detail">生成 AES-256 密钥</span>
+        </div>
+        <div class="comm-flow">
+          <svg class="flow-svg" viewBox="0 0 200 40" fill="none" aria-hidden="true">
+            <path
+              d="M 0 20 H 200"
+              stroke="rgba(0,255,170,0.4)"
+              stroke-width="1.5"
+              stroke-dasharray="6 4"
+              class="dash-flow-line"
+            />
+          </svg>
+          <div class="flow-dots">
+            <div class="flow-dot dot-1"></div>
+            <div class="flow-dot dot-2"></div>
+            <div class="flow-dot dot-3"></div>
+          </div>
+          <span class="flow-label">E2EE 中转（零知识）</span>
+        </div>
+        <div class="comm-party party-b">
+          <div class="party-icon">🔓</div>
+          <span class="party-label">对方</span>
+          <span class="party-detail">接收密钥</span>
+        </div>
+      </div>
+      <!-- Chat bubbles -->
+      <div class="chat-preview">
+        <div class="chat-bubble bubble-sent fade-in-up-el" style="--delay: 0.2s">
+          <span class="bubble-lock">🔒</span> 你好！很高兴认识你。
+        </div>
+        <div class="chat-bubble bubble-received fade-in-up-el" style="--delay: 0.5s">
+          <span class="bubble-lock">🔒</span> 嗨！我也是！
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: Feature Loop (Next Button) -->
+    <div class="demo-section">
+      <h2 class="section-title">4. 继续或下一位</h2>
+      <p class="section-desc">继续聊天、延长房间时间，或寻找新的对象。</p>
+      <div class="loop-area">
+        <div class="loop-options">
+          <div class="loop-card">
+            <span class="loop-icon">🔄</span>
+            <span class="loop-label">下一位</span>
+            <span class="loop-desc">寻找新对象</span>
+          </div>
+          <div class="loop-card">
+            <span class="loop-icon">⏱️</span>
+            <span class="loop-label">延时</span>
+            <span class="loop-desc">+30 分钟（双方同意）</span>
+          </div>
+          <div class="loop-card">
+            <span class="loop-icon">🔗</span>
+            <span class="loop-label">邀请</span>
+            <span class="loop-desc">冷启动链接</span>
+          </div>
+        </div>
+        <div class="loop-flow">
+          <span class="loop-step">配对</span>
+          <span class="loop-arrow">→</span>
+          <span class="loop-step">聊天</span>
+          <span class="loop-arrow">→</span>
+          <span class="loop-step active-step pulse-glow-el">下一位</span>
+          <span class="loop-arrow">→</span>
+          <span class="loop-step">配对</span>
+          <span class="loop-hint">⟲ 循环</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info badges -->
+    <div class="demo-badges">
+      <span class="badge">🏷️ 兴趣标签</span>
+      <span class="badge">⏱️ 60秒超时</span>
+      <span class="badge">🔗 邀请链接</span>
+      <span class="badge">🔄 下一位</span>
+      <span class="badge">🛡️ 端到端加密</span>
+    </div>
+  </section>
+
+  <Footer slot="footer" />
+</Landing>
+
+<style>
+  /* ============================================================
+     Random Match Demo — CSS Animations & Layout
+     Reuses animation primitives from css-animation-guide.md
+     ============================================================ */
+
+  /* --- Keyframes --- */
+  @keyframes dot-move {
+    0%   { transform: translateX(0); opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { transform: translateX(160px); opacity: 0; }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 8px rgba(0,255,170,0.3),
+                  0 0 16px rgba(0,255,170,0.1);
+    }
+    50% {
+      box-shadow: 0 0 16px rgba(0,255,170,0.6),
+                  0 0 32px rgba(0,255,170,0.3);
+    }
+  }
+
+  @keyframes dash-flow {
+    to { stroke-dashoffset: -20; }
+  }
+
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes orbit {
+    from { transform: rotate(0deg) translateX(60px) rotate(0deg); }
+    to   { transform: rotate(360deg) translateX(60px) rotate(-360deg); }
+  }
+
+  /* --- Reduced Motion --- */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* --- Layout --- */
+  .demo-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  .demo-header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+
+  .demo-title {
+    font-size: 2.5rem;
+    color: #e2e8f0;
+    margin: 0 0 0.5rem;
+  }
+
+  .demo-subtitle {
+    color: #94a3b8;
+    font-size: 1.1rem;
+    margin: 0;
+  }
+
+  /* --- Sections --- */
+  .demo-section {
+    margin-bottom: 3rem;
+    padding: 2rem;
+    background: linear-gradient(180deg, #2d2f45 0%, #1e2035 100%);
+    border: 1px solid #374151;
+    border-radius: 12px;
+  }
+
+  .section-title {
+    color: #e2e8f0;
+    font-size: 1.3rem;
+    margin: 0 0 0.5rem;
+  }
+
+  .section-desc {
+    color: #94a3b8;
+    font-size: 0.95rem;
+    margin: 0 0 1.5rem;
+  }
+
+  /* --- Step 1: Matching Area --- */
+  .matching-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .orbit-container {
+    position: relative;
+    width: 160px;
+    height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .orbit-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: #1e293b;
+    border: 2px solid rgba(0,255,170,0.5);
+  }
+
+  .orbit-icon {
+    font-size: 1.5rem;
+  }
+
+  .orbit-label {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    margin-top: 2px;
+  }
+
+  .pulse-glow-el {
+    animation: pulse-glow 2.5s ease-in-out infinite;
+  }
+
+  .orbit-particle {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #00ffaa;
+    top: 50%;
+    left: 50%;
+    margin: -4px 0 0 -4px;
+    animation: orbit 3s linear infinite;
+  }
+
+  .particle-1 { animation-delay: 0s; }
+  .particle-2 { animation-delay: -1s; }
+  .particle-3 { animation-delay: -2s; }
+
+  .interest-tags {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .tag {
+    padding: 0.4rem 0.8rem;
+    background: #1e293b;
+    border: 1px solid #374151;
+    border-radius: 20px;
+    color: #94a3b8;
+    font-size: 0.85rem;
+  }
+
+  .tag-active {
+    border-color: rgba(0,255,170,0.5);
+    color: #00ffaa;
+  }
+
+  /* --- Step 2: Match Found --- */
+  .match-found-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .match-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    background: #1e293b;
+    border: 1px solid rgba(0,255,170,0.3);
+    border-radius: 12px;
+  }
+
+  .match-avatar {
+    font-size: 2rem;
+  }
+
+  .match-status {
+    color: #e2e8f0;
+    font-size: 1rem;
+  }
+
+  .match-success {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .success-icon {
+    font-size: 1.5rem;
+  }
+
+  .success-text {
+    color: #22c55e;
+    font-weight: 600;
+    font-size: 1.1rem;
+  }
+
+  .fade-in-up-el {
+    opacity: 0;
+    animation: fade-in-up 0.8s ease-out forwards;
+    animation-delay: var(--delay, 0s);
+  }
+
+  /* --- Step 3: Encryption Area --- */
+  .encryption-area {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .comm-party {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 80px;
+  }
+
+  .party-icon {
+    font-size: 1.8rem;
+  }
+
+  .party-label {
+    color: #e2e8f0;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .party-detail {
+    color: #94a3b8;
+    font-size: 0.7rem;
+  }
+
+  .comm-flow {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    position: relative;
+    min-width: 120px;
+  }
+
+  .flow-svg {
+    width: 100%;
+    height: 40px;
+  }
+
+  .dash-flow-line {
+    animation: dash-flow 1.5s linear infinite;
+  }
+
+  .flow-dots {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 8px;
+    margin-top: -4px;
+    overflow: hidden;
+  }
+
+  .flow-dot {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #00ffaa;
+    top: 1px;
+    animation: dot-move 2s ease-in-out infinite;
+  }
+
+  .dot-1 { animation-delay: 0s; }
+  .dot-2 { animation-delay: 0.7s; }
+  .dot-3 { animation-delay: 1.4s; }
+
+  .flow-label {
+    color: #94a3b8;
+    font-size: 0.75rem;
+    text-align: center;
+  }
+
+  /* Chat preview */
+  .chat-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+
+  .chat-bubble {
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    color: #e2e8f0;
+  }
+
+  .bubble-sent {
+    background: #1e3a5f;
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+  }
+
+  .bubble-received {
+    background: #2d2f45;
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+  }
+
+  .bubble-lock {
+    font-size: 0.75rem;
+  }
+
+  /* --- Step 4: Loop Area --- */
+  .loop-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .loop-options {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .loop-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 1rem 1.25rem;
+    background: #1e293b;
+    border: 1px solid #374151;
+    border-radius: 12px;
+    transition: border-color 0.2s ease-out, transform 0.2s ease-out;
+    cursor: pointer;
+    min-width: 100px;
+  }
+
+  .loop-card:hover {
+    border-color: rgba(0,255,170,0.5);
+    transform: translateY(-2px);
+  }
+
+  .loop-icon {
+    font-size: 1.5rem;
+  }
+
+  .loop-label {
+    color: #e2e8f0;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .loop-desc {
+    color: #94a3b8;
+    font-size: 0.75rem;
+  }
+
+  .loop-flow {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    position: relative;
+  }
+
+  .loop-step {
+    padding: 0.4rem 0.8rem;
+    background: #1e293b;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    color: #94a3b8;
+    font-size: 0.85rem;
+  }
+
+  .active-step {
+    border-color: rgba(0,255,170,0.5);
+    color: #00ffaa;
+  }
+
+  .loop-arrow {
+    color: #94a3b8;
+    font-size: 1.2rem;
+  }
+
+  .loop-hint {
+    color: #6366f1;
+    font-size: 0.8rem;
+    font-style: italic;
+    margin-left: 0.5rem;
+  }
+
+  /* --- Badges --- */
+  .demo-badges {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding-top: 1rem;
+  }
+
+  .badge {
+    padding: 0.4rem 0.8rem;
+    background: #1e293b;
+    border: 1px solid #374151;
+    border-radius: 20px;
+    color: #a5b4fc;
+    font-size: 0.8rem;
+  }
+
+  /* --- Responsive (min-width 320px) --- */
+  @media (max-width: 600px) {
+    .demo-container {
+      padding: 1.5rem 1rem 3rem;
+    }
+
+    .demo-title {
+      font-size: 1.8rem;
+    }
+
+    .demo-section {
+      padding: 1.25rem;
+    }
+
+    .encryption-area {
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .comm-flow {
+      width: 100%;
+    }
+
+    .flow-svg {
+      height: 30px;
+    }
+
+    .loop-options {
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .loop-card {
+      width: 100%;
+      max-width: 200px;
+    }
+
+    .orbit-container {
+      width: 130px;
+      height: 130px;
+    }
+
+    .orbit-center {
+      width: 64px;
+      height: 64px;
+    }
+  }
+</style>

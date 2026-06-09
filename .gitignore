@@ -47,6 +47,8 @@ arthas-cli/arthas-cli
 # Internal scripts (contain sensitive info like mailmap with company email)
 /scripts/*
 !/scripts/validate-openclaw-docs.sh
+!/scripts/validate-translations.py
+!/scripts/validate-docs-structure.py
 
 # Coverage reports
 packages/openclaw-channel/coverage/

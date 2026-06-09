@@ -1,0 +1,407 @@
+---
+/**
+ * 活跃度排序演示页 — 交互式 CSS 动画展示（中文版）
+ *
+ * 使用 docs/beta/css-animation-guide.md 中的 CSS 动画原语，
+ * 演示 Arthas Hub 房间活跃度排序功能。
+ *
+ * 页面区块：
+ * 1. Header — 标题 + 简介
+ * 2. 排序模式 Tab — 4 个交互式 Tab（最活跃/最多人/最新/全部）
+ * 3. 房间卡片 — 模拟卡片重排，fade-in-up 动画
+ * 4. 活跃指示器 — pulse-glow 脉冲效果
+ * 5. 在线人数 — shimmer 数字光效
+ *
+ * 动画：fade-in-up、pulse-glow、shimmer
+ * 无障碍：prefers-reduced-motion 禁用所有动画
+ * 响应式：最小宽度 320px
+ *
+ * @see docs/beta/css-animation-guide.md — 动画原语参考
+ * @see src/pages/demo/activity-ranking.astro — 英文版本
+ */
+
+import Landing from '../../../layouts/Landing.astro';
+import Footer from '../../../components/Footer.astro';
+---
+
+<Landing
+  title="活跃度排序 演示"
+  description="Arthas Hub 房间活跃度排序功能的交互式演示"
+>
+  <section class="demo-container">
+    <header class="demo-header">
+      <h1 class="demo-title">房间活跃度排序</h1>
+      <p class="demo-description">
+        按活跃度、人数或最新排序 Hub 房间。5 分钟滑动窗口实时追踪房间活跃度，
+        并提供全局在线人数指示器。
+      </p>
+    </header>
+
+    <!-- 排序模式 Tab -->
+    <nav class="sort-tabs" aria-label="排序模式选择">
+      <button class="tab active" data-sort="active" aria-pressed="true">🔥 最活跃</button>
+      <button class="tab" data-sort="people" aria-pressed="false">👥 最多人</button>
+      <button class="tab" data-sort="newest" aria-pressed="false">🆕 最新</button>
+      <button class="tab" data-sort="all" aria-pressed="false">全部</button>
+    </nav>
+
+    <!-- 房间卡片 -->
+    <div class="room-cards" aria-live="polite" aria-label="排序后的房间列表">
+      <article class="room-card animate-fade-in-up" style="animation-delay: 0s">
+        <div class="card-header">
+          <span class="room-name">综合聊天</span>
+          <span class="activity-badge animate-pulse-glow">🔥 45</span>
+        </div>
+        <p class="card-description">畅聊一切话题的开放房间</p>
+        <div class="card-footer">
+          <span class="member-count">👥 12 人</span>
+          <span class="created-time">🆕 2分钟前</span>
+        </div>
+      </article>
+
+      <article class="room-card animate-fade-in-up" style="animation-delay: 0.2s">
+        <div class="card-header">
+          <span class="room-name">开发者角落</span>
+          <span class="activity-badge animate-pulse-glow">🔥 32</span>
+        </div>
+        <p class="card-description">编程与技术讨论</p>
+        <div class="card-footer">
+          <span class="member-count">👥 8 人</span>
+          <span class="created-time">🆕 5分钟前</span>
+        </div>
+      </article>
+
+      <article class="room-card animate-fade-in-up" style="animation-delay: 0.4s">
+        <div class="card-header">
+          <span class="room-name">音乐休息室</span>
+          <span class="activity-badge animate-pulse-glow">🔥 18</span>
+        </div>
+        <p class="card-description">一起分享和发现好音乐</p>
+        <div class="card-footer">
+          <span class="member-count">👥 5 人</span>
+          <span class="created-time">🆕 12分钟前</span>
+        </div>
+      </article>
+
+      <article class="room-card animate-fade-in-up" style="animation-delay: 0.6s">
+        <div class="card-header">
+          <span class="room-name">游戏大厅</span>
+          <span class="activity-badge animate-pulse-glow">🔥 12</span>
+        </div>
+        <p class="card-description">寻找队友，畅聊游戏</p>
+        <div class="card-footer">
+          <span class="member-count">👥 3 人</span>
+          <span class="created-time">🆕 20分钟前</span>
+        </div>
+      </article>
+    </div>
+
+    <!-- 在线人数指示器 -->
+    <div class="online-section">
+      <div class="online-indicator">
+        <span class="online-dot"></span>
+        <span class="online-count animate-shimmer">42 人在线</span>
+      </div>
+      <p class="online-note">5 分钟滑动窗口 · 每 30 秒更新</p>
+    </div>
+  </section>
+
+  <Footer slot="footer" />
+</Landing>
+
+<style>
+  /* === Base Layout === */
+  .demo-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem;
+    min-height: 100vh;
+  }
+
+  /* === Header === */
+  .demo-header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+
+  .demo-title {
+    font-size: 2.25rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    margin-bottom: 0.75rem;
+  }
+
+  .demo-description {
+    font-size: 1.1rem;
+    color: #94a3b8;
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* === Sort Tabs === */
+  .sort-tabs {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .tab {
+    padding: 0.6rem 1.2rem;
+    border-radius: 9999px;
+    border: 1px solid #374151;
+    background: #1e293b;
+    color: #94a3b8;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease-out;
+  }
+
+  .tab:hover {
+    border-color: #6366f1;
+    color: #e2e8f0;
+  }
+
+  .tab.active {
+    background: #6366f1;
+    border-color: #6366f1;
+    color: #ffffff;
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+  }
+
+  /* === Room Cards === */
+  .room-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .room-card {
+    background: linear-gradient(180deg, #2d2f45 0%, #1e2035 100%);
+    border: 1px solid #374151;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    transition: all 0.3s ease-out;
+  }
+
+  .room-card:hover {
+    border-color: #6366f1;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .room-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #e2e8f0;
+  }
+
+  .activity-badge {
+    padding: 0.25rem 0.6rem;
+    border-radius: 9999px;
+    background: #1e293b;
+    border: 1px solid #374151;
+    font-size: 0.8rem;
+    color: #a5b4fc;
+  }
+
+  .card-description {
+    color: #94a3b8;
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .card-footer {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.8rem;
+    color: #64748b;
+  }
+
+  /* === Online Count === */
+  .online-section {
+    text-align: center;
+    padding: 1.5rem;
+    background: linear-gradient(180deg, #2d2f45 0%, #1e2035 100%);
+    border: 1px solid #374151;
+    border-radius: 12px;
+  }
+
+  .online-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .online-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+    animation: pulse-glow-dot 2s ease-in-out infinite;
+  }
+
+  .online-count {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #e2e8f0;
+  }
+
+  .online-note {
+    font-size: 0.8rem;
+    color: #64748b;
+  }
+
+  /* === Animations === */
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 8px rgba(99, 102, 241, 0.3),
+                  0 0 16px rgba(99, 102, 241, 0.1);
+    }
+    50% {
+      box-shadow: 0 0 16px rgba(99, 102, 241, 0.6),
+                  0 0 32px rgba(99, 102, 241, 0.3);
+    }
+  }
+
+  @keyframes pulse-glow-dot {
+    0%, 100% {
+      box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+    }
+    50% {
+      box-shadow: 0 0 12px rgba(34, 197, 94, 0.8),
+                  0 0 20px rgba(34, 197, 94, 0.4);
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% center;
+    }
+    100% {
+      background-position: 200% center;
+    }
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.8s ease-out forwards;
+    opacity: 0;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2.5s ease-in-out infinite;
+  }
+
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      #e2e8f0 0%,
+      #a5b4fc 50%,
+      #e2e8f0 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 3s ease-in-out infinite;
+  }
+
+  /* === Accessibility: Reduced Motion === */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+
+    .animate-fade-in-up {
+      opacity: 1;
+    }
+  }
+
+  /* === Responsive === */
+  @media (max-width: 640px) {
+    .demo-container {
+      padding: 2rem 1rem;
+    }
+
+    .demo-title {
+      font-size: 1.75rem;
+    }
+
+    .demo-description {
+      font-size: 1rem;
+    }
+
+    .sort-tabs {
+      gap: 0.35rem;
+    }
+
+    .tab {
+      padding: 0.5rem 0.9rem;
+      font-size: 0.8rem;
+    }
+
+    .room-card {
+      padding: 1rem 1.25rem;
+    }
+
+    .card-footer {
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+  }
+</style>
+
+<script>
+  // Interactive tab switching with card re-animation
+  document.addEventListener('DOMContentLoaded', () => {
+    const tabs = document.querySelectorAll('.tab');
+    const cards = document.querySelectorAll('.room-card');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        // Update active tab
+        tabs.forEach(t => {
+          t.classList.remove('active');
+          t.setAttribute('aria-pressed', 'false');
+        });
+        tab.classList.add('active');
+        tab.setAttribute('aria-pressed', 'true');
+
+        // Re-trigger card animations
+        cards.forEach((card, index) => {
+          card.classList.remove('animate-fade-in-up');
+          // Force reflow
+          void (card as HTMLElement).offsetWidth;
+          card.classList.add('animate-fade-in-up');
+          (card as HTMLElement).style.animationDelay = `${index * 0.15}s`;
+        });
+      });
+    });
+  });
+</script>

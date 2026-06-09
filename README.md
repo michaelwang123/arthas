@@ -50,6 +50,8 @@ A minimalist end-to-end encrypted chat application. Create a temporary room, gen
 - 🧩 **Chrome Extension** – E2EE chat in browser toolbar popup, same protocol as web/CLI
 - 🌐 **i18n** – English / Chinese / Japanese, auto-detects browser language
 - 🌐 **Arthas Hub** – Public room directory, browse & join rooms without sharing codes
+- 🔥 **Room Activity Ranking** – Sort Hub rooms by activity, members, or recency; 5-minute sliding window tracking with global online count
+- 🎲 **Random Match** – Encrypted Omegle-style random pairing with interest tags, session loop, invite link cold-start, and mutual room extension
 - 🚫 **No Signup** – No accounts, open and use immediately
 - 🏠 **Self-Hostable** – Single binary zero-dependency, or Docker Compose with auto HTTPS
 
@@ -203,6 +205,51 @@ Arthas Hub lets room creators opt-in to listing their rooms publicly. Visitors c
 
 > **Security note:** Public rooms deliberately expose their encryption key so anyone can join. For access control, set a password — the room shows 🔒 in Hub and requires the password to enter.
 
+### Activity Ranking
+
+<p align="center">
+  <img src="docs/diagrams/activity-ranking-flow.svg" alt="Activity Ranking Flow" width="900"/>
+</p>
+
+Sort Hub rooms by multiple criteria to discover the most interesting conversations:
+
+| Mode | Description |
+|------|-------------|
+| 🔥 Most Active | Rooms with the most messages in the last 5 minutes |
+| 👥 Most People | Rooms with the highest member count |
+| 🆕 Newest | Recently created rooms |
+| All | Default sort (member count priority) |
+
+A global online count in the Hub header shows real-time platform activity (updates every 30 seconds).
+
+**How to use:**
+1. Open the Hub page
+2. Click a sort mode tab (🔥 / 👥 / 🆕 / All)
+3. Browse the reordered room list
+4. Check the online count indicator in the header
+
+### Random Match (Encrypted Omegle)
+
+<p align="center">
+  <img src="docs/diagrams/random-match-flow.svg" alt="Random Match Flow" width="900"/>
+</p>
+
+Anonymous, end-to-end encrypted random pairing — like Omegle, but with real privacy:
+
+- **Interest tags** — Select up to 3 tags (#tech, #music, #gaming, etc.) for better matches
+- **E2EE** — Client-generated AES-256 key; the server relays but never stores it
+- **Session loop** — Click "Next" to instantly re-enter matching after a conversation
+- **Invite link** — Generate a one-time link for cold-start when the queue is empty
+- **Room extension** — Both parties can agree to extend the 30-minute room up to 3 times (2 hours max)
+- **Report & block** — IP-level 24h ban after 3 reports
+
+**How to use:**
+1. Select interest tags (optional)
+2. Click "Match" to enter the queue
+3. Wait for pairing (60s timeout)
+4. Chat in an encrypted room
+5. Click "Next" to match again, or close to leave
+
 ---
 
 ## Project Structure
@@ -235,6 +282,8 @@ arthas/
 | [OpenClaw Channel](official_doc/openclaw-channel.en.md) | AI Agent E2EE plugin |
 | [Development](official_doc/development.en.md) | Local dev setup, code structure |
 | [Configuration](official_doc/configuration.en.md) | All configurable parameters |
+| [Activity Ranking](official_doc/activity-ranking.en.md) | Hub room sort modes and activity tracking |
+| [Random Match](official_doc/random-match.en.md) | Encrypted random pairing (Omegle-style) |
 
 ---
 
@@ -242,7 +291,7 @@ arthas/
 
 **v1.2.2** — Feature Complete + Production Ready (2026-06-02)
 
-All planned features implemented: E2EE chat • encrypted file sharing • encrypted voice messages • QR code sharing • room expiry • reply & reactions • password protection • self-destruct messages • Ed25519 signatures • CLI client • AI Agent channel • Arthas Hub • i18n • self-hosted deployment (3 tiers).
+All planned features implemented: E2EE chat • encrypted file sharing • encrypted voice messages • QR code sharing • room expiry • reply & reactions • password protection • self-destruct messages • Ed25519 signatures • CLI client • AI Agent channel • Arthas Hub • Activity Ranking • Random Match • i18n • self-hosted deployment (3 tiers).
 
 See [Roadmap](docs/roadmap.md) for future plans.
 
