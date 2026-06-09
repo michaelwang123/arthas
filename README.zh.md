@@ -151,6 +151,13 @@ npm run dev
 
 前端启动在 `http://localhost:5173`
 
+本地预览生产构建（无 React StrictMode、无 HMR）：
+
+```bash
+cd arthas-client
+npm run preview:prod
+```
+
 ### CLI 客户端
 
 ```bash

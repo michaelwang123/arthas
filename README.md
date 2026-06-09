@@ -151,6 +151,13 @@ npm run dev
 
 Frontend starts at `http://localhost:5173`
 
+To preview a production build locally (no React StrictMode, no HMR):
+
+```bash
+cd arthas-client
+npm run preview:prod
+```
+
 ### CLI Client
 
 ```bash
