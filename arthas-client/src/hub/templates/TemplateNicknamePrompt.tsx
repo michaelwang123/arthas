@@ -58,9 +58,11 @@ export function TemplateNicknamePrompt({
   const [password, setPassword] = useState('');
   const nicknameInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus nickname input on mount
+  // Auto-focus nickname input on mount and scroll into view
   useEffect(() => {
     nicknameInputRef.current?.focus();
+    // Ensure the prompt is visible — scroll it into view on mobile/short viewports
+    nicknameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, []);
 
   const nicknameValid = nickname.trim().length >= 1 && nickname.trim().length <= NICKNAME_MAX_LENGTH;
