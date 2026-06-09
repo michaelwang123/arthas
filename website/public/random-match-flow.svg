@@ -1,0 +1,187 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" fill="none" role="img" aria-labelledby="svg-title svg-desc">
+  <title id="svg-title">Random Match — Encrypted Pairing Flow</title>
+  <desc id="svg-desc">Diagram showing the encrypted random pairing flow: Client A and Client B send match requests to a server queue, the pairing algorithm matches them, Client A generates an AES-256 key relayed through the server to Client B, creating an E2EE chat room with 30-minute expiry.</desc>
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1b2e"/>
+      <stop offset="100%" stop-color="#0f1019"/>
+    </linearGradient>
+    <linearGradient id="cardGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2d2f45"/>
+      <stop offset="100%" stop-color="#1e2035"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <marker id="arrowIndigo" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#6366f1"/>
+    </marker>
+    <marker id="arrowViolet" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#8b5cf6"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#22c55e"/>
+    </marker>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <style>
+      @keyframes dot-move {
+        0% { opacity: 0; }
+        20% { opacity: 1; }
+        80% { opacity: 1; }
+        100% { opacity: 0; }
+      }
+      @keyframes dash-flow {
+        0% { stroke-dashoffset: 20; }
+        100% { stroke-dashoffset: 0; }
+      }
+      @keyframes pulse-glow {
+        0%, 100% { filter: none; }
+        50% { filter: drop-shadow(0 0 6px rgba(34, 197, 94, 0.6)); }
+      }
+      @keyframes arrow-flow {
+        0%, 100% { opacity: 0.5; }
+        50% { opacity: 1; }
+      }
+      .dot-particle { animation: dot-move 2s ease-in-out infinite; }
+      .dot-particle-delay { animation: dot-move 2s ease-in-out 0.5s infinite; }
+      .key-relay { stroke-dasharray: 6, 4; animation: dash-flow 1s linear infinite; }
+      .match-room { animation: pulse-glow 3s ease-in-out infinite; }
+      .flow-arrow { animation: arrow-flow 1.5s ease-in-out infinite; }
+      @media (prefers-reduced-motion: reduce) {
+        .dot-particle, .dot-particle-delay, .key-relay, .match-room, .flow-arrow {
+          animation: none;
+        }
+      }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="520" rx="16" fill="url(#bgGrad)"/>
+
+  <!-- Title -->
+  <text x="450" y="38" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="700" fill="#e2e8f0">Random Match — Encrypted Pairing Flow</text>
+
+  <!-- Column Headers -->
+  <text x="150" y="68" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" fill="#94a3b8">Client A</text>
+  <text x="450" y="68" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" fill="#94a3b8">Server</text>
+  <text x="750" y="68" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" fill="#94a3b8">Client B</text>
+
+  <!-- Column Dividers (subtle) -->
+  <line x1="300" y1="55" x2="300" y2="430" stroke="#374151" stroke-width="0.5" stroke-dasharray="4,6" opacity="0.5"/>
+  <line x1="600" y1="55" x2="600" y2="430" stroke="#374151" stroke-width="0.5" stroke-dasharray="4,6" opacity="0.5"/>
+
+  <!-- ===== ROW 1: Match Request ===== -->
+
+  <!-- Client A: Click Match -->
+  <rect x="60" y="85" width="180" height="65" rx="12" fill="url(#cardGrad)" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="150" y="112" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20">🎲</text>
+  <text x="150" y="132" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#e2e8f0">Click Match</text>
+  <text x="150" y="145" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#94a3b8">Select interest tags</text>
+
+  <!-- Server: Queue -->
+  <rect x="360" y="85" width="180" height="65" rx="12" fill="url(#cardGrad)" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="450" y="112" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20">📋</text>
+  <text x="450" y="132" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#e2e8f0">Queue</text>
+  <text x="450" y="145" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#94a3b8">Match requests pool</text>
+
+  <!-- Client B: Click Match -->
+  <rect x="660" y="85" width="180" height="65" rx="12" fill="url(#cardGrad)" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="750" y="112" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20">🎲</text>
+  <text x="750" y="132" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#e2e8f0">Click Match</text>
+  <text x="750" y="145" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#94a3b8">Select interest tags</text>
+
+  <!-- Arrows: Client A → Queue -->
+  <path class="flow-arrow" d="M240 117 L360 117" stroke="#6366f1" stroke-width="2" marker-end="url(#arrowIndigo)"/>
+  <text x="300" y="110" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#a5b4fc">MatchReq</text>
+  <!-- Dot particles on Client A arrow -->
+  <circle class="dot-particle" cx="260" cy="117" r="2.5" fill="#6366f1"/>
+  <circle class="dot-particle-delay" cx="270" cy="117" r="2.5" fill="#6366f1"/>
+
+  <!-- Arrows: Client B → Queue -->
+  <path class="flow-arrow" d="M660 117 L540 117" stroke="#6366f1" stroke-width="2" marker-end="url(#arrowIndigo)"/>
+  <text x="600" y="110" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#a5b4fc">MatchReq</text>
+  <!-- Dot particles on Client B arrow -->
+  <circle class="dot-particle" cx="640" cy="117" r="2.5" fill="#6366f1"/>
+  <circle class="dot-particle-delay" cx="630" cy="117" r="2.5" fill="#6366f1"/>
+
+  <!-- ===== ROW 2: Pairing Algorithm ===== -->
+
+  <!-- Arrow: Queue → Pairing Algorithm -->
+  <path class="flow-arrow" d="M450 150 L450 170" stroke="#8b5cf6" stroke-width="2" marker-end="url(#arrowViolet)"/>
+
+  <!-- Server: Pairing Algorithm -->
+  <rect x="360" y="175" width="180" height="55" rx="12" fill="url(#cardGrad)" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="450" y="200" text-anchor="middle" font-family="system-ui, sans-serif" font-size="16">⚡</text>
+  <text x="450" y="218" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#e2e8f0">Pairing Algorithm</text>
+  <text x="450" y="228" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#94a3b8">Tag priority → FIFO fallback</text>
+
+  <!-- ===== ROW 3: Key Exchange ===== -->
+
+  <!-- Arrow: Pairing → Key Exchange row -->
+  <path class="flow-arrow" d="M450 230 L450 252" stroke="#8b5cf6" stroke-width="2" marker-end="url(#arrowViolet)"/>
+
+  <!-- Client A: Gen AES -->
+  <rect x="60" y="255" width="180" height="65" rx="12" fill="url(#cardGrad)" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="150" y="282" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20">🔑</text>
+  <text x="150" y="302" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#22c55e">Gen AES Key</text>
+  <text x="150" y="315" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#94a3b8">Client-side generation</text>
+
+  <!-- Server: Relay -->
+  <rect x="360" y="255" width="180" height="65" rx="12" fill="url(#cardGrad)" stroke="#374151" stroke-width="1"/>
+  <text x="450" y="282" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20">🔀</text>
+  <text x="450" y="302" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#e2e8f0">Relay</text>
+  <text x="450" y="315" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#94a3b8">No store — zero knowledge</text>
+
+  <!-- Client B: Recv Key -->
+  <rect x="660" y="255" width="180" height="65" rx="12" fill="url(#cardGrad)" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="750" y="282" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20">🔐</text>
+  <text x="750" y="302" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#22c55e">Recv Key</text>
+  <text x="750" y="315" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#94a3b8">Decrypt &amp; store locally</text>
+
+  <!-- Key relay arrows with dash animation -->
+  <line class="key-relay" x1="240" y1="287" x2="360" y2="287" stroke="#22c55e" stroke-width="2" marker-end="url(#arrowGreen)"/>
+  <text x="300" y="280" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#86efac">Key →</text>
+
+  <line class="key-relay" x1="540" y1="287" x2="660" y2="287" stroke="#22c55e" stroke-width="2" marker-end="url(#arrowGreen)"/>
+  <text x="600" y="280" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#86efac">→ Key</text>
+
+  <!-- ===== ROW 4: Match Room ===== -->
+
+  <!-- Converging arrows to Match Room -->
+  <path d="M150 320 L150 345 L380 345" stroke="#22c55e" stroke-width="1.5" fill="none" marker-end="url(#arrowGreen)"/>
+  <path d="M750 320 L750 345 L520 345" stroke="#22c55e" stroke-width="1.5" fill="none" marker-end="url(#arrowGreen)"/>
+  <path d="M450 320 L450 335" stroke="#8b5cf6" stroke-width="1.5" fill="none"/>
+
+  <!-- Match Room (centered, prominent) -->
+  <rect class="match-room" x="325" y="350" width="250" height="75" rx="12" fill="url(#cardGrad)" stroke="#22c55e" stroke-width="2"/>
+  <text x="450" y="377" text-anchor="middle" font-family="system-ui, sans-serif" font-size="22">💬</text>
+  <text x="450" y="398" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="#22c55e">Match Room</text>
+  <text x="450" y="416" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#94a3b8">E2EE Chat • 30min expiry</text>
+
+  <!-- ===== BOTTOM: Feature Badges ===== -->
+  <rect x="50" y="445" width="800" height="60" rx="12" fill="url(#cardGrad)" stroke="#374151" stroke-width="1"/>
+
+  <!-- Badge: Interest Tags -->
+  <rect x="75" y="460" width="155" height="26" rx="13" fill="#1e293b" stroke="#6366f1" stroke-width="1"/>
+  <text x="152" y="477" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#a5b4fc">🏷️ Interest Tags</text>
+
+  <!-- Badge: 60s Timeout -->
+  <rect x="250" y="460" width="145" height="26" rx="13" fill="#1e293b" stroke="#6366f1" stroke-width="1"/>
+  <text x="322" y="477" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#a5b4fc">⏱️ 60s Timeout</text>
+
+  <!-- Badge: Invite Link -->
+  <rect x="415" y="460" width="145" height="26" rx="13" fill="#1e293b" stroke="#22c55e" stroke-width="1"/>
+  <text x="487" y="477" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#86efac">🔗 Invite Link</text>
+
+  <!-- Badge: Next -->
+  <rect x="580" y="460" width="100" height="26" rx="13" fill="#1e293b" stroke="#22c55e" stroke-width="1"/>
+  <text x="630" y="477" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#86efac">🔄 Next</text>
+
+  <!-- Badge: E2EE -->
+  <rect x="700" y="460" width="130" height="26" rx="13" fill="#1e293b" stroke="#22c55e" stroke-width="1"/>
+  <text x="765" y="477" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#86efac">🔒 E2EE</text>
+</svg>
