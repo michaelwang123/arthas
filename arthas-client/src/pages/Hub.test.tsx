@@ -35,7 +35,7 @@ vi.mock('../components/HubRoomCard', () => ({
 
 // Mock hubApi to prevent real network calls from startPolling
 vi.mock('../hub/hubApi', () => ({
-  fetchHubRooms: vi.fn().mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 }),
+  fetchHubRooms: vi.fn().mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0, totalOnline: 0 }),
 }));
 
 describe('Hub page', () => {
@@ -48,6 +48,7 @@ describe('Hub page', () => {
       loading: false,
       error: null,
       filters: { tag: '', query: '' },
+      totalOnline: 0,
     });
     usePageStore.setState({ page: 'hub' });
   });
@@ -80,8 +81,8 @@ describe('Hub page', () => {
     act(() => {
       useHubStore.setState({
         rooms: [
-          { roomId: '1', title: 'Room A', shareCode: '1:k:0:0', description: '', tags: [], memberCount: 2, hasPassword: false, createdAt: 1000, expiresAt: 0 },
-          { roomId: '2', title: 'Room B', shareCode: '2:k:0:0', description: '', tags: [], memberCount: 1, hasPassword: true, createdAt: 2000, expiresAt: 0 },
+          { roomId: '1', title: 'Room A', shareCode: '1:k:0:0', description: '', tags: [], memberCount: 2, hasPassword: false, createdAt: 1000, expiresAt: 0, messageCount5min: 0 },
+          { roomId: '2', title: 'Room B', shareCode: '2:k:0:0', description: '', tags: [], memberCount: 1, hasPassword: true, createdAt: 2000, expiresAt: 0, messageCount5min: 0 },
         ],
         total: 2,
         loading: false,

@@ -17,6 +17,9 @@ const DAILY_TOPIC_INTERVAL = 300_000;
 /** Rooms polling interval: 30 seconds. */
 const ROOMS_POLL_INTERVAL = 30_000;
 
+/** Sort mode for Hub room listing. */
+export type SortMode = 'active' | 'people' | 'newest' | '';
+
 interface HubState {
   rooms: RoomListing[];
   dailyTopic: RoomListing | null;
@@ -26,6 +29,8 @@ interface HubState {
   error: string | null;
   filters: HubFilters;
   hasMore: boolean;
+  sortMode: SortMode;
+  totalOnline: number;
 
   // Actions
   fetchRooms: () => Promise<void>;
@@ -34,6 +39,7 @@ interface HubState {
   retry: () => void;
   setTagFilter: (tag: string) => void;
   setSearchQuery: (query: string) => void;
+  setSortMode: (mode: SortMode) => void;
   startPolling: () => void;
   stopPolling: () => void;
 }
@@ -42,6 +48,23 @@ interface HubState {
 let pollingInterval: ReturnType<typeof setInterval> | null = null;
 let dailyTopicInterval: ReturnType<typeof setInterval> | null = null;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let fetchController: AbortController | null = null;
+
+/**
+ * Cancels any in-flight room listing fetch and returns a fresh AbortSignal.
+ * Used by all "replace" operations (fetchRooms, setSortMode, startPolling initLoad).
+ * Also cancels in-flight loadMore requests to prevent stale data appending.
+ */
+function newFetchSignal(): AbortSignal {
+  if (fetchController) fetchController.abort();
+  fetchController = new AbortController();
+  return fetchController.signal;
+}
+
+/** Returns true if the error is an abort (should be silently ignored). */
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'AbortError';
+}
 
 export const useHubStore = create<HubState>((set, get) => ({
   rooms: [],
@@ -52,6 +75,8 @@ export const useHubStore = create<HubState>((set, get) => ({
   error: null,
   filters: { tag: '', query: '' },
   hasMore: false,
+  sortMode: '',
+  totalOnline: 0,
 
   fetchDailyTopic: async () => {
     try {
@@ -71,23 +96,28 @@ export const useHubStore = create<HubState>((set, get) => ({
   },
 
   fetchRooms: async () => {
+    const signal = newFetchSignal();
     set({ loading: true, error: null });
     try {
-      // Use server-side isDailyTopic=false filter — excludes daily topic from results
       const response = await fetchHubRooms({
         filters: get().filters,
         limit: PAGE_SIZE,
         offset: 0,
         isDailyTopic: false,
+        sort: get().sortMode,
+        signal,
       });
+      if (signal.aborted) return;
       const rooms = response.rooms ?? [];
       set({
         rooms,
         total: response.total,
+        totalOnline: response.totalOnline ?? 0,
         loading: false,
         hasMore: rooms.length < response.total,
       });
     } catch (err) {
+      if (isAbortError(err)) return;
       set({
         error: err instanceof Error ? err.message : 'Failed to fetch rooms',
         loading: false,
@@ -96,8 +126,12 @@ export const useHubStore = create<HubState>((set, get) => ({
   },
 
   loadMore: async () => {
-    const { rooms, loadingMore, filters } = get();
+    const { rooms, loadingMore, filters, sortMode } = get();
     if (loadingMore) return;
+
+    // Use the current fetchController signal — if a replace operation fires
+    // (fetchRooms/setSortMode) while loadMore is in flight, this request is cancelled.
+    const signal = fetchController?.signal;
 
     set({ loadingMore: true });
     try {
@@ -106,15 +140,23 @@ export const useHubStore = create<HubState>((set, get) => ({
         limit: PAGE_SIZE,
         offset: rooms.length,
         isDailyTopic: false,
+        sort: sortMode,
+        signal,
       });
+      if (signal?.aborted) return;
       const newRooms = response.rooms ?? [];
       set({
         rooms: [...rooms, ...newRooms],
         total: response.total,
+        totalOnline: response.totalOnline ?? 0,
         loadingMore: false,
         hasMore: rooms.length + newRooms.length < response.total,
       });
     } catch (err) {
+      if (isAbortError(err)) {
+        set({ loadingMore: false });
+        return;
+      }
       set({
         error: err instanceof Error ? err.message : 'Failed to load more rooms',
         loadingMore: false,
@@ -141,15 +183,51 @@ export const useHubStore = create<HubState>((set, get) => ({
     }, 300);
   },
 
+  setSortMode: (mode: SortMode) => {
+    set({ sortMode: mode });
+    // Re-fetch without showing loading spinner — keep current rooms visible
+    // while the server responds with the new sort order.
+    const signal = newFetchSignal();
+
+    (async () => {
+      try {
+        const response = await fetchHubRooms({
+          filters: get().filters,
+          limit: PAGE_SIZE,
+          offset: 0,
+          isDailyTopic: false,
+          sort: mode,
+          signal,
+        });
+        if (signal.aborted) return;
+        const rooms = response.rooms ?? [];
+        set({
+          rooms,
+          total: response.total,
+          totalOnline: response.totalOnline ?? 0,
+          hasMore: rooms.length < response.total,
+        });
+      } catch (err) {
+        if (isAbortError(err)) return;
+        set({
+          error: err instanceof Error ? err.message : 'Failed to fetch rooms',
+        });
+      }
+    })();
+  },
+
   startPolling: () => {
-    // 初始加载：两次请求（dailyTopic 和 rooms 使用服务端过滤，各自精确获取）
+    const signal = newFetchSignal();
+
     const initLoad = async () => {
       try {
         // Parallel fetch: dailyTopic (limit=1) and rooms (isDailyTopic=false)
         const [dailyRes, roomsRes] = await Promise.all([
-          fetchHubRooms({ filters: { tag: '', query: '' }, limit: 1, offset: 0, isDailyTopic: true }),
-          fetchHubRooms({ filters: { tag: '', query: '' }, limit: PAGE_SIZE, offset: 0, isDailyTopic: false }),
+          fetchHubRooms({ filters: { tag: '', query: '' }, limit: 1, offset: 0, isDailyTopic: true, signal }),
+          fetchHubRooms({ filters: { tag: '', query: '' }, limit: PAGE_SIZE, offset: 0, isDailyTopic: false, sort: get().sortMode, signal }),
         ]);
+
+        if (signal.aborted) return;
 
         const dailyRooms = dailyRes.rooms ?? [];
         const daily = dailyRooms.length > 0 ? dailyRooms[0] : null;
@@ -159,10 +237,12 @@ export const useHubStore = create<HubState>((set, get) => ({
           dailyTopic: daily,
           rooms,
           total: roomsRes.total,
+          totalOnline: roomsRes.totalOnline ?? 0,
           loading: false,
           hasMore: rooms.length < roomsRes.total,
         });
       } catch (err) {
+        if (isAbortError(err)) return;
         set({
           error: err instanceof Error ? err.message : 'Failed to fetch rooms',
           loading: false,
@@ -202,6 +282,10 @@ export const useHubStore = create<HubState>((set, get) => ({
     if (debounceTimer) {
       clearTimeout(debounceTimer);
       debounceTimer = null;
+    }
+    if (fetchController) {
+      fetchController.abort();
+      fetchController = null;
     }
   },
 }));

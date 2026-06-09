@@ -42,7 +42,7 @@ func setupHubWithRoom(t *testing.T) (*Hub, *room.Room, *Client) {
 	hub.mu.Unlock()
 
 	// 创建房间并添加成员
-	r := hub.roomManager.CreateRoom("room-abc", "", 0, 0)
+	r := hub.roomManager.CreateRoom("room-abc", "", 0, 0, 0)
 	member := &room.Member{
 		ID:    client.ID,
 		Name:  client.Name,
@@ -496,7 +496,7 @@ func TestSendFileData_TimeoutReturnsFalse(t *testing.T) {
 // 即使某个接收方的 send buffer 满了（需要等待 5s 超时），
 // 其他接收方仍能立即收到数据。
 func TestBroadcastFileData_SlowReceiverDoesNotBlockFast(t *testing.T) {
-	r := room.NewRoom("test-room", "", 0, 0)
+	r := room.NewRoom("test-room", "", 0, 0, 0)
 
 	// 快接收方：有缓冲的 channel
 	fastCh := make(chan []byte, 10)

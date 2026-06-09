@@ -45,7 +45,7 @@ func NewRoomManager() *RoomManager {
 }
 
 // CreateRoom creates a new room with the given ID, password hash, ephemeral duration,
-// and expiration timestamp.
+// expiration timestamp, and per-room member limit.
 // If a room with the same ID already exists, it returns the existing room.
 //
 // Parameters:
@@ -53,7 +53,8 @@ func NewRoomManager() *RoomManager {
 //   - passwordHash: SHA-256 hash of room password; empty string means no password
 //   - ephemeral: ephemeral message duration in seconds; 0 means disabled
 //   - expiresAt: Unix seconds timestamp when the room expires; 0 means no expiration
-func (rm *RoomManager) CreateRoom(roomId, passwordHash string, ephemeral int, expiresAt int64) *Room {
+//   - maxMembers: per-room member limit; 0 means use DefaultMaxMembers (50)
+func (rm *RoomManager) CreateRoom(roomId, passwordHash string, ephemeral int, expiresAt int64, maxMembers int) *Room {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
@@ -61,7 +62,7 @@ func (rm *RoomManager) CreateRoom(roomId, passwordHash string, ephemeral int, ex
 		return existing
 	}
 
-	r := NewRoom(roomId, passwordHash, ephemeral, expiresAt)
+	r := NewRoom(roomId, passwordHash, ephemeral, expiresAt, maxMembers)
 	rm.rooms[roomId] = r
 
 	// 📚 学习要点: 维护 expiringRooms 索引
@@ -88,6 +89,25 @@ func (rm *RoomManager) RemoveRoom(roomId string) {
 	defer rm.mu.Unlock()
 	delete(rm.rooms, roomId)
 	delete(rm.expiringRooms, roomId) // 同步清理过期索引
+}
+
+// ExtendRoomExpiry updates the expiration timestamp for a room.
+// Returns false if the room does not exist.
+// Used by match rooms to implement mutual-consent room extension.
+func (rm *RoomManager) ExtendRoomExpiry(roomId string, newExpiresAt int64) bool {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	r, ok := rm.rooms[roomId]
+	if !ok {
+		return false
+	}
+
+	r.ExtendExpiry(newExpiresAt)
+	if newExpiresAt > 0 {
+		rm.expiringRooms[roomId] = newExpiresAt
+	}
+	return true
 }
 
 // RoomCount returns the total number of active rooms.

@@ -25,7 +25,7 @@ describe('hubApi — fetchHubRooms', () => {
 
     await fetchHubRooms({ filters: { tag: '', query: '' } });
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/hub');
+    expect(mockFetch).toHaveBeenCalledWith('/api/hub', expect.any(Object));
   });
 
   it('includes tag param when set', async () => {
@@ -36,7 +36,7 @@ describe('hubApi — fetchHubRooms', () => {
 
     await fetchHubRooms({ filters: { tag: 'golang', query: '' } });
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/hub?tag=golang');
+    expect(mockFetch).toHaveBeenCalledWith('/api/hub?tag=golang', expect.any(Object));
   });
 
   it('includes query param when set', async () => {
@@ -47,7 +47,7 @@ describe('hubApi — fetchHubRooms', () => {
 
     await fetchHubRooms({ filters: { tag: '', query: 'react' } });
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/hub?q=react');
+    expect(mockFetch).toHaveBeenCalledWith('/api/hub?q=react', expect.any(Object));
   });
 
   it('includes both params when both set', async () => {

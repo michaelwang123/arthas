@@ -44,7 +44,7 @@ func TestExpiry_CreateRoomWithExpiry_CleanupDestroysRoom(t *testing.T) {
 	// 创建带 1 小时过期时间的房间
 	now := time.Now().Unix()
 	expiresAt := now + 3600
-	r := hub.roomManager.CreateRoom("room-expiry-01", "", 0, expiresAt)
+	r := hub.roomManager.CreateRoom("room-expiry-01", "", 0, expiresAt, 0)
 
 	// 添加一个成员并注册客户端
 	memberSend := make(chan []byte, sendBufferSize)
@@ -295,7 +295,7 @@ func TestExpiry_ExpiredRoomWithActiveTransfer_FileCancelBroadcastToAll(t *testin
 	// 创建带过期时间的房间
 	now := time.Now().Unix()
 	pastExpiresAt := now - 10 // 10 秒前已过期
-	r := hub.roomManager.CreateRoom("room-transfer-expiry", "", 0, pastExpiresAt)
+	r := hub.roomManager.CreateRoom("room-transfer-expiry", "", 0, pastExpiresAt, 0)
 
 	// 添加发送方（有活跃传输）
 	senderSend := make(chan []byte, sendBufferSize)
@@ -439,7 +439,7 @@ func TestExpiry_JoinExpiredRoom_ReturnsE007(t *testing.T) {
 
 	// 创建已过期的房间
 	now := time.Now().Unix()
-	hub.roomManager.CreateRoom("room-expired-join", "", 0, now-60) // 60 秒前已过期
+	hub.roomManager.CreateRoom("room-expired-join", "", 0, now-60, 0) // 60 秒前已过期
 
 	// 创建客户端
 	clientSend := make(chan []byte, sendBufferSize)
@@ -491,7 +491,7 @@ func TestExpiry_JoinNoExpiredRoom_Succeeds(t *testing.T) {
 	// 创建未过期的房间（1 小时后过期）
 	now := time.Now().Unix()
 	futureExpiresAt := now + 3600
-	hub.roomManager.CreateRoom("room-active-join", "", 0, futureExpiresAt)
+	hub.roomManager.CreateRoom("room-active-join", "", 0, futureExpiresAt, 0)
 
 	// 创建客户端
 	clientSend := make(chan []byte, sendBufferSize)
@@ -543,13 +543,13 @@ func TestExpiry_CleanupSkipsNoExpiredRooms(t *testing.T) {
 	now := time.Now().Unix()
 
 	// 创建永不过期的房间
-	hub.roomManager.CreateRoom("room-never-expire", "", 0, 0)
+	hub.roomManager.CreateRoom("room-never-expire", "", 0, 0, 0)
 
 	// 创建未来过期的房间
-	hub.roomManager.CreateRoom("room-future-expire", "", 0, now+3600)
+	hub.roomManager.CreateRoom("room-future-expire", "", 0, now+3600, 0)
 
 	// 创建已过期的房间（只有这个应被销毁）
-	hub.roomManager.CreateRoom("room-past-expire", "", 0, now-10)
+	hub.roomManager.CreateRoom("room-past-expire", "", 0, now-10, 0)
 
 	// 调用 cleanupExpiredRooms
 	hub.cleanupExpiredRooms()

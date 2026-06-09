@@ -1,5 +1,5 @@
 /**
- * @file HubFilters — search input and tag filter badges for the Hub page.
+ * @file HubFilters — sort mode tabs, search input, and tag filter badges for the Hub page.
  *
  * Dynamically derives popular tags from the currently loaded rooms.
  * Falls back to a set of default tags when no rooms are loaded.
@@ -7,9 +7,19 @@
  * @module components/HubFilters
  */
 
-import { useMemo } from 'react';
+import { useMemo, useRef, useEffect, useState } from 'react';
 import { useHubStore } from '../hub/hubStore';
+import type { SortMode } from '../hub/hubStore';
 import { useTranslation } from '../i18n';
+import type { TranslationKey } from '../i18n';
+
+/** Sort mode button definitions. */
+const SORT_MODES: ReadonlyArray<{ value: SortMode; labelKey: TranslationKey; icon?: string }> = [
+  { value: '', labelKey: 'hub.sort.all' },
+  { value: 'active', labelKey: 'hub.sort.active', icon: '🔥' },
+  { value: 'people', labelKey: 'hub.sort.people', icon: '👥' },
+  { value: 'newest', labelKey: 'hub.sort.newest', icon: '🆕' },
+];
 
 /** Fallback tags shown when no rooms are loaded or tags are empty. */
 const DEFAULT_TAGS = ['dev', 'gaming', 'random', 'help', 'ama'];
@@ -21,8 +31,10 @@ export function HubFilters() {
   const { t } = useTranslation();
   const filters = useHubStore((s) => s.filters);
   const rooms = useHubStore((s) => s.rooms);
+  const sortMode = useHubStore((s) => s.sortMode);
   const setTagFilter = useHubStore((s) => s.setTagFilter);
   const setSearchQuery = useHubStore((s) => s.setSearchQuery);
+  const setSortMode = useHubStore((s) => s.setSortMode);
 
   // Derive popular tags from current rooms (sorted by frequency), fallback to defaults
   const popularTags = useMemo(() => {
@@ -54,10 +66,51 @@ export function HubFilters() {
     setSearchQuery('');
   };
 
+  /** Returns the display label for the current sort mode (used for aria-live announcement). */
+  const currentSortLabel = useMemo(() => {
+    const mode = SORT_MODES.find((m) => m.value === sortMode);
+    return mode ? t(mode.labelKey) : t('hub.sort.all');
+  }, [sortMode, t]);
+
+  // Only announce sort mode changes, not the initial render.
+  const [announcement, setAnnouncement] = useState('');
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    setAnnouncement(t('hub.sort.changed', { mode: currentSortLabel }));
+  }, [sortMode, currentSortLabel, t]);
+
   const hasFilters = filters.tag !== '' || filters.query !== '';
 
   return (
     <div className="space-y-3">
+      {/* Sort mode buttons */}
+      <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={t('hub.sort.all')}>
+        {SORT_MODES.map((mode) => (
+          <button
+            key={mode.value}
+            onClick={() => setSortMode(mode.value)}
+            aria-pressed={sortMode === mode.value}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+              sortMode === mode.value
+                ? 'bg-indigo-600 text-white'
+                : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-300 border border-gray-700'
+            }`}
+          >
+            {mode.icon && <span aria-hidden="true">{mode.icon} </span>}
+            {t(mode.labelKey)}
+          </button>
+        ))}
+      </div>
+
+      {/* Aria-live region for sort mode change announcements (empty on initial render) */}
+      <div aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
+
       {/* Search input */}
       <div className="relative">
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm" aria-hidden="true">🔍</span>

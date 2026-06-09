@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	// MaxMembers is the maximum number of members allowed in a single room.
-	MaxMembers = 50
+	// DefaultMaxMembers is the default maximum number of members allowed in a single room.
+	// Individual rooms can override this via their MaxMembers field.
+	DefaultMaxMembers = 50
 )
 
 // Errors returned by Room methods.
@@ -48,24 +49,27 @@ type Room struct {
 	ID           string
 	PasswordHash string // SHA-256 hash of room password; empty string means no password.
 	Ephemeral    int    // Ephemeral message duration in seconds; 0 means disabled.
+	MaxMembers   int    // Per-room member limit; 0 means use DefaultMaxMembers (50).
 	expiresAt    int64  // Unix seconds timestamp when the room expires; 0 means no expiration. Set at creation time, read-only thereafter.
 	mu           sync.RWMutex
 	members      map[string]*Member
 }
 
 // NewRoom creates a new Room with the given ID, optional password hash, ephemeral duration,
-// and expiration timestamp.
+// expiration timestamp, and per-room member limit.
 //
 // Parameters:
 //   - id: unique room identifier (NanoID, 21 chars)
 //   - passwordHash: SHA-256 hash of room password; empty string means no password
 //   - ephemeral: ephemeral message duration in seconds; 0 means disabled
 //   - expiresAt: Unix seconds timestamp when the room expires; 0 means no expiration
-func NewRoom(id, passwordHash string, ephemeral int, expiresAt int64) *Room {
+//   - maxMembers: per-room member limit; 0 means use DefaultMaxMembers (50)
+func NewRoom(id, passwordHash string, ephemeral int, expiresAt int64, maxMembers int) *Room {
 	return &Room{
 		ID:           id,
 		PasswordHash: passwordHash,
 		Ephemeral:    ephemeral,
+		MaxMembers:   maxMembers,
 		expiresAt:    expiresAt,
 		members:      make(map[string]*Member),
 	}
@@ -74,12 +78,20 @@ func NewRoom(id, passwordHash string, ephemeral int, expiresAt int64) *Room {
 // GetExpiresAt 返回房间的过期时间戳（Unix 秒）。0 表示永不过期。
 //
 // 📚 学习要点: Getter 封装只读语义
-// expiresAt 在 NewRoom 创建时设置，之后不可修改。
-// 使用私有字段 + 公开 getter 在编译期强制只读约束：
-// 外部代码只能通过 GetExpiresAt() 读取，无法直接赋值修改。
-// 这比导出字段 + 文档约定"请勿修改"更安全 — 编译器替你检查。
+// expiresAt 在 NewRoom 创建时设置，通常不修改。
+// 唯一的修改路径是 ExtendExpiry（match 房间延期），通过写锁保护。
+// 外部代码通过 GetExpiresAt() 读取，不能直接赋值修改。
 func (r *Room) GetExpiresAt() int64 {
 	return r.expiresAt
+}
+
+// ExtendExpiry updates the room's expiration timestamp to a new value.
+// Used by match rooms to implement mutual-consent room extension.
+// Thread-safe: acquires write lock since expiresAt may be read concurrently by IsExpired.
+func (r *Room) ExtendExpiry(newExpiresAt int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.expiresAt = newExpiresAt
 }
 
 // IsExpired 判断房间是否已过期。
@@ -90,17 +102,15 @@ func (r *Room) GetExpiresAt() int64 {
 // - 便于属性测试：可注入任意时间点验证边界条件，无需 mock time 包
 // - 便于推理正确性：调用方明确控制时间源
 //
-// 📚 学习要点: expiresAt 只读语义
-// expiresAt 在 NewRoom 创建时设置，之后不可修改（没有 setter 方法）。
-// 这意味着 IsExpired 只读取一个不可变字段 + 比较传入的 now 参数，
-// 天然线程安全，无需任何锁保护。多个 goroutine 可以并发调用 IsExpired
-// 而不会产生数据竞争。
+// Thread-safe: acquires read lock because expiresAt can be modified by ExtendExpiry.
 //
 // Parameters:
 //   - now: current Unix timestamp in seconds (caller provides, enabling pure function testing)
 //
 // Returns true if the room has a non-zero expiresAt and the current time exceeds it.
 func (r *Room) IsExpired(now int64) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.expiresAt > 0 && now > r.expiresAt
 }
 
@@ -111,20 +121,30 @@ func (r *Room) MemberCount() int {
 	return len(r.members)
 }
 
+// maxMembersLimit returns the effective member limit for this room.
+// If per-room MaxMembers > 0, use it; otherwise fall back to DefaultMaxMembers.
+func (r *Room) maxMembersLimit() int {
+	if r.MaxMembers > 0 {
+		return r.MaxMembers
+	}
+	return DefaultMaxMembers
+}
+
 // IsFull returns true if the room has reached its capacity limit.
+// Uses per-room MaxMembers if set, otherwise falls back to DefaultMaxMembers.
 func (r *Room) IsFull() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return len(r.members) >= MaxMembers
+	return len(r.members) >= r.maxMembersLimit()
 }
 
 // AddMember adds a member to the room. Returns ErrRoomFull if the room
-// has reached MaxMembers capacity.
+// has reached its capacity limit (per-room MaxMembers or DefaultMaxMembers).
 func (r *Room) AddMember(member *Member) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if len(r.members) >= MaxMembers {
+	if len(r.members) >= r.maxMembersLimit() {
 		return ErrRoomFull
 	}
 

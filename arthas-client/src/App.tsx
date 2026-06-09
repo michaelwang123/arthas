@@ -1,9 +1,13 @@
-import { useEffect, Component, type ReactNode } from 'react';
+import { useEffect, useState, Component, type ReactNode } from 'react';
 import { useChatStore } from './stores/chatStore';
 import { usePageStore } from './stores/pageStore';
+import { useMatchStore } from './match/matchStore';
+import { disconnect } from './network/websocket';
 import { Home } from './pages/Home';
 import { ChatRoom } from './pages/ChatRoom';
 import { Hub } from './pages/Hub';
+import { MatchInvitePage, parseMatchInviteRoute } from './match/MatchInvitePage';
+import { MatchPage } from './match/MatchPage';
 import { useTranslation, useI18nStore, translate } from './i18n';
 
 // ===== ErrorBoundary =====
@@ -70,10 +74,30 @@ function App() {
   const roomId = useChatStore((s) => s.roomId);
   const connect = useChatStore((s) => s.connect);
   const page = usePageStore((s) => s.page);
+  const matchStatus = useMatchStore((s) => s.status);
   const { t } = useTranslation();
+
+  // Hash-based route detection for /match/:token invite links
+  const [matchToken, setMatchToken] = useState<string | null>(() =>
+    parseMatchInviteRoute(window.location.hash)
+  );
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setMatchToken(parseMatchInviteRoute(window.location.hash));
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   useEffect(() => {
     connect();
+    return () => {
+      // React StrictMode 在开发模式下会 mount → unmount → remount。
+      // disconnect() 确保旧连接被正确关闭，不会留下孤儿 WebSocket。
+      // 生产环境不会触发此 cleanup（组件只 mount 一次）。
+      disconnect();
+    };
   }, []);
 
   // 设置初始 document.title（store 的 setLocale 会在语言切换时更新）
@@ -83,10 +107,22 @@ function App() {
 
   // Determine which view to render:
   // 1. If in a room → always show ChatRoom
-  // 2. If page === 'hub' → show Hub directory
-  // 3. Otherwise → show Home (create/join)
+  // 2. If match is in an active state → show MatchPage
+  // 3. If hash matches #/match/{token} → show MatchInvitePage
+  // 4. If page === 'hub' → show Hub directory
+  // 5. Otherwise → show Home (create/join)
   const renderPage = () => {
     if (roomId !== null) return <ChatRoom />;
+
+    // Active match states: waiting, pairing, found, in-room, timeout
+    // These take over the full screen via MatchPage container
+    if (matchStatus === 'waiting' || matchStatus === 'pairing' ||
+        matchStatus === 'found' || matchStatus === 'in-room' ||
+        matchStatus === 'timeout') {
+      return <MatchPage />;
+    }
+
+    if (matchToken) return <MatchInvitePage token={matchToken} />;
     if (page === 'hub') return <Hub />;
     return <Home />;
   };

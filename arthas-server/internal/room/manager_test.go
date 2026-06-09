@@ -19,7 +19,7 @@ func TestNewRoomManager(t *testing.T) {
 func TestCreateRoom(t *testing.T) {
 	rm := NewRoomManager()
 
-	room := rm.CreateRoom("room-abc123", "", 0, 0)
+	room := rm.CreateRoom("room-abc123", "", 0, 0, 0)
 	if room == nil {
 		t.Fatal("CreateRoom returned nil")
 	}
@@ -34,8 +34,8 @@ func TestCreateRoom(t *testing.T) {
 func TestCreateRoom_DuplicateReturnsExisting(t *testing.T) {
 	rm := NewRoomManager()
 
-	room1 := rm.CreateRoom("room-1", "", 0, 0)
-	room2 := rm.CreateRoom("room-1", "", 0, 0)
+	room1 := rm.CreateRoom("room-1", "", 0, 0, 0)
+	room2 := rm.CreateRoom("room-1", "", 0, 0, 0)
 
 	if room1 != room2 {
 		t.Error("CreateRoom with same ID should return the existing room")
@@ -48,7 +48,7 @@ func TestCreateRoom_DuplicateReturnsExisting(t *testing.T) {
 func TestGetRoom(t *testing.T) {
 	rm := NewRoomManager()
 
-	rm.CreateRoom("room-xyz", "", 0, 0)
+	rm.CreateRoom("room-xyz", "", 0, 0, 0)
 
 	room := rm.GetRoom("room-xyz")
 	if room == nil {
@@ -71,7 +71,7 @@ func TestGetRoom_NotFound(t *testing.T) {
 func TestRemoveRoom(t *testing.T) {
 	rm := NewRoomManager()
 
-	rm.CreateRoom("room-to-remove", "", 0, 0)
+	rm.CreateRoom("room-to-remove", "", 0, 0, 0)
 	if rm.RoomCount() != 1 {
 		t.Fatalf("expected 1 room, got %d", rm.RoomCount())
 	}
@@ -107,7 +107,7 @@ func TestConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			rm.CreateRoom(fmt.Sprintf("room-%d", id), "", 0, 0)
+			rm.CreateRoom(fmt.Sprintf("room-%d", id), "", 0, 0, 0)
 		}(i)
 	}
 	wg.Wait()

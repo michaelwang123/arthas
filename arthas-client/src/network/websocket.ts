@@ -43,11 +43,25 @@ let shouldReconnect = true
 
 /**
  * 发起 WebSocket 连接。
+ *
+ * 幂等设计：如果已存在活跃连接，先关闭旧连接再创建新连接。
+ * 这确保 React StrictMode 的双重 mount 不会产生孤儿连接。
+ *
  * @param url 可选，覆盖默认 URL
  */
 export function connect(url?: string): void {
   const wsUrl = url ?? import.meta.env.VITE_WS_URL ?? DEFAULT_WS_URL
   shouldReconnect = true
+
+  // 关闭已有连接，防止 StrictMode 或重复调用产生孤儿 WebSocket
+  if (ws) {
+    const oldWs = ws
+    ws = null
+    oldWs.onclose = null // 阻止旧连接的 onclose 触发重连逻辑
+    oldWs.onerror = null
+    oldWs.onmessage = null
+    oldWs.close()
+  }
 
   try {
     ws = new WebSocket(wsUrl)

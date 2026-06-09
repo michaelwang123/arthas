@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/arthas/arthas-server/internal/activity"
 )
 
 // TestHubIntegration_PublicRoomLifecycle tests the full lifecycle:
@@ -34,7 +36,7 @@ func TestHubIntegration_PublicRoomLifecycle(t *testing.T) {
 	}
 
 	// Verify it appears in listing
-	result := reg.List(ListOptions{})
+	result := reg.List(ListOptions{}, nil)
 	if result.Total != 1 {
 		t.Fatalf("expected 1 room in listing, got %d", result.Total)
 	}
@@ -51,7 +53,7 @@ func TestHubIntegration_PublicRoomLifecycle(t *testing.T) {
 	// 2. Another member joins (simulates handleJoinRoom → UpdateMemberCount)
 	reg.UpdateMemberCount("test-room-1", 2)
 
-	result = reg.List(ListOptions{})
+	result = reg.List(ListOptions{}, nil)
 	if result.Rooms[0].MemberCount != 2 {
 		t.Fatalf("expected memberCount=2 after join, got %d", result.Rooms[0].MemberCount)
 	}
@@ -59,7 +61,7 @@ func TestHubIntegration_PublicRoomLifecycle(t *testing.T) {
 	// 3. Third member joins
 	reg.UpdateMemberCount("test-room-1", 3)
 
-	result = reg.List(ListOptions{})
+	result = reg.List(ListOptions{}, nil)
 	if result.Rooms[0].MemberCount != 3 {
 		t.Fatalf("expected memberCount=3, got %d", result.Rooms[0].MemberCount)
 	}
@@ -67,7 +69,7 @@ func TestHubIntegration_PublicRoomLifecycle(t *testing.T) {
 	// 4. One member leaves (simulates handleLeaveRoom → UpdateMemberCount)
 	reg.UpdateMemberCount("test-room-1", 2)
 
-	result = reg.List(ListOptions{})
+	result = reg.List(ListOptions{}, nil)
 	if result.Rooms[0].MemberCount != 2 {
 		t.Fatalf("expected memberCount=2 after leave, got %d", result.Rooms[0].MemberCount)
 	}
@@ -76,7 +78,7 @@ func TestHubIntegration_PublicRoomLifecycle(t *testing.T) {
 	reg.UpdateMemberCount("test-room-1", 1)
 	reg.Unregister("test-room-1")
 
-	result = reg.List(ListOptions{})
+	result = reg.List(ListOptions{}, nil)
 	if result.Total != 0 {
 		t.Fatalf("expected 0 rooms after unregister, got %d", result.Total)
 	}
@@ -131,7 +133,7 @@ func TestHubIntegration_PasswordProtectedPublicRoom(t *testing.T) {
 
 	reg.Register(listing)
 
-	result := reg.List(ListOptions{})
+	result := reg.List(ListOptions{}, nil)
 	if !result.Rooms[0].HasPassword {
 		t.Fatal("expected HasPassword=true")
 	}
@@ -146,7 +148,13 @@ func TestHubIntegration_PasswordProtectedPublicRoom(t *testing.T) {
 func TestHubIntegration_DailyTopicRoomFlow(t *testing.T) {
 	reg := NewHubRegistry(200)
 	rateLimiter := NewRateLimiter(30, time.Minute)
-	handler := NewHubHandler(reg, rateLimiter, "*")
+	handler := NewHubHandler(HubHandlerConfig{
+		Registry:       reg,
+		RateLimiter:    rateLimiter,
+		AllowedOrigins: "*",
+		ActivityGetter: nil,
+		OnlineCountFn:  nil,
+	})
 
 	// Simulate what CreateDailyTopicRoom does: register a daily topic listing
 	now := time.Now().UTC()
@@ -286,7 +294,13 @@ func TestHubIntegration_DailyTopicBypassesCapacity(t *testing.T) {
 func TestHubIntegration_DailyTopicJSON(t *testing.T) {
 	reg := NewHubRegistry(200)
 	rateLimiter := NewRateLimiter(30, time.Minute)
-	handler := NewHubHandler(reg, rateLimiter, "*")
+	handler := NewHubHandler(HubHandlerConfig{
+		Registry:       reg,
+		RateLimiter:    rateLimiter,
+		AllowedOrigins: "*",
+		ActivityGetter: nil,
+		OnlineCountFn:  nil,
+	})
 
 	// Register a regular room (IsDailyTopic = false)
 	reg.Register(&RoomListing{
@@ -354,5 +368,265 @@ func TestHubIntegration_DailyTopicJSON(t *testing.T) {
 	dailyStr := string(dailyJSON)
 	if !strings.Contains(dailyStr, `"isDailyTopic":true`) {
 		t.Errorf("daily topic room JSON should contain isDailyTopic:true, got: %s", dailyStr)
+	}
+}
+
+// TestIntegration_ActivitySortFlow tests the full activity flow:
+// create public rooms → send messages (increment activity) → query API with sort=active → verify ordering.
+// Validates: Requirements 1.1, 2.3
+func TestIntegration_ActivitySortFlow(t *testing.T) {
+	// Create a real activity tracker with a short window for testing
+	tracker := activity.New(5*time.Minute, 10000)
+
+	// Create registry and register 3 rooms
+	reg := NewHubRegistry(200)
+	reg.Register(&RoomListing{
+		RoomID:      "room-low",
+		KeyEncoded:  "key1",
+		Title:       "Low Activity Room",
+		MemberCount: 2,
+		CreatedAt:   1700000000,
+	})
+	reg.Register(&RoomListing{
+		RoomID:      "room-high",
+		KeyEncoded:  "key2",
+		Title:       "High Activity Room",
+		MemberCount: 3,
+		CreatedAt:   1700000001,
+	})
+	reg.Register(&RoomListing{
+		RoomID:      "room-mid",
+		KeyEncoded:  "key3",
+		Title:       "Mid Activity Room",
+		MemberCount: 1,
+		CreatedAt:   1700000002,
+	})
+
+	// Simulate message activity: high=10, mid=5, low=1
+	for i := 0; i < 10; i++ {
+		tracker.Increment("room-high")
+	}
+	for i := 0; i < 5; i++ {
+		tracker.Increment("room-mid")
+	}
+	tracker.Increment("room-low")
+
+	// Set up handler with real tracker
+	rateLimiter := NewRateLimiter(30, time.Minute)
+	handler := NewHubHandler(HubHandlerConfig{
+		Registry:       reg,
+		RateLimiter:    rateLimiter,
+		AllowedOrigins: "*",
+		ActivityGetter: tracker,
+		OnlineCountFn:  nil,
+	})
+
+	// Query with sort=active
+	req := httptest.NewRequest(http.MethodGet, "/api/hub?sort=active", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var result ListResult
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if result.Total != 3 {
+		t.Fatalf("expected 3 rooms, got %d", result.Total)
+	}
+
+	// Verify ordering: room-high (10) > room-mid (5) > room-low (1)
+	if result.Rooms[0].RoomID != "room-high" {
+		t.Errorf("expected first room to be room-high, got %s", result.Rooms[0].RoomID)
+	}
+	if result.Rooms[1].RoomID != "room-mid" {
+		t.Errorf("expected second room to be room-mid, got %s", result.Rooms[1].RoomID)
+	}
+	if result.Rooms[2].RoomID != "room-low" {
+		t.Errorf("expected third room to be room-low, got %s", result.Rooms[2].RoomID)
+	}
+
+	// Verify messageCount5min values are populated correctly
+	if result.Rooms[0].MessageCount5min != 10 {
+		t.Errorf("expected room-high messageCount5min=10, got %d", result.Rooms[0].MessageCount5min)
+	}
+	if result.Rooms[1].MessageCount5min != 5 {
+		t.Errorf("expected room-mid messageCount5min=5, got %d", result.Rooms[1].MessageCount5min)
+	}
+	if result.Rooms[2].MessageCount5min != 1 {
+		t.Errorf("expected room-low messageCount5min=1, got %d", result.Rooms[2].MessageCount5min)
+	}
+}
+
+// TestIntegration_TotalOnlineCount verifies that totalOnline in the API response
+// matches the value returned by the OnlineCountFn.
+// Validates: Requirements 3.1
+func TestIntegration_TotalOnlineCount(t *testing.T) {
+	reg := NewHubRegistry(200)
+	rateLimiter := NewRateLimiter(30, time.Minute)
+
+	// Register a room so the response has content
+	reg.Register(&RoomListing{
+		RoomID:      "online-test-room",
+		KeyEncoded:  "key1",
+		Title:       "Online Count Test",
+		MemberCount: 3,
+		CreatedAt:   1700000000,
+	})
+
+	handler := NewHubHandler(HubHandlerConfig{
+		Registry:       reg,
+		RateLimiter:    rateLimiter,
+		AllowedOrigins: "*",
+		ActivityGetter: nil,
+		OnlineCountFn:  func() int { return 15 },
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/hub", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var result ListResult
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if result.TotalOnline != 15 {
+		t.Errorf("expected totalOnline=15, got %d", result.TotalOnline)
+	}
+}
+
+// TestIntegration_ReactionsNotCounted validates the design decision that reactions
+// do NOT increment activity counts. Since reactions are excluded at the hub.go layer
+// (handleSendReaction does NOT call tracker.Increment), this test validates that
+// only explicit Increment calls (representing messages) affect GetCount.
+// Validates: Requirements 1.8
+func TestIntegration_ReactionsNotCounted(t *testing.T) {
+	tracker := activity.New(5*time.Minute, 10000)
+
+	// Simulate: 3 messages sent to room (each triggers Increment)
+	tracker.Increment("reaction-test-room")
+	tracker.Increment("reaction-test-room")
+	tracker.Increment("reaction-test-room")
+
+	// Reactions would NOT call tracker.Increment (handled in hub.go).
+	// We do NOT call Increment here — simulating that reactions are excluded.
+
+	// Verify count reflects only the 3 message increments
+	count := tracker.GetCount("reaction-test-room")
+	if count != 3 {
+		t.Errorf("expected count=3 (messages only, no reactions), got %d", count)
+	}
+
+	// Also verify via API handler integration
+	reg := NewHubRegistry(200)
+	reg.Register(&RoomListing{
+		RoomID:      "reaction-test-room",
+		KeyEncoded:  "key1",
+		Title:       "Reaction Test Room",
+		MemberCount: 2,
+		CreatedAt:   1700000000,
+	})
+
+	rateLimiter := NewRateLimiter(30, time.Minute)
+	handler := NewHubHandler(HubHandlerConfig{
+		Registry:       reg,
+		RateLimiter:    rateLimiter,
+		AllowedOrigins: "*",
+		ActivityGetter: tracker,
+		OnlineCountFn:  nil,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/hub?sort=active", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	var result ListResult
+	json.NewDecoder(w.Body).Decode(&result)
+
+	if len(result.Rooms) != 1 {
+		t.Fatalf("expected 1 room, got %d", len(result.Rooms))
+	}
+	if result.Rooms[0].MessageCount5min != 3 {
+		t.Errorf("expected messageCount5min=3 (reactions excluded), got %d", result.Rooms[0].MessageCount5min)
+	}
+}
+
+// TestIntegration_PrivateRoomNotTracked verifies that private rooms (not registered
+// in HubRegistry) do not appear in Hub API responses, even if activity is tracked
+// for them on the tracker. The Hub only shows registered public rooms.
+// Validates: Requirements 1.7
+func TestIntegration_PrivateRoomNotTracked(t *testing.T) {
+	tracker := activity.New(5*time.Minute, 10000)
+
+	reg := NewHubRegistry(200)
+
+	// Register only the public room
+	reg.Register(&RoomListing{
+		RoomID:      "public-room",
+		KeyEncoded:  "key1",
+		Title:       "Public Room",
+		MemberCount: 5,
+		CreatedAt:   1700000000,
+	})
+	// "private-room" is NOT registered in HubRegistry
+
+	// Increment both rooms on the tracker
+	for i := 0; i < 8; i++ {
+		tracker.Increment("public-room")
+	}
+	for i := 0; i < 20; i++ {
+		tracker.Increment("private-room")
+	}
+
+	// Set up handler
+	rateLimiter := NewRateLimiter(30, time.Minute)
+	handler := NewHubHandler(HubHandlerConfig{
+		Registry:       reg,
+		RateLimiter:    rateLimiter,
+		AllowedOrigins: "*",
+		ActivityGetter: tracker,
+		OnlineCountFn:  nil,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/hub", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var result ListResult
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Only public-room should appear (private-room is not registered)
+	if result.Total != 1 {
+		t.Fatalf("expected 1 room (only public), got %d", result.Total)
+	}
+	if result.Rooms[0].RoomID != "public-room" {
+		t.Errorf("expected public-room, got %s", result.Rooms[0].RoomID)
+	}
+
+	// Verify public room has its correct activity count
+	if result.Rooms[0].MessageCount5min != 8 {
+		t.Errorf("expected public-room messageCount5min=8, got %d", result.Rooms[0].MessageCount5min)
+	}
+
+	// Verify private-room does NOT appear anywhere in response
+	for _, room := range result.Rooms {
+		if room.RoomID == "private-room" {
+			t.Error("private-room should NOT appear in Hub API response")
+		}
 	}
 }

@@ -8,14 +8,24 @@ import (
 	"strings"
 )
 
+// HubHandlerConfig holds all dependencies for the Hub API handler.
+// Using a config struct avoids breaking changes when adding new dependencies.
+type HubHandlerConfig struct {
+	Registry       *HubRegistry
+	RateLimiter    *RateLimiter
+	AllowedOrigins string
+	ActivityGetter ActivityGetter // nil means all counts are 0 (graceful degradation)
+	OnlineCountFn  func() int     // returns Hub.ClientCount(); nil-safe (defaults to 0)
+}
+
 // NewHubHandler creates the HTTP handler for the Hub directory API.
-// It handles GET /api/hub with query params: tag, q, limit, offset.
-// CORS headers are set based on allowedOrigins. Rate limiting is enforced per IP.
-func NewHubHandler(registry *HubRegistry, rateLimiter *RateLimiter, allowedOrigins string) http.Handler {
+// It handles GET /api/hub with query params: tag, q, sort, limit, offset.
+// CORS headers are set based on cfg.AllowedOrigins. Rate limiting is enforced per IP.
+func NewHubHandler(cfg HubHandlerConfig) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Set CORS headers before any other response logic
-		if allowedOrigins != "" {
-			w.Header().Set("Access-Control-Allow-Origin", allowedOrigins)
+		if cfg.AllowedOrigins != "" {
+			w.Header().Set("Access-Control-Allow-Origin", cfg.AllowedOrigins)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		}
@@ -35,8 +45,8 @@ func NewHubHandler(registry *HubRegistry, rateLimiter *RateLimiter, allowedOrigi
 
 		// Rate limit check by IP
 		ip := extractIP(r)
-		if !rateLimiter.Allow(ip) {
-			retryAfter := rateLimiter.SecondsUntilReset(ip)
+		if !cfg.RateLimiter.Allow(ip) {
+			retryAfter := cfg.RateLimiter.SecondsUntilReset(ip)
 			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 			w.Header().Set("Content-Type", "application/json")
 			http.Error(w, `{"error":"rate limited, try again later"}`, http.StatusTooManyRequests)
@@ -47,6 +57,7 @@ func NewHubHandler(registry *HubRegistry, rateLimiter *RateLimiter, allowedOrigi
 		query := r.URL.Query()
 		tag := query.Get("tag")
 		q := query.Get("q")
+		sortParam := query.Get("sort")
 		isDailyTopicStr := query.Get("isDailyTopic")
 
 		limitStr := query.Get("limit")
@@ -83,6 +94,7 @@ func NewHubHandler(registry *HubRegistry, rateLimiter *RateLimiter, allowedOrigi
 		opts := ListOptions{
 			Tag:    tag,
 			Query:  q,
+			Sort:   sortParam,
 			Limit:  limit,
 			Offset: offset,
 		}
@@ -96,10 +108,16 @@ func NewHubHandler(registry *HubRegistry, rateLimiter *RateLimiter, allowedOrigi
 			opts.IsDailyTopic = &v
 		}
 
-		result := registry.List(opts)
+		result := cfg.Registry.List(opts, cfg.ActivityGetter)
+
+		// Set totalOnline from OnlineCountFn (nil-safe, default 0)
+		if cfg.OnlineCountFn != nil {
+			result.TotalOnline = cfg.OnlineCountFn()
+		}
 
 		// JSON response
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		json.NewEncoder(w).Encode(result)
 	})
 }

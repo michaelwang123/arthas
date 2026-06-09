@@ -89,7 +89,7 @@ func TestProperty5_JoinExpiredRoomError(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 
 		// 创建过期房间
-		hub.roomManager.CreateRoom(roomID, "", 0, expiresAt)
+		hub.roomManager.CreateRoom(roomID, "", 0, expiresAt, 0)
 
 		// 创建客户端（模拟 join 请求的发送方）
 		clientSend := make(chan []byte, sendBufferSize)
@@ -186,7 +186,7 @@ func TestProperty10_JoinDuringExpiryConsistency_WithoutExpiryChecker(t *testing.
 		time.Sleep(5 * time.Millisecond)
 
 		// 创建过期房间
-		r := hub.roomManager.CreateRoom(roomID, "", 0, expiresAt)
+		r := hub.roomManager.CreateRoom(roomID, "", 0, expiresAt, 0)
 
 		// 验证前置条件：房间确实已过期
 		if !r.IsExpired(now) {
@@ -263,7 +263,7 @@ func TestProperty10_JoinDuringExpiryConsistency_AfterExpiryChecker(t *testing.T)
 		time.Sleep(5 * time.Millisecond)
 
 		// 创建过期房间
-		hub.roomManager.CreateRoom(roomID, "", 0, expiresAt)
+		hub.roomManager.CreateRoom(roomID, "", 0, expiresAt, 0)
 
 		// 手动触发 cleanupExpiredRooms（模拟 Expiry_Checker 已运行）
 		hub.cleanupExpiredRooms()
@@ -337,7 +337,7 @@ func TestProperty10_JoinDuringExpiryConsistency_IsExpiredIndependentOfGetExpired
 		roomID := rapid.StringMatching(`[a-zA-Z0-9_-]{21}`).Draw(t, "roomID")
 
 		rm := room.NewRoomManager()
-		r := rm.CreateRoom(roomID, "", 0, expiresAt)
+		r := rm.CreateRoom(roomID, "", 0, expiresAt, 0)
 
 		// 验证 IsExpired 在 GetExpiredRooms 调用前返回 true
 		beforeResult := r.IsExpired(now)

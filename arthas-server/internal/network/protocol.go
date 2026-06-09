@@ -1,5 +1,12 @@
 package network
 
+// 消息类型 ID 范围分配:
+//   0x01-0x0C: Client → Server (core + file transfer)
+//   0x10-0x1E: Server → Client (core + file transfer)
+//   0x20-0x2F: Match 模块专用（定义在 internal/match/protocol.go，避免循环导入）
+//              0x20-0x27 Client→Server, 0x28-0x2F Server→Client
+//              Hub 通过数值范围路由，不在此处定义具体常量。
+
 // 消息类型 ID — Client → Server
 const (
 	MsgCreateRoom   uint8 = 0x01
@@ -83,8 +90,9 @@ const (
 
 // Message 通用消息信封，使用 MessagePack 二进制序列化。
 type Message struct {
-	Type uint8       `msgpack:"type"`
-	Data interface{} `msgpack:"data"`
+	Type    uint8       `msgpack:"type"`
+	Data    interface{} `msgpack:"data"`
+	rawData []byte      // Raw msgpack bytes of Data field (set by ParseAndHandleMessage for match messages)
 }
 
 // --- Client → Server 数据结构 ---

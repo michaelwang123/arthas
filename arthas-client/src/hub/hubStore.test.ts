@@ -22,6 +22,7 @@ const MOCK_ROOMS = [
     hasPassword: false,
     createdAt: Math.floor(Date.now() / 1000) - 120,
     expiresAt: 0,
+    messageCount5min: 0,
   },
   {
     roomId: 'room-2',
@@ -33,6 +34,7 @@ const MOCK_ROOMS = [
     hasPassword: true,
     createdAt: Math.floor(Date.now() / 1000) - 600,
     expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    messageCount5min: 0,
   },
 ];
 
@@ -64,6 +66,7 @@ describe('hubStore', () => {
         total: 2,
         limit: 50,
         offset: 0,
+        totalOnline: 0,
       });
 
       await useHubStore.getState().fetchRooms();
@@ -94,7 +97,7 @@ describe('hubStore', () => {
       const fetchPromise = useHubStore.getState().fetchRooms();
       expect(useHubStore.getState().loading).toBe(true);
 
-      resolvePromise!({ rooms: [], total: 0, limit: 50, offset: 0 });
+      resolvePromise!({ rooms: [], total: 0, limit: 50, offset: 0, totalOnline: 0 });
       await fetchPromise;
 
       expect(useHubStore.getState().loading).toBe(false);
@@ -106,6 +109,7 @@ describe('hubStore', () => {
         total: 0,
         limit: 50,
         offset: 0,
+        totalOnline: 0,
       });
 
       await useHubStore.getState().fetchRooms();
@@ -120,19 +124,19 @@ describe('hubStore', () => {
 
   describe('setTagFilter', () => {
     it('updates tag filter and triggers fetch', async () => {
-      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
+      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0, totalOnline: 0 });
 
       useHubStore.getState().setTagFilter('golang');
 
       expect(useHubStore.getState().filters.tag).toBe('golang');
       // fetchRooms was called with isDailyTopic=false for server-side filtering
-      expect(mockFetchHubRooms).toHaveBeenCalledWith({ filters: { tag: 'golang', query: '' }, limit: 50, offset: 0, isDailyTopic: false });
+      expect(mockFetchHubRooms).toHaveBeenCalledWith(expect.objectContaining({ filters: { tag: 'golang', query: '' }, limit: 50, offset: 0, isDailyTopic: false, sort: '' }));
     });
   });
 
   describe('setSearchQuery', () => {
     it('debounces search query (300ms)', async () => {
-      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
+      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0, totalOnline: 0 });
 
       useHubStore.getState().setSearchQuery('react');
 
@@ -142,11 +146,11 @@ describe('hubStore', () => {
       // Advance time by 300ms
       vi.advanceTimersByTime(300);
 
-      expect(mockFetchHubRooms).toHaveBeenCalledWith({ filters: { tag: '', query: 'react' }, limit: 50, offset: 0, isDailyTopic: false });
+      expect(mockFetchHubRooms).toHaveBeenCalledWith(expect.objectContaining({ filters: { tag: '', query: 'react' }, limit: 50, offset: 0, isDailyTopic: false, sort: '' }));
     });
 
     it('cancels previous debounce on rapid input', () => {
-      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
+      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0, totalOnline: 0 });
 
       useHubStore.getState().setSearchQuery('r');
       vi.advanceTimersByTime(100);
@@ -157,13 +161,13 @@ describe('hubStore', () => {
 
       // Only the final value should trigger a fetch
       expect(mockFetchHubRooms).toHaveBeenCalledTimes(1);
-      expect(mockFetchHubRooms).toHaveBeenCalledWith({ filters: { tag: '', query: 'rea' }, limit: 50, offset: 0, isDailyTopic: false });
+      expect(mockFetchHubRooms).toHaveBeenCalledWith(expect.objectContaining({ filters: { tag: '', query: 'rea' }, limit: 50, offset: 0, isDailyTopic: false, sort: '' }));
     });
   });
 
   describe('polling lifecycle', () => {
     it('startPolling fetches dailyTopic + rooms in parallel, then rooms every 30s', async () => {
-      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
+      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0, totalOnline: 0 });
 
       useHubStore.getState().startPolling();
 
@@ -180,7 +184,7 @@ describe('hubStore', () => {
     });
 
     it('stopPolling clears all intervals', () => {
-      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
+      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0, totalOnline: 0 });
 
       useHubStore.getState().startPolling();
       // Parallel initial fetch: 2 calls
@@ -194,7 +198,7 @@ describe('hubStore', () => {
     });
 
     it('dailyTopic refreshes every 5 minutes', () => {
-      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
+      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0, totalOnline: 0 });
 
       useHubStore.getState().startPolling();
       const initialCalls = mockFetchHubRooms.mock.calls.length; // 2 (parallel dailyTopic + rooms)
@@ -217,9 +221,10 @@ describe('hubStore', () => {
         createdAt: 1000,
         expiresAt: Math.floor(Date.now() / 1000) - 60, // expired 60s ago
         isDailyTopic: true,
+        messageCount5min: 0,
       };
       useHubStore.setState({ dailyTopic: expiredTopic });
-      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
+      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0, totalOnline: 0 });
 
       useHubStore.getState().startPolling();
       // Advance to 5-minute mark to trigger dailyTopic interval
@@ -238,6 +243,7 @@ describe('hubStore', () => {
         total: 100,
         limit: 50,
         offset: 0,
+        totalOnline: 0,
       });
 
       await useHubStore.getState().fetchRooms();
@@ -251,6 +257,7 @@ describe('hubStore', () => {
         total: 2,
         limit: 50,
         offset: 0,
+        totalOnline: 0,
       });
 
       await useHubStore.getState().fetchRooms();
@@ -265,6 +272,7 @@ describe('hubStore', () => {
         total: 4,
         limit: 50,
         offset: 0,
+        totalOnline: 0,
       });
       await useHubStore.getState().fetchRooms();
       expect(useHubStore.getState().rooms).toHaveLength(2);
@@ -280,6 +288,7 @@ describe('hubStore', () => {
         total: 4,
         limit: 50,
         offset: 2,
+        totalOnline: 0,
       });
       await useHubStore.getState().loadMore();
 
@@ -295,6 +304,7 @@ describe('hubStore', () => {
         total: 100,
         limit: 50,
         offset: 2,
+        totalOnline: 0,
       });
 
       await useHubStore.getState().loadMore();
@@ -315,7 +325,7 @@ describe('hubStore', () => {
 
   describe('retry', () => {
     it('retry calls fetchDailyTopic and fetchRooms', async () => {
-      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0 });
+      mockFetchHubRooms.mockResolvedValue({ rooms: [], total: 0, limit: 50, offset: 0, totalOnline: 0 });
 
       useHubStore.getState().retry();
 
@@ -337,6 +347,7 @@ describe('hubStore', () => {
         createdAt: 1000,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
         isDailyTopic: true,
+        messageCount5min: 0,
       };
       // Server returns only the daily topic room (isDailyTopic=true filter applied server-side)
       mockFetchHubRooms.mockResolvedValueOnce({
@@ -344,6 +355,7 @@ describe('hubStore', () => {
         total: 1,
         limit: 1,
         offset: 0,
+        totalOnline: 0,
       });
 
       await useHubStore.getState().fetchDailyTopic();
@@ -358,6 +370,7 @@ describe('hubStore', () => {
         total: 0,
         limit: 1,
         offset: 0,
+        totalOnline: 0,
       });
 
       await useHubStore.getState().fetchDailyTopic();
@@ -372,6 +385,7 @@ describe('hubStore', () => {
         total: 0,
         limit: 1,
         offset: 0,
+        totalOnline: 0,
       });
 
       await useHubStore.getState().fetchDailyTopic();
@@ -396,6 +410,7 @@ describe('hubStore', () => {
         createdAt: 1000,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
         isDailyTopic: true,
+        messageCount5min: 0,
       };
       useHubStore.setState({ dailyTopic: existingTopic });
       mockFetchHubRooms.mockRejectedValueOnce(new Error('Network error'));
@@ -414,6 +429,7 @@ describe('hubStore', () => {
         total: 2,
         limit: 50,
         offset: 0,
+        totalOnline: 0,
       });
 
       await useHubStore.getState().fetchRooms();
@@ -424,6 +440,82 @@ describe('hubStore', () => {
       expect(mockFetchHubRooms).toHaveBeenCalledWith(
         expect.objectContaining({ isDailyTopic: false })
       );
+    });
+  });
+
+  describe('sort mode and totalOnline', () => {
+    it('default sort mode is empty string on initial load', () => {
+      expect(useHubStore.getState().sortMode).toBe('');
+    });
+
+    it('setSortMode updates state and triggers fetchRooms', async () => {
+      mockFetchHubRooms.mockResolvedValueOnce({
+        rooms: [], total: 0, limit: 50, offset: 0, totalOnline: 0,
+      });
+
+      useHubStore.getState().setSortMode('active');
+
+      expect(useHubStore.getState().sortMode).toBe('active');
+      // Verify fetchRooms was called with sort: 'active'
+      expect(mockFetchHubRooms).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'active', offset: 0 })
+      );
+    });
+
+    it('sort mode switch resets pagination (fetches from offset 0)', async () => {
+      // Simulate having loaded rooms (offset would be > 0 on next loadMore)
+      useHubStore.setState({ rooms: Array(50).fill(MOCK_ROOMS[0]), total: 100, hasMore: true });
+      mockFetchHubRooms.mockResolvedValueOnce({
+        rooms: [], total: 0, limit: 50, offset: 0, totalOnline: 0,
+      });
+
+      useHubStore.getState().setSortMode('newest');
+
+      // fetchRooms always uses offset: 0
+      expect(mockFetchHubRooms).toHaveBeenCalledWith(
+        expect.objectContaining({ offset: 0 })
+      );
+    });
+
+    it('sort mode persists across polling cycles', async () => {
+      mockFetchHubRooms.mockResolvedValue({
+        rooms: [], total: 0, limit: 50, offset: 0, totalOnline: 0,
+      });
+
+      useHubStore.getState().setSortMode('people');
+      mockFetchHubRooms.mockClear();
+
+      // Simulate a polling cycle (fetchRooms call)
+      await useHubStore.getState().fetchRooms();
+
+      expect(mockFetchHubRooms).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'people' })
+      );
+    });
+
+    it('totalOnline updates from API response', async () => {
+      mockFetchHubRooms.mockResolvedValueOnce({
+        rooms: MOCK_ROOMS, total: 2, limit: 50, offset: 0, totalOnline: 42,
+      });
+
+      await useHubStore.getState().fetchRooms();
+
+      expect(useHubStore.getState().totalOnline).toBe(42);
+    });
+
+    it('totalOnline defaults to 0 when field missing from response', async () => {
+      mockFetchHubRooms.mockResolvedValueOnce({
+        rooms: MOCK_ROOMS, total: 2, limit: 50, offset: 0,
+        // totalOnline field intentionally omitted (simulating old API)
+      } as never);
+
+      await useHubStore.getState().fetchRooms();
+
+      expect(useHubStore.getState().totalOnline).toBe(0);
+    });
+
+    it('default totalOnline is 0', () => {
+      expect(useHubStore.getState().totalOnline).toBe(0);
     });
   });
 });

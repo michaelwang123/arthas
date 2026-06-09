@@ -16,6 +16,8 @@ import { HubRoomCard } from '../components/HubRoomCard';
 import { HubFilters } from '../components/HubFilters';
 import { DailyTopicCard } from '../components/DailyTopicCard';
 import { TemplateGrid } from '../hub/templates/TemplateGrid';
+import { MatchEntry } from '../match/MatchEntry';
+import { useMatchStore } from '../match/matchStore';
 import type { TemplateConfig } from '../hub/templates/templateConfig';
 
 export function Hub() {
@@ -23,6 +25,7 @@ export function Hub() {
   const rooms = useHubStore((s) => s.rooms);
   const dailyTopic = useHubStore((s) => s.dailyTopic);
   const total = useHubStore((s) => s.total);
+  const totalOnline = useHubStore((s) => s.totalOnline);
   const loading = useHubStore((s) => s.loading);
   const loadingMore = useHubStore((s) => s.loadingMore);
   const error = useHubStore((s) => s.error);
@@ -145,6 +148,10 @@ export function Hub() {
           <div className="flex items-center gap-3">
             <span className="text-2xl" aria-hidden="true">🌐</span>
             <h1 className="text-xl md:text-2xl font-bold text-white">{t('hub.title')}</h1>
+            <span className="text-sm text-green-400 flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" aria-hidden="true" />
+              {t('hub.onlineCount', { count: totalOnline })}
+            </span>
           </div>
           <button
             onClick={() => setPage('home')}
@@ -156,6 +163,9 @@ export function Hub() {
 
         {/* Daily Topic — always above filters, not affected by search */}
         {dailyTopic && <DailyTopicCard room={dailyTopic} onJoin={handleJoinDailyTopic} />}
+
+        {/* Random Match entry point */}
+        <MatchEntry onStart={() => useMatchStore.getState().startMatch()} />
 
         {/* Inline nickname prompt for daily topic join (shown when user has no stored nickname) */}
         {showDailyNicknamePrompt && (

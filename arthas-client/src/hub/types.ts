@@ -9,6 +9,7 @@ export interface RoomListing {
   createdAt: number;
   expiresAt: number;
   isDailyTopic?: boolean; // true = system daily topic room
+  messageCount5min: number; // 5-minute sliding window message count
 }
 
 export interface HubListResponse {
@@ -16,6 +17,7 @@ export interface HubListResponse {
   total: number;
   limit: number;
   offset: number;
+  totalOnline: number; // total connected WebSocket clients across all rooms
 }
 
 export interface HubFilters {

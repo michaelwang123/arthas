@@ -5,9 +5,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arthas/arthas-server/internal/activity"
 	"github.com/arthas/arthas-server/internal/dailytopic"
 	"github.com/arthas/arthas-server/internal/hub"
 	"github.com/arthas/arthas-server/internal/logger"
+	"github.com/arthas/arthas-server/internal/match"
 	"github.com/arthas/arthas-server/internal/room"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/vmihailenco/msgpack/v5"
@@ -15,6 +17,12 @@ import (
 
 // Compile-time interface check: Hub must satisfy dailytopic.RoomCreator.
 var _ dailytopic.RoomCreator = (*Hub)(nil)
+
+// Compile-time interface check: Client must satisfy match.ClientRef.
+var _ match.ClientRef = (*Client)(nil)
+
+// Compile-time interface check: Hub must satisfy match.RoomCreator.
+var _ match.RoomCreator = (*Hub)(nil)
 
 // 📚 学习要点: 服务器端传输超时 — 兜底清理机制
 // 正常流程中，文件传输通过 MSG_SEND_FILE_COMPLETE 或 MSG_SEND_FILE_CANCEL 消息结束，
@@ -63,12 +71,14 @@ const (
 // 4. writePump 退出后关闭 conn → readPump 读取失败退出
 // 5. WaitGroup 计数归零 → main() 的 hub.Wait() 返回，继续退出
 type Hub struct {
-	roomManager *room.RoomManager
-	hubRegistry *hub.HubRegistry // public room directory registry (nil = Hub disabled)
-	clients     map[*Client]bool
-	register    chan *Client
-	unregister  chan *Client
-	mu          sync.RWMutex
+	roomManager     *room.RoomManager
+	hubRegistry     *hub.HubRegistry // public room directory registry (nil = Hub disabled)
+	activityTracker *activity.Tracker
+	matchServer     *match.MatchServer // random match module (nil = feature disabled)
+	clients         map[*Client]bool
+	register        chan *Client
+	unregister      chan *Client
+	mu              sync.RWMutex
 
 	// warnedExpiry 记录已发送过期预警的房间 ID，防止重复发送。
 	// 📚 学习要点: 过期预警的幂等性
@@ -95,18 +105,25 @@ type Hub struct {
 // NewHub 创建一个新的 Hub 实例，内部初始化 RoomManager。
 func NewHub() *Hub {
 	return &Hub{
-		roomManager:  room.NewRoomManager(),
-		clients:      make(map[*Client]bool),
-		register:     make(chan *Client),
-		unregister:   make(chan *Client),
-		done:         make(chan struct{}),
-		warnedExpiry: make(map[string]bool),
+		roomManager:     room.NewRoomManager(),
+		activityTracker: activity.New(5*time.Minute, 10000),
+		clients:         make(map[*Client]bool),
+		register:        make(chan *Client),
+		unregister:      make(chan *Client),
+		done:            make(chan struct{}),
+		warnedExpiry:    make(map[string]bool),
 	}
 }
 
 // SetHubRegistry sets the Hub directory registry for public room listing.
 func (h *Hub) SetHubRegistry(registry *hub.HubRegistry) {
 	h.hubRegistry = registry
+}
+
+// SetMatchServer sets the match server for random match functionality.
+// If nil, match messages (0x20-0x2F) will receive an M001 "feature disabled" error.
+func (h *Hub) SetMatchServer(ms *match.MatchServer) {
+	h.matchServer = ms
 }
 
 // CreateDailyTopicRoom creates a room internally (no WebSocket client involved)
@@ -124,8 +141,8 @@ func (h *Hub) CreateDailyTopicRoom(params dailytopic.DailyRoomParams) (string, e
 		return "", fmt.Errorf("failed to generate room ID: %w", err)
 	}
 
-	// 2. 创建房间（无密码、非阅后即焚、指定过期时间）
-	h.roomManager.CreateRoom(roomID, "", 0, params.ExpiresAt)
+	// 2. 创建房间（无密码、非阅后即焚、指定过期时间、默认成员上限）
+	h.roomManager.CreateRoom(roomID, "", 0, params.ExpiresAt, 0)
 
 	// 3. 构建 RoomListing 并注册到 Hub Registry
 	listing := &hub.RoomListing{
@@ -150,6 +167,103 @@ func (h *Hub) CreateDailyTopicRoom(params dailytopic.DailyRoomParams) (string, e
 
 	logger.Info("Hub", "daily topic room %s created: %q", roomID, params.Title)
 	return roomID, nil
+}
+
+// CreateMatchRoom creates a temporary match room with maxMembers=2.
+// The room is NOT registered in HubRegistry (not visible in public room listing).
+// Called by MatchServer via the match.RoomCreator interface.
+func (h *Hub) CreateMatchRoom(expiresAt int64, ephemeral int) (string, error) {
+	// 1. Generate NanoID as room ID.
+	roomID, err := gonanoid.New()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate room ID: %w", err)
+	}
+
+	// 2. Create room with maxMembers=2, no password, specified ephemeral and expiry.
+	// NOT registered in HubRegistry — match rooms are private 1v1 rooms.
+	h.roomManager.CreateRoom(roomID, "", ephemeral, expiresAt, 2)
+
+	logger.Info("Hub", "match room %s created (expires=%d, ephemeral=%d)", roomID, expiresAt, ephemeral)
+	return roomID, nil
+}
+
+// JoinClientToRoom joins a client (referenced via match.ClientRef) into the specified room.
+// Sets the client's name and room association, then adds it as a room member.
+// Called by MatchServer via the match.RoomCreator interface.
+func (h *Hub) JoinClientToRoom(client match.ClientRef, roomId string, name string) error {
+	// Type-assert ClientRef to *Client (Hub owns the concrete type).
+	c, ok := client.(*Client)
+	if !ok {
+		return fmt.Errorf("client is not a *network.Client")
+	}
+
+	// Look up the room.
+	r := h.roomManager.GetRoom(roomId)
+	if r == nil {
+		return fmt.Errorf("room %s not found", roomId)
+	}
+
+	// Set client fields.
+	c.Name = name
+	c.Color = generateColor(c.ID)
+	c.RoomID = roomId
+
+	// Add client as a member to the room.
+	member := &room.Member{
+		ID:    c.ID,
+		Name:  c.Name,
+		Color: c.Color,
+		SendFunc: func(data []byte) {
+			c.Send(data)
+		},
+		SendFileFunc: func(data []byte) bool {
+			return c.SendFileData(data)
+		},
+	}
+	if err := r.AddMember(member); err != nil {
+		c.RoomID = ""
+		return fmt.Errorf("failed to add client to room %s: %w", roomId, err)
+	}
+
+	return nil
+}
+
+// ExtendMatchRoom updates the expiration timestamp for a match room.
+// Returns false if the room does not exist.
+// Called by MatchServer via the match.RoomCreator interface.
+func (h *Hub) ExtendMatchRoom(roomId string, newExpiresAt int64) bool {
+	return h.roomManager.ExtendRoomExpiry(roomId, newExpiresAt)
+}
+
+// LeaveMatchRoom removes a client from their current room.
+// Handles member removal and room cleanup (same logic as normal leave).
+// Called by MatchServer via the match.RoomCreator interface.
+func (h *Hub) LeaveMatchRoom(client match.ClientRef) error {
+	c, ok := client.(*Client)
+	if !ok {
+		return fmt.Errorf("client is not a *network.Client")
+	}
+
+	if c.RoomID == "" {
+		return nil // not in a room
+	}
+
+	r := h.roomManager.GetRoom(c.RoomID)
+	if r == nil {
+		c.RoomID = ""
+		return nil
+	}
+
+	r.RemoveMember(c.ID)
+	roomID := c.RoomID
+	c.RoomID = ""
+
+	// Clean up empty room
+	if r.MemberCount() == 0 {
+		h.roomManager.RemoveRoom(roomID)
+	}
+
+	return nil
 }
 
 // Run 启动 Hub 主循环，处理客户端注册/注销事件。
@@ -204,6 +318,10 @@ func (h *Hub) Run() {
 
 			// 断线自动离开房间
 			h.handleClientDisconnect(client)
+			// 通知 Match_Server 客户端断线
+			if h.matchServer != nil {
+				h.matchServer.HandleDisconnect(client.ID)
+			}
 			logger.Info("Hub", "client %s disconnected, total: %d", client.ID, h.clientCount())
 
 		case <-staleTransferTicker.C:
@@ -235,6 +353,8 @@ func (h *Hub) Run() {
 			// - expiry (60s): 房间级别，±60s 精度对小时/天级有效期完全足够
 			// 分离 ticker 使得未来可以独立调整各自的间隔而不互相影响。
 			h.cleanupExpiredRooms()
+			// Prune expired activity data (piggyback on existing 60s ticker — Req 3.2).
+			h.activityTracker.Cleanup()
 			// 检查即将过期的房间并发送预警（在清理之后执行，避免对已销毁房间发送预警）
 			h.warnApproachingExpiry(h.roomManager.NowFunc())
 		}
@@ -299,6 +419,28 @@ func (h *Hub) Wait() {
 // 这种「每个 handler 自治」的设计比「集中式前置检查」更灵活：
 // 不同消息类型有不同的流量特征，统一限流策略无法兼顾所有场景。
 func (h *Hub) HandleMessage(client *Client, msg *Message) {
+	// Match messages: 0x20-0x2F → delegate to MatchServer
+	if msg.Type >= 0x20 && msg.Type <= 0x2F {
+		if h.matchServer != nil {
+			// Use pre-computed rawData bytes to avoid double-serialization.
+			data := msg.rawData
+			if data == nil {
+				// Fallback: re-marshal if rawData wasn't set (e.g., direct HandleMessage call in tests).
+				var err error
+				data, err = msgpack.Marshal(msg.Data)
+				if err != nil {
+					logger.Error("Hub", "failed to marshal match message data: %v", err)
+					return
+				}
+			}
+			h.matchServer.HandleMessage(client, msg.Type, data)
+		} else {
+			// Feature disabled: send M001 error in match protocol format
+			h.sendMatchError(client, match.ErrCodeMatchDisabled, "random match is disabled")
+		}
+		return
+	}
+
 	switch msg.Type {
 	case MsgCreateRoom:
 		h.handleCreateRoom(client, msg.Data)
@@ -347,6 +489,16 @@ func (h *Hub) ParseAndHandleMessage(client *Client, raw []byte) {
 		h.sendError(client, ErrCodeInvalidMessage, "invalid message format")
 		return
 	}
+
+	// For match messages (0x20-0x2F), preserve raw data bytes to avoid double-serialization.
+	// The match server will deserialize the data itself from these bytes.
+	if msg.Type >= 0x20 && msg.Type <= 0x2F && msg.Data != nil {
+		rawData, err := msgpack.Marshal(msg.Data)
+		if err == nil {
+			msg.rawData = rawData
+		}
+	}
+
 	h.HandleMessage(client, &msg)
 }
 
@@ -417,8 +569,8 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 		return
 	}
 
-	// Create the room via RoomManager with password, ephemeral, and computed expiresAt
-	r := h.roomManager.CreateRoom(roomId, password, ephemeral, expiresAt)
+	// Create the room via RoomManager with password, ephemeral, computed expiresAt, and default max members
+	r := h.roomManager.CreateRoom(roomId, password, ephemeral, expiresAt, 0)
 
 	// Set client fields
 	client.Name = name
@@ -715,6 +867,12 @@ func (h *Hub) handleSendMessage(client *Client, data interface{}) {
 	}
 	r.Broadcast(client.ID, broadcastData)
 
+	// Track activity for public rooms (used for Hub directory sorting).
+	// Only message relays are counted — reactions are excluded (Req 1.8).
+	if h.hubRegistry != nil && h.hubRegistry.GetListing(client.RoomID) != nil {
+		h.activityTracker.Increment(client.RoomID)
+	}
+
 	// 注意：不记录 ciphertext 内容（零知识设计）
 }
 
@@ -794,6 +952,7 @@ func (h *Hub) handleLeaveRoom(client *Client, data interface{}) {
 				listing := h.hubRegistry.GetListing(roomId)
 				if listing == nil || !listing.IsDailyTopic {
 					h.hubRegistry.Unregister(roomId)
+					h.activityTracker.Remove(roomId)
 				} else {
 					h.hubRegistry.UpdateMemberCount(roomId, 0)
 				}
@@ -1310,6 +1469,7 @@ func (h *Hub) cleanupExpiredRooms() {
 		if h.hubRegistry != nil {
 			h.hubRegistry.Unregister(roomId)
 		}
+		h.activityTracker.Remove(roomId)
 
 		// 从 RoomManager 中移除房间
 		h.roomManager.RemoveRoom(roomId)
@@ -1759,6 +1919,26 @@ func (h *Hub) sendError(client *Client, code string, msg string) {
 	client.Send(data)
 }
 
+// sendMatchError sends a match-protocol formatted error to the client.
+// Used when the match feature is disabled (matchServer is nil) and the Hub
+// receives a message in the 0x20-0x2F range. Uses the same wire format as
+// MatchServer.sendError to maintain protocol consistency for clients.
+func (h *Hub) sendMatchError(client *Client, code string, msg string) {
+	payload, err := msgpack.Marshal(match.MatchErrorData{
+		Code: code,
+		Msg:  msg,
+	})
+	if err != nil {
+		logger.Error("Hub", "failed to marshal match error message: %v", err)
+		return
+	}
+	// Match protocol wire format: [msgType byte][msgpack payload]
+	frame := make([]byte, 1+len(payload))
+	frame[0] = match.MsgMatchError
+	copy(frame[1:], payload)
+	client.Send(frame)
+}
+
 // sendToClient 向客户端发送指定类型的消息。
 func (h *Hub) sendToClient(client *Client, msgType uint8, msgData interface{}) {
 	msg := Message{Type: msgType, Data: msgData}
@@ -1775,6 +1955,18 @@ func (h *Hub) clientCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.clients)
+}
+
+// ClientCount returns the number of currently connected WebSocket clients.
+// Safe for concurrent use (acquires read lock internally).
+func (h *Hub) ClientCount() int {
+	return h.clientCount()
+}
+
+// ActivityTracker returns the Hub's activity tracker instance.
+// Used to pass the tracker as an ActivityGetter to the Hub API handler.
+func (h *Hub) ActivityTracker() *activity.Tracker {
+	return h.activityTracker
 }
 
 // generateColor 根据客户端 ID 生成一个十六进制颜色值。

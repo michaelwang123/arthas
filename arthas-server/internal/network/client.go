@@ -99,6 +99,7 @@ type Client struct {
 	Name     string // 显示昵称（创建/加入房间时设置）
 	Color    string // 颜色标识（服务器分配）
 	LastPong int64  // 最近一次收到 Pong 的时间戳（UnixMilli）
+	RemoteIP string // 客户端 IP 地址（WebSocket 升级时提取，用于 match 模块限流）
 	hub      *Hub
 	conn     *websocket.Conn
 	send     chan []byte
@@ -145,10 +146,11 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &Client{
-		ID:   generateID(),
-		hub:  hub,
-		conn: conn,
-		send: make(chan []byte, sendBufferSize),
+		ID:       generateID(),
+		RemoteIP: extractIP(r),
+		hub:      hub,
+		conn:     conn,
+		send:     make(chan []byte, sendBufferSize),
 	}
 
 	// 📚 学习要点: select 实现「发送或取消」模式
@@ -269,6 +271,24 @@ func (c *Client) Send(data []byte) {
 	}
 }
 
+// GetID returns the client's unique identifier.
+// Implements match.ClientRef interface.
+func (c *Client) GetID() string {
+	return c.ID
+}
+
+// GetRoomID returns the client's current room ID (empty if not in a room).
+// Implements match.ClientRef interface.
+func (c *Client) GetRoomID() string {
+	return c.RoomID
+}
+
+// GetRemoteIP returns the client's remote IP address.
+// Implements match.ClientRef interface.
+func (c *Client) GetRemoteIP() string {
+	return c.RemoteIP
+}
+
 // SendFileData 为文件传输消息提供带超时的阻塞发送。
 // 与普通 Send() 不同，此方法会等待 send channel 有空间，
 // 而不是在缓冲区满时静默丢弃。
@@ -346,4 +366,30 @@ func (c *Client) IsRateLimited() bool {
 	// 记录本次消息时间戳
 	c.msgTimestamps = append(c.msgTimestamps, now)
 	return false
+}
+
+// extractIP extracts the client IP address from the HTTP request.
+// Checks X-Forwarded-For and X-Real-IP headers first (for reverse proxy setups),
+// then falls back to the connection's RemoteAddr.
+func extractIP(r *http.Request) string {
+	// Check X-Forwarded-For header (first IP in the chain is the client)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
+		if idx := strings.IndexByte(xff, ','); idx != -1 {
+			return strings.TrimSpace(xff[:idx])
+		}
+		return strings.TrimSpace(xff)
+	}
+
+	// Check X-Real-IP header
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+
+	// Fall back to RemoteAddr (host:port format)
+	addr := r.RemoteAddr
+	if idx := strings.LastIndexByte(addr, ':'); idx != -1 {
+		return addr[:idx]
+	}
+	return addr
 }

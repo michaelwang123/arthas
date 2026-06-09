@@ -229,7 +229,7 @@ func generateAssetPath(r *rand.Rand) string {
 // 当请求路径不对应 dist/ 中的任何真实文件时，服务器返回 index.html。
 // 我们通过生成 /room/xxx、/settings/xxx 等路径来模拟前端路由。
 func generateSPAPath(r *rand.Rand) string {
-	prefixes := []string{"/room/", "/settings/", "/about/", "/user/", "/chat/", "/invite/"}
+	prefixes := []string{"/room/", "/settings/", "/about/", "/user/", "/chat/", "/invite/", "/match/"}
 	prefix := prefixes[r.Intn(len(prefixes))]
 
 	// 生成 1-15 个字符的路径段
@@ -283,6 +283,7 @@ var spaPathSegments = []string{
 	"abc123", "xyz789", "test-room", "my-chat",
 	"deep", "nested", "path", "segment", "invite",
 	"join", "create", "edit", "delete", "view",
+	"match", // Random Match invite link route: /match/{token}
 }
 
 // knownStaticFiles 是嵌入的 dist/ 中已知存在的文件路径。

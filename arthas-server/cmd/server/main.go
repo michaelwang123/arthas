@@ -37,6 +37,7 @@ import (
 	"github.com/arthas/arthas-server/internal/dailytopic"
 	"github.com/arthas/arthas-server/internal/hub"
 	"github.com/arthas/arthas-server/internal/logger"
+	"github.com/arthas/arthas-server/internal/match"
 	"github.com/arthas/arthas-server/internal/network"
 	"github.com/arthas/arthas-server/internal/static"
 )
@@ -148,6 +149,7 @@ func main() {
 	originsFlag := flag.String("allowed-origins", "", "Comma-separated allowed origins (default: $ALLOWED_ORIGINS or *)")
 	maxPublicRoomsFlag := flag.Int("max-public-rooms", 200, "Maximum number of public rooms in Hub (default: $MAX_PUBLIC_ROOMS or 200)")
 	disableDailyTopic := flag.Bool("disable-daily-topic", false, "Disable daily topic room feature (env: DISABLE_DAILY_TOPIC)")
+	disableRandomMatch := flag.Bool("disable-random-match", false, "Disable random match feature (env: DISABLE_RANDOM_MATCH)")
 	flag.Parse()
 
 	if *versionFlag {
@@ -201,7 +203,13 @@ func main() {
 	wsHub.SetHubRegistry(hubRegistry)
 
 	hubRateLimiter := hub.NewRateLimiter(30, time.Minute)
-	hubHandler := hub.NewHubHandler(hubRegistry, hubRateLimiter, origins)
+	hubHandler := hub.NewHubHandler(hub.HubHandlerConfig{
+		Registry:       hubRegistry,
+		RateLimiter:    hubRateLimiter,
+		AllowedOrigins: origins,
+		ActivityGetter: wsHub.ActivityTracker(),
+		OnlineCountFn:  wsHub.ClientCount,
+	})
 
 	// ─── Daily Topic Scheduler ───────────────────────────────────────────────
 	//
@@ -217,6 +225,51 @@ func main() {
 			defer scheduler.Stop()
 		}
 	}
+
+	// ─── Random Match Server ─────────────────────────────────────────────────
+	//
+	// Conditional initialization: disabled via --disable-random-match flag or
+	// DISABLE_RANDOM_MATCH=true environment variable. When disabled, the Hub's
+	// range router returns M001 for any 0x20-0x2F message and matchServer remains nil.
+	//
+	// Priority: CLI flag > env var (flag takes precedence if set).
+	var matchServer *match.MatchServer
+	var matchEnabledFn func() bool
+	var matchQueueSizeFn func() int
+	if !*disableRandomMatch && os.Getenv("DISABLE_RANDOM_MATCH") != "true" {
+		matchCfg, err := match.ParseEnv()
+		if err != nil {
+			logger.Error("Server", "invalid match configuration: %v", err)
+			os.Exit(1)
+		}
+		if err := matchCfg.Validate(); err != nil {
+			logger.Error("Server", "match configuration validation failed: %v", err)
+			os.Exit(1)
+		}
+		matchServer = match.NewMatchServer(matchCfg, wsHub)
+		matchServer.Run()
+		wsHub.SetMatchServer(matchServer)
+
+		matchEnabledFn = func() bool { return true }
+		matchQueueSizeFn = matchServer.QueueSize
+
+		logger.Info("Server", "random match enabled (queue max: %d, timeout: %v)",
+			matchCfg.MaxQueueSize, matchCfg.MatchTimeout)
+	} else {
+		logger.Info("Server", "random match disabled")
+	}
+
+	// ─── Hub Stats Handler ──────────────────────────────────────────────────
+	// /api/hub/stats — lightweight endpoint for match feature discovery.
+	// Returns online count, match enabled status, and queue size.
+	// No rate limiting (lightweight read-only data).
+	// Created after MatchServer init so that match functions are available.
+	statsHandler := hub.NewHubStatsHandler(hub.HubStatsHandlerConfig{
+		AllowedOrigins:   origins,
+		OnlineCountFn:    wsHub.ClientCount,
+		MatchEnabledFn:   matchEnabledFn,
+		MatchQueueSizeFn: matchQueueSizeFn,
+	})
 
 	// ─── Step 4: 注册 HTTP 路由 ─────────────────────────────────────────────
 	//
@@ -250,6 +303,10 @@ func main() {
 	// Returns paginated list of public rooms as JSON. Rate-limited per IP.
 	mux.Handle("/api/hub", hubHandler)
 
+	// /api/hub/stats — Hub stats API endpoint
+	// Returns online count, match enabled status, and match queue size as JSON.
+	mux.Handle("/api/hub/stats", statsHandler)
+
 	// / — 前端静态文件服务（SPA fallback）
 	//
 	// 📚 学习要点: 路由优先级与 ServeMux 匹配规则
@@ -261,6 +318,13 @@ func main() {
 	// 虽然 ServeMux 的匹配规则保证精确路径优先，
 	// 但代码顺序上「先注册精确路径，后注册通配」更符合阅读直觉，
 	// 让维护者一眼看出路由优先级。
+	//
+	// SPA 路由覆盖说明：
+	// static.Handler() 对所有不存在于 dist/ 中的路径返回 index.html。
+	// 这涵盖了所有前端路由，包括：
+	//   - /room/:id — 聊天房间
+	//   - /match/:token — Random Match 邀请链接（React Router 处理）
+	//   - 其他客户端路由
 	mux.Handle("/", static.Handler())
 
 	// ─── Step 5: 端口解析（flag > env > default）────────────────────────────
@@ -393,9 +457,17 @@ func main() {
 		logger.Error("Server", "HTTP shutdown error: %v", err)
 	}
 
-	// Phase 2: 关闭所有 WebSocket 连接
+	// Phase 2: Stop MatchServer goroutine (if enabled)
 	//
-	// 📚 学习要点: 为什么需要 Phase 2？
+	// MatchServer.Stop() signals its internal ticker goroutine to exit.
+	// This must happen before Hub.Stop() because Hub.Stop() closes client connections,
+	// and MatchServer may still be processing queue entries referencing those clients.
+	if matchServer != nil {
+		matchServer.Stop()
+	}
+
+	// Phase 3: 关闭所有 WebSocket 连接
+	//
 	// WebSocket 连接通过 HTTP Hijack 脱离了 http.Server 的管理。
 	// Shutdown() 对它们无感知，必须由 Hub 主动关闭。
 	//
@@ -409,7 +481,7 @@ func main() {
 	// 实现了「优雅断开」而非「粗暴切断」。
 	wsHub.Stop()
 
-	// Phase 3: 等待所有客户端 goroutine 退出（带超时保护）
+	// Phase 4: 等待所有客户端 goroutine 退出（带超时保护）
 	//
 	// 📚 学习要点: WaitGroup + select 实现「等待或超时」模式
 	// 这是 Go 中处理「最多等 N 秒」的标准模式：

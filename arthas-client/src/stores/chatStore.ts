@@ -49,6 +49,7 @@ import { decryptMessage } from '../crypto/decrypt';
 import { encodeShareKey, decodeShareKey } from '../crypto/shareKey';
 import { encryptTypingStatus, decryptTypingStatus } from '../crypto/typingEncrypt';
 import { useFileTransferStore } from '../file-transfer/fileTransferStore';
+import { useMatchStore } from '../match/matchStore';
 import { useVoiceStore } from '../voice/voiceStore';
 import { playNotificationSound, showDesktopNotification, playJoinSound, playLeaveSound } from '../utils/notification';
 import { buildPayload, parseSignedPayload, makeStableId, buildSignedPayload } from '../utils/payload';
@@ -214,6 +215,11 @@ function scheduleEphemeralRemoval(msgId: string, ephemeral: number): void {
 let typingTimer: ReturnType<typeof setTimeout> | null = null;
 let isCurrentlyTyping = false;
 
+// ===== Connection poll state =====
+
+/** 连接状态轮询 interval ID，确保重复调用 connect() 不会产生多个轮询 */
+let connectionPollInterval: number | null = null;
+
 // 📚 学习要点: 异步加密的 last-write-wins 策略
 // setTyping 变为 async 后，加密操作可能在 in-flight 时被新的 typing 事件覆盖。
 // 使用版本计数器（typingVersion）实现 last-write-wins：
@@ -281,7 +287,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       get().handleServerMessage(msg);
     });
     ws.connect();
-    // Track connection state via polling (ws module exposes isConnected)
+    // Track connection state via polling (ws module exposes isConnected).
+    // 使用模块级变量存储 interval ID，确保重复调用 connect() 时
+    // 不会产生多个轮询（React StrictMode 防护）。
+    if (connectionPollInterval !== null) {
+      clearInterval(connectionPollInterval);
+    }
     const checkConnection = () => {
       const wasConnected = get().connected;
       const nowConnected = ws.isConnected();
@@ -289,8 +300,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set({ connected: nowConnected });
       }
     };
-    // Check connection state periodically
-    setInterval(checkConnection, 500);
+    connectionPollInterval = setInterval(checkConnection, 500) as unknown as number;
   },
 
   createRoom: async (name: string, password?: string, ephemeral?: number, expiry?: number, publicData?: { title: string; description: string; tags: string[] }) => {
@@ -1255,6 +1265,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
             messages: messages.length > MAX_MESSAGES ? messages.slice(-MAX_MESSAGES) : messages,
           };
         });
+        break;
+      }
+
+      // ===== Match 消息（Server → Client, 0x28-0x2F）=====
+      // 📚 学习要点: Match 消息路由委托模式
+      // 与文件传输相同的「中央路由 + 委托处理」模式：
+      // chatStore 检测到 match 范围消息后委托给 matchStore.handleMatchMessage()。
+      // matchStore 内部根据 msgType 执行对应的状态机转换。
+      default: {
+        // Match messages are in the 0x28-0x2F range (server → client)
+        if (msg.type >= 0x28 && msg.type <= 0x2f) {
+          useMatchStore.getState().handleMatchMessage(msg.type, msg.data);
+        }
         break;
       }
     }
