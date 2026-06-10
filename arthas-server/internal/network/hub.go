@@ -189,6 +189,7 @@ func (h *Hub) CreateMatchRoom(expiresAt int64, ephemeral int) (string, error) {
 
 // JoinClientToRoom joins a client (referenced via match.ClientRef) into the specified room.
 // Sets the client's name and room association, then adds it as a room member.
+// Broadcasts MSG_MEMBER_JOINED to existing members and sends MSG_ROOM_JOINED to the joiner.
 // Called by MatchServer via the match.RoomCreator interface.
 func (h *Hub) JoinClientToRoom(client match.ClientRef, roomId string, name string) error {
 	// Type-assert ClientRef to *Client (Hub owns the concrete type).
@@ -203,7 +204,7 @@ func (h *Hub) JoinClientToRoom(client match.ClientRef, roomId string, name strin
 		return fmt.Errorf("room %s not found", roomId)
 	}
 
-	// Set client fields.
+	// Set client fields. Use short ID suffix to differentiate anonymous users.
 	c.Name = name
 	c.Color = generateColor(c.ID)
 	c.RoomID = roomId
@@ -224,6 +225,37 @@ func (h *Hub) JoinClientToRoom(client match.ClientRef, roomId string, name strin
 		c.RoomID = ""
 		return fmt.Errorf("failed to add client to room %s: %w", roomId, err)
 	}
+
+	// Broadcast MSG_MEMBER_JOINED to existing members (excluding the new joiner).
+	// This ensures all participants see each other in the member list.
+	memberJoinedMsg := Message{
+		Type: MsgMemberJoined,
+		Data: MemberJoinedData{
+			ID:    c.ID,
+			Name:  c.Name,
+			Color: c.Color,
+		},
+	}
+	broadcastData, err := msgpack.Marshal(memberJoinedMsg)
+	if err != nil {
+		logger.Error("Hub", "failed to marshal MemberJoined in match room: %v", err)
+	} else {
+		r.Broadcast(c.ID, broadcastData)
+	}
+
+	// Send MSG_ROOM_JOINED to the joining client so chatStore properly initializes
+	// roomId, myId, members, ephemeral, etc.
+	members := r.GetMembers()
+	memberInfos := make([]MemberInfo, len(members))
+	for i, m := range members {
+		memberInfos[i] = MemberInfo{ID: m.ID, Name: m.Name, Color: m.Color}
+	}
+	h.sendToClient(c, MsgRoomJoined, RoomJoinedData{
+		RoomID:    roomId,
+		Members:   memberInfos,
+		Ephemeral: r.Ephemeral,
+		ExpiresAt: r.GetExpiresAt(),
+	})
 
 	return nil
 }
@@ -1921,22 +1953,22 @@ func (h *Hub) sendError(client *Client, code string, msg string) {
 
 // sendMatchError sends a match-protocol formatted error to the client.
 // Used when the match feature is disabled (matchServer is nil) and the Hub
-// receives a message in the 0x20-0x2F range. Uses the same wire format as
-// MatchServer.sendError to maintain protocol consistency for clients.
+// receives a message in the 0x20-0x2F range. Uses the same {type, data} envelope
+// format as all other server messages for client compatibility.
 func (h *Hub) sendMatchError(client *Client, code string, msg string) {
-	payload, err := msgpack.Marshal(match.MatchErrorData{
-		Code: code,
-		Msg:  msg,
-	})
+	envelope := Message{
+		Type: match.MsgMatchError,
+		Data: match.MatchErrorData{
+			Code: code,
+			Msg:  msg,
+		},
+	}
+	data, err := msgpack.Marshal(envelope)
 	if err != nil {
 		logger.Error("Hub", "failed to marshal match error message: %v", err)
 		return
 	}
-	// Match protocol wire format: [msgType byte][msgpack payload]
-	frame := make([]byte, 1+len(payload))
-	frame[0] = match.MsgMatchError
-	copy(frame[1:], payload)
-	client.Send(frame)
+	client.Send(data)
 }
 
 // sendToClient 向客户端发送指定类型的消息。

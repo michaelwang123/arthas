@@ -14,6 +14,7 @@
 import { create } from 'zustand';
 import * as ws from '../network/websocket';
 import { generateRoomKey, exportRoomKey, importRoomKey } from '../crypto/keys';
+import { useChatStore } from '../stores/chatStore';
 import {
   MSG_MATCH_REQUEST,
   MSG_MATCH_CANCEL,
@@ -184,8 +185,11 @@ async function generateAndRelayKey(set: (partial: Partial<MatchState>) => void):
     const relayData: MatchKeyRelayData = { key: encodedKey };
     ws.send(MSG_MATCH_KEY_RELAY, relayData);
 
-    // 4. Store CryptoKey in state
+    // 4. Store CryptoKey in matchStore state
     set({ matchKey: key });
+
+    // 5. Sync to chatStore immediately so chat can work as soon as room is joined
+    useChatStore.setState({ roomKey: key });
   } catch (err) {
     // Web Crypto API failure is rare but possible (insecure context, etc.)
     console.error('[Match] Key generation failed:', err);
@@ -377,6 +381,8 @@ export const useMatchStore = create<MatchState>((set, get) => ({
           // Import the raw key as a CryptoKey for actual encryption/decryption
           void importRoomKey(payload.key).then((cryptoKey) => {
             set({ matchKey: cryptoKey });
+            // Sync to chatStore so chat messages can be encrypted/decrypted
+            useChatStore.setState({ roomKey: cryptoKey });
           }).catch((err) => {
             console.error('[Match] Failed to import room key:', err);
           });

@@ -736,17 +736,24 @@ func (ms *MatchServer) handleNext(client ClientRef, data []byte) {
 
 // sendMessage serializes data with msgpack, prepends the msgType byte, and sends to client.
 func (ms *MatchServer) sendMessage(client ClientRef, msgType uint8, data any) {
-	payload, err := msgpack.Marshal(data)
+	// Use the same {type, data} envelope format as Hub messages.
+	// The client's websocket.ts decodes ALL messages with msgpack as {type, data},
+	// so match messages must use the same wire format for consistency.
+	envelope := struct {
+		Type uint8 `msgpack:"type"`
+		Data any   `msgpack:"data"`
+	}{
+		Type: msgType,
+		Data: data,
+	}
+
+	encoded, err := msgpack.Marshal(envelope)
 	if err != nil {
 		logger.Error("Match", "failed to marshal message type 0x%02x: %v", msgType, err)
 		return
 	}
 
-	// Prepend message type byte to the payload.
-	msg := make([]byte, 1+len(payload))
-	msg[0] = msgType
-	copy(msg[1:], payload)
-	client.Send(msg)
+	client.Send(encoded)
 }
 
 // QueueSize returns the current number of entries in the match queue.

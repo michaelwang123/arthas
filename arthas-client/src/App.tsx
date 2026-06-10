@@ -106,21 +106,23 @@ function App() {
   }, [t]);
 
   // Determine which view to render:
-  // 1. If in a room → always show ChatRoom
-  // 2. If match is in an active state → show MatchPage
+  // 1. If match is in an active state → show MatchPage (takes priority over roomId)
+  // 2. If in a room (non-match) → show ChatRoom
   // 3. If hash matches #/match/{token} → show MatchInvitePage
   // 4. If page === 'hub' → show Hub directory
   // 5. Otherwise → show Home (create/join)
   const renderPage = () => {
-    if (roomId !== null) return <ChatRoom />;
-
     // Active match states: waiting, pairing, found, in-room, timeout
-    // These take over the full screen via MatchPage container
+    // These take over the full screen via MatchPage container.
+    // Must be checked BEFORE roomId to prevent ChatRoom from stealing the render
+    // when MSG_ROOM_JOINED sets chatStore.roomId during match flow.
     if (matchStatus === 'waiting' || matchStatus === 'pairing' ||
         matchStatus === 'found' || matchStatus === 'in-room' ||
         matchStatus === 'timeout') {
       return <MatchPage />;
     }
+
+    if (roomId !== null) return <ChatRoom />;
 
     if (matchToken) return <MatchInvitePage token={matchToken} />;
     if (page === 'hub') return <Hub />;
