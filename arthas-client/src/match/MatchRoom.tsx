@@ -10,6 +10,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from '../i18n';
 import { useMatchStore } from './matchStore';
+import { useChatStore } from '../stores/chatStore';
+import { MessageInput } from '../components/MessageInput';
+import { MessageList } from '../components/MessageList';
+import { TypingIndicator } from '../components/TypingIndicator';
+import { DropZone } from '../file-transfer/components/DropZone';
 
 /** 5 minutes in seconds — threshold for showing extend prompt */
 const EXTEND_THRESHOLD_SECONDS = 300;
@@ -34,6 +39,12 @@ export function MatchRoom() {
   const partnerProposedExtend = useMatchStore((s) => s.partnerProposedExtend);
   const partnerLeft = useMatchStore((s) => s.partnerLeft);
   const matchExpiresAt = useMatchStore((s) => s.matchExpiresAt);
+
+  // Chat store state for message list and input
+  const messages = useChatStore((s) => s.messages);
+  const myId = useChatStore((s) => s.myId);
+  const members = useChatStore((s) => s.members);
+  const typingMembers = useChatStore((s) => s.typingMembers);
 
   const [showExtendPrompt, setShowExtendPrompt] = useState(false);
   const [showReportMenu, setShowReportMenu] = useState(false);
@@ -109,13 +120,16 @@ export function MatchRoom() {
         </div>
       )}
 
-      {/* Chat room content placeholder */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {/* Standard chat room interface will be rendered here */}
-        <div className="flex items-center justify-center h-full text-gray-600 text-sm">
-          {t('match.room.chatPlaceholder')}
+      {/* Chat room content — reuses standard chat components */}
+      <DropZone>
+        <MessageList messages={messages} myId={myId} members={members} />
+        <div className="px-4 py-1 shrink-0">
+          <TypingIndicator typingMembers={typingMembers} members={members} />
         </div>
-      </div>
+        <div className="px-4 py-3 bg-gray-800 border-t border-gray-700 shrink-0">
+          <MessageInput />
+        </div>
+      </DropZone>
 
       {/* Bottom action bar */}
       <div className="border-t border-gray-700 px-4 py-3 flex items-center justify-between bg-gray-900/80">

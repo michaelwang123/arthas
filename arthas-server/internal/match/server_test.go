@@ -183,7 +183,7 @@ func TestProperty_DisconnectionCleanup(t *testing.T) {
 
 			foundPartnerLeftMsg := false
 			for _, msg := range sentMsgs {
-				if len(msg) > 0 && msg[0] == MsgMatchPartnerLeft {
+				if msgType, _, _ := decodeMatchMsg(msg); msgType == MsgMatchPartnerLeft {
 					foundPartnerLeftMsg = true
 					break
 				}
@@ -265,7 +265,7 @@ func TestProperty_KeyExchangeTimeout(t *testing.T) {
 				extraSec := rapid.IntRange(1, 60).Draw(t, fmt.Sprintf("extraSec_%d", i))
 				createdAt = now.Add(-timeout - time.Duration(extraSec)*time.Second)
 			} else {
-				// Created recently â€” within the timeout window (0 to timeout-1s ago).
+				// Created recently â€?within the timeout window (0 to timeout-1s ago).
 				// Ensure it's strictly within: use at most timeout-1 second ago.
 				maxAgeMilli := int(timeout.Milliseconds()) - 100 // leave 100ms margin
 				if maxAgeMilli < 1 {
@@ -413,7 +413,7 @@ func (m *mockRoomCreator) LeaveMatchRoom(client ClientRef) error {
 	return nil
 }
 
-// TestHandleMatchKeyRelay_HappyPath verifies the full key relay â†’ room creation â†’ MatchFound flow.
+// TestHandleMatchKeyRelay_HappyPath verifies the full key relay â†?room creation â†?MatchFound flow.
 func TestHandleMatchKeyRelay_HappyPath(t *testing.T) {
 	creator := &mockRoomCreator{roomID: "room-abc123"}
 	config := DefaultConfig()
@@ -542,7 +542,7 @@ func TestHandleMatchKeyRelay_NotClientA(t *testing.T) {
 	keyRelayData := MatchKeyRelayData{Key: "some-key"}
 	payload, _ := msgpack.Marshal(keyRelayData)
 
-	// Client B tries to relay â€” should be rejected.
+	// Client B tries to relay â€?should be rejected.
 	ms.handleMatchKeyRelay(clientB, payload)
 
 	// Verify Client B received an error.
@@ -660,7 +660,7 @@ func TestHandleInviteJoin_Success(t *testing.T) {
 
 	found := false
 	for _, msg := range msgs {
-		if len(msg) > 0 && msg[0] == MsgMatchGenerateKey {
+		if msgType, _, _ := decodeMatchMsg(msg); msgType == MsgMatchGenerateKey {
 			found = true
 			break
 		}
@@ -696,7 +696,7 @@ func TestHandleInviteJoin_UsedToken(t *testing.T) {
 	payload := mustMarshal(t, MatchInviteJoinData{Token: inviteLink.Token})
 	ms.handleInviteJoin(invitee1, payload)
 
-	// Second use fails â€” token already used.
+	// Second use fails â€?token already used.
 	invitee2 := newTestClient("invitee-2")
 	ms.handleInviteJoin(invitee2, payload)
 	assertClientReceivedError(t, invitee2, ErrCodeInviteInvalid)
@@ -847,6 +847,27 @@ func mustMarshal(t *testing.T, v any) []byte {
 	return data
 }
 
+// matchMsgEnvelope is used by test helpers to decode the {type, data} msgpack envelope
+// that sendMessage now produces (matching Hub's wire format).
+type matchMsgEnvelope struct {
+	Type uint8       `msgpack:"type"`
+	Data interface{} `msgpack:"data"`
+}
+
+// decodeMatchMsg extracts the message type and re-marshals the data field for
+// further deserialization into specific data structs.
+func decodeMatchMsg(raw []byte) (uint8, []byte, error) {
+	var env matchMsgEnvelope
+	if err := msgpack.Unmarshal(raw, &env); err != nil {
+		return 0, nil, err
+	}
+	data, err := msgpack.Marshal(env.Data)
+	if err != nil {
+		return env.Type, nil, err
+	}
+	return env.Type, data, nil
+}
+
 func assertClientReceivedError(t *testing.T, client *testClient, expectedCode string) {
 	t.Helper()
 	client.mu.Lock()
@@ -854,9 +875,13 @@ func assertClientReceivedError(t *testing.T, client *testClient, expectedCode st
 	client.mu.Unlock()
 
 	for _, msg := range msgs {
-		if len(msg) > 0 && msg[0] == MsgMatchError {
+		msgType, data, err := decodeMatchMsg(msg)
+		if err != nil {
+			continue
+		}
+		if msgType == MsgMatchError {
 			var errData MatchErrorData
-			if err := msgpack.Unmarshal(msg[1:], &errData); err == nil {
+			if err := msgpack.Unmarshal(data, &errData); err == nil {
 				if errData.Code == expectedCode {
 					return
 				}
@@ -969,7 +994,7 @@ func TestHandleReport_InvalidReason(t *testing.T) {
 	payload := mustMarshal(t, MatchReportData{Reason: "invalid-reason"})
 	ms.handleReport(reporter, payload)
 
-	// Should silently ignore â€” no messages to reporter.
+	// Should silently ignore â€?no messages to reporter.
 	reporter.mu.Lock()
 	msgs := reporter.sent
 	reporter.mu.Unlock()
@@ -987,7 +1012,7 @@ func TestHandleReport_NotInRoom(t *testing.T) {
 	payload := mustMarshal(t, MatchReportData{Reason: "spam"})
 	ms.handleReport(reporter, payload)
 
-	// Should silently ignore â€” no messages.
+	// Should silently ignore â€?no messages.
 	reporter.mu.Lock()
 	msgs := reporter.sent
 	reporter.mu.Unlock()
@@ -1074,7 +1099,7 @@ func TestHandleExtendRequest_NotInRoom(t *testing.T) {
 	payload := mustMarshal(t, struct{}{})
 	ms.handleExtendRequest(client, payload)
 
-	// Should silently ignore â€” no messages.
+	// Should silently ignore â€?no messages.
 	client.mu.Lock()
 	msgs := client.sent
 	client.mu.Unlock()
@@ -1160,7 +1185,7 @@ func TestHandleExtendRequest_MutualConsent(t *testing.T) {
 	// the caller (clientB) and partner (clientA).
 	foundExtendedA := false
 	for _, msg := range aMsgs {
-		if len(msg) > 0 && msg[0] == MsgMatchExtended {
+		if msgType, _, _ := decodeMatchMsg(msg); msgType == MsgMatchExtended {
 			foundExtendedA = true
 			var data MatchExtendedData
 			if err := msgpack.Unmarshal(msg[1:], &data); err == nil {
@@ -1183,7 +1208,7 @@ func TestHandleExtendRequest_MutualConsent(t *testing.T) {
 	clientB.mu.Unlock()
 	foundExtendedB := false
 	for _, msg := range bMsgs {
-		if len(msg) > 0 && msg[0] == MsgMatchExtended {
+		if msgType, _, _ := decodeMatchMsg(msg); msgType == MsgMatchExtended {
 			foundExtendedB = true
 			break
 		}

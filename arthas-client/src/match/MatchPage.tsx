@@ -17,6 +17,7 @@
 
 import { useEffect, useCallback } from 'react';
 import { useMatchStore } from './matchStore';
+import { useChatStore } from '../stores/chatStore';
 import { MatchWaiting } from './MatchWaiting';
 import { MatchFound } from './MatchFound';
 import { MatchRoom } from './MatchRoom';
@@ -61,6 +62,27 @@ export function MatchPage() {
       }
     }, 3000);
     return () => clearTimeout(fallback);
+  }, [status]);
+
+  // Sync matchStore state → chatStore when entering 'in-room'.
+  // This is a backup sync in case the direct sync in matchStore (on key generation/import)
+  // hasn't fired yet due to timing. Ensures roomKey is set before user tries to send messages.
+  useEffect(() => {
+    if (status !== 'in-room') return;
+
+    const { matchKey, matchRoomId, matchEphemeral } = useMatchStore.getState();
+    if (matchKey) {
+      const chatState = useChatStore.getState();
+      // Only sync if chatStore doesn't already have the key (avoid overwriting)
+      if (!chatState.roomKey) {
+        useChatStore.setState({
+          roomKey: matchKey,
+          roomId: matchRoomId,
+          ephemeral: matchEphemeral ?? 0,
+          myName: 'Anonymous',
+        });
+      }
+    }
   }, [status]);
 
   // Retry match from timeout state
