@@ -126,7 +126,7 @@ func TestIntegration_FullMatchFlow(t *testing.T) {
 
 	foundGenKey := false
 	for _, msg := range aMsgs {
-		if len(msg) > 0 && msg[0] == MsgMatchGenerateKey {
+		if msgType, _, err := decodeMatchMsg(msg); err == nil && msgType == MsgMatchGenerateKey {
 			foundGenKey = true
 			break
 		}
@@ -147,10 +147,10 @@ func TestIntegration_FullMatchFlow(t *testing.T) {
 
 	var foundDataA *MatchFoundData
 	for _, msg := range aMsgs {
-		if len(msg) > 0 && msg[0] == MsgMatchFound {
-			var data MatchFoundData
-			if err := msgpack.Unmarshal(msg[1:], &data); err == nil {
-				foundDataA = &data
+		if msgType, data, err := decodeMatchMsg(msg); err == nil && msgType == MsgMatchFound {
+			var d MatchFoundData
+			if err := msgpack.Unmarshal(data, &d); err == nil {
+				foundDataA = &d
 			}
 			break
 		}
@@ -168,10 +168,10 @@ func TestIntegration_FullMatchFlow(t *testing.T) {
 
 	var foundDataB *MatchFoundData
 	for _, msg := range bMsgs {
-		if len(msg) > 0 && msg[0] == MsgMatchFound {
-			var data MatchFoundData
-			if err := msgpack.Unmarshal(msg[1:], &data); err == nil {
-				foundDataB = &data
+		if msgType, data, err := decodeMatchMsg(msg); err == nil && msgType == MsgMatchFound {
+			var d MatchFoundData
+			if err := msgpack.Unmarshal(data, &d); err == nil {
+				foundDataB = &d
 			}
 			break
 		}
@@ -255,9 +255,9 @@ func TestIntegration_KeyExchangeTimeout(t *testing.T) {
 
 	foundErrA := false
 	for _, msg := range aMsgs {
-		if len(msg) > 0 && msg[0] == MsgMatchError {
+		if msgType, data, err := decodeMatchMsg(msg); err == nil && msgType == MsgMatchError {
 			var errData MatchErrorData
-			if err := msgpack.Unmarshal(msg[1:], &errData); err == nil {
+			if err := msgpack.Unmarshal(data, &errData); err == nil {
 				if errData.Code == ErrCodeKeyExchangeTimeout {
 					foundErrA = true
 					break
@@ -275,9 +275,9 @@ func TestIntegration_KeyExchangeTimeout(t *testing.T) {
 
 	foundErrB := false
 	for _, msg := range bMsgs {
-		if len(msg) > 0 && msg[0] == MsgMatchError {
+		if msgType, data, err := decodeMatchMsg(msg); err == nil && msgType == MsgMatchError {
 			var errData MatchErrorData
-			if err := msgpack.Unmarshal(msg[1:], &errData); err == nil {
+			if err := msgpack.Unmarshal(data, &errData); err == nil {
 				if errData.Code == ErrCodeKeyExchangeTimeout {
 					foundErrB = true
 					break
@@ -350,7 +350,7 @@ func TestIntegration_InviteLink(t *testing.T) {
 
 	foundGenKey := false
 	for _, msg := range aMsgs {
-		if len(msg) > 0 && msg[0] == MsgMatchGenerateKey {
+		if msgType, _, err := decodeMatchMsg(msg); err == nil && msgType == MsgMatchGenerateKey {
 			foundGenKey = true
 			break
 		}
@@ -370,10 +370,10 @@ func TestIntegration_InviteLink(t *testing.T) {
 
 	var foundA *MatchFoundData
 	for _, msg := range aMsgs {
-		if len(msg) > 0 && msg[0] == MsgMatchFound {
-			var data MatchFoundData
-			if err := msgpack.Unmarshal(msg[1:], &data); err == nil {
-				foundA = &data
+		if msgType, data, err := decodeMatchMsg(msg); err == nil && msgType == MsgMatchFound {
+			var d MatchFoundData
+			if err := msgpack.Unmarshal(data, &d); err == nil {
+				foundA = &d
 			}
 			break
 		}
@@ -388,10 +388,10 @@ func TestIntegration_InviteLink(t *testing.T) {
 
 	var foundB *MatchFoundData
 	for _, msg := range bMsgs {
-		if len(msg) > 0 && msg[0] == MsgMatchFound {
-			var data MatchFoundData
-			if err := msgpack.Unmarshal(msg[1:], &data); err == nil {
-				foundB = &data
+		if msgType, data, err := decodeMatchMsg(msg); err == nil && msgType == MsgMatchFound {
+			var d MatchFoundData
+			if err := msgpack.Unmarshal(data, &d); err == nil {
+				foundB = &d
 			}
 			break
 		}
@@ -545,9 +545,9 @@ func TestIntegration_FeatureDisabled(t *testing.T) {
 
 	foundDisabledErr := false
 	for _, msg := range msgs {
-		if len(msg) > 0 && msg[0] == MsgMatchError {
+		if msgType, data, err := decodeMatchMsg(msg); err == nil && msgType == MsgMatchError {
 			var errData MatchErrorData
-			if err := msgpack.Unmarshal(msg[1:], &errData); err == nil {
+			if err := msgpack.Unmarshal(data, &errData); err == nil {
 				if errData.Code == ErrCodeMatchDisabled {
 					foundDisabledErr = true
 					break
@@ -588,9 +588,9 @@ func TestIntegration_FeatureDisabled(t *testing.T) {
 
 		found := false
 		for _, msg := range msgs {
-			if len(msg) > 0 && msg[0] == MsgMatchError {
+			if decodedType, data, err := decodeMatchMsg(msg); err == nil && decodedType == MsgMatchError {
 				var errData MatchErrorData
-				if err := msgpack.Unmarshal(msg[1:], &errData); err == nil {
+				if err := msgpack.Unmarshal(data, &errData); err == nil {
 					if errData.Code == ErrCodeMatchDisabled {
 						found = true
 						break

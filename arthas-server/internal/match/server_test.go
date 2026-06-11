@@ -265,7 +265,7 @@ func TestProperty_KeyExchangeTimeout(t *testing.T) {
 				extraSec := rapid.IntRange(1, 60).Draw(t, fmt.Sprintf("extraSec_%d", i))
 				createdAt = now.Add(-timeout - time.Duration(extraSec)*time.Second)
 			} else {
-				// Created recently â€?within the timeout window (0 to timeout-1s ago).
+				// Created recently â€” within the timeout window (0 to timeout-1s ago).
 				// Ensure it's strictly within: use at most timeout-1 second ago.
 				maxAgeMilli := int(timeout.Milliseconds()) - 100 // leave 100ms margin
 				if maxAgeMilli < 1 {
@@ -413,7 +413,7 @@ func (m *mockRoomCreator) LeaveMatchRoom(client ClientRef) error {
 	return nil
 }
 
-// TestHandleMatchKeyRelay_HappyPath verifies the full key relay â†?room creation â†?MatchFound flow.
+// TestHandleMatchKeyRelay_HappyPath verifies the full key relay â€” room creation â€” MatchFound flow.
 func TestHandleMatchKeyRelay_HappyPath(t *testing.T) {
 	creator := &mockRoomCreator{roomID: "room-abc123"}
 	config := DefaultConfig()
@@ -461,11 +461,15 @@ func TestHandleMatchKeyRelay_HappyPath(t *testing.T) {
 		t.Fatal("Client A should have received a message")
 	}
 	lastMsgA := aMsgs[len(aMsgs)-1]
-	if lastMsgA[0] != MsgMatchFound {
-		t.Fatalf("Client A should receive MsgMatchFound (0x%02x), got 0x%02x", MsgMatchFound, lastMsgA[0])
+	msgTypeA, dataA, err := decodeMatchMsg(lastMsgA)
+	if err != nil {
+		t.Fatalf("failed to decode Client A message: %v", err)
+	}
+	if msgTypeA != MsgMatchFound {
+		t.Fatalf("Client A should receive MsgMatchFound (0x%02x), got 0x%02x", MsgMatchFound, msgTypeA)
 	}
 	var foundDataA MatchFoundData
-	if err := msgpack.Unmarshal(lastMsgA[1:], &foundDataA); err != nil {
+	if err := msgpack.Unmarshal(dataA, &foundDataA); err != nil {
 		t.Fatalf("failed to unmarshal Client A MatchFound: %v", err)
 	}
 	if foundDataA.RoomID != "room-abc123" {
@@ -483,11 +487,15 @@ func TestHandleMatchKeyRelay_HappyPath(t *testing.T) {
 		t.Fatal("Client B should have received a message")
 	}
 	lastMsgB := bMsgs[len(bMsgs)-1]
-	if lastMsgB[0] != MsgMatchFound {
-		t.Fatalf("Client B should receive MsgMatchFound (0x%02x), got 0x%02x", MsgMatchFound, lastMsgB[0])
+	msgTypeB, dataB, err := decodeMatchMsg(lastMsgB)
+	if err != nil {
+		t.Fatalf("failed to decode Client B message: %v", err)
+	}
+	if msgTypeB != MsgMatchFound {
+		t.Fatalf("Client B should receive MsgMatchFound (0x%02x), got 0x%02x", MsgMatchFound, msgTypeB)
 	}
 	var foundDataB MatchFoundData
-	if err := msgpack.Unmarshal(lastMsgB[1:], &foundDataB); err != nil {
+	if err := msgpack.Unmarshal(dataB, &foundDataB); err != nil {
 		t.Fatalf("failed to unmarshal Client B MatchFound: %v", err)
 	}
 	if foundDataB.RoomID != "room-abc123" {
@@ -518,8 +526,12 @@ func TestHandleMatchKeyRelay_NoPendingMatch(t *testing.T) {
 	if len(msgs) == 0 {
 		t.Fatal("client should receive an error message")
 	}
-	if msgs[0][0] != MsgMatchError {
-		t.Fatalf("expected MsgMatchError (0x%02x), got 0x%02x", MsgMatchError, msgs[0][0])
+	msgType, _, err := decodeMatchMsg(msgs[0])
+	if err != nil {
+		t.Fatalf("failed to decode error message: %v", err)
+	}
+	if msgType != MsgMatchError {
+		t.Fatalf("expected MsgMatchError (0x%02x), got 0x%02x", MsgMatchError, msgType)
 	}
 }
 
@@ -542,7 +554,7 @@ func TestHandleMatchKeyRelay_NotClientA(t *testing.T) {
 	keyRelayData := MatchKeyRelayData{Key: "some-key"}
 	payload, _ := msgpack.Marshal(keyRelayData)
 
-	// Client B tries to relay â€?should be rejected.
+	// Client B tries to relay â€” should be rejected.
 	ms.handleMatchKeyRelay(clientB, payload)
 
 	// Verify Client B received an error.
@@ -552,8 +564,12 @@ func TestHandleMatchKeyRelay_NotClientA(t *testing.T) {
 	if len(msgs) == 0 {
 		t.Fatal("Client B should receive an error when trying to relay key")
 	}
-	if msgs[0][0] != MsgMatchError {
-		t.Fatalf("expected MsgMatchError (0x%02x), got 0x%02x", MsgMatchError, msgs[0][0])
+	msgType, _, err := decodeMatchMsg(msgs[0])
+	if err != nil {
+		t.Fatalf("failed to decode Client B error message: %v", err)
+	}
+	if msgType != MsgMatchError {
+		t.Fatalf("expected MsgMatchError (0x%02x), got 0x%02x", MsgMatchError, msgType)
 	}
 
 	// Pending match should still exist.
@@ -600,15 +616,23 @@ func TestHandleMatchKeyRelay_RoomCreationFailure(t *testing.T) {
 	clientA.mu.Lock()
 	aMsgs := clientA.sent
 	clientA.mu.Unlock()
-	if len(aMsgs) == 0 || aMsgs[0][0] != MsgMatchError {
+	if len(aMsgs) == 0 {
 		t.Fatal("Client A should receive error on room creation failure")
+	}
+	msgTypeA, _, err := decodeMatchMsg(aMsgs[0])
+	if err != nil || msgTypeA != MsgMatchError {
+		t.Fatalf("Client A should receive MsgMatchError on room creation failure, got type=0x%02x err=%v", msgTypeA, err)
 	}
 
 	clientB.mu.Lock()
 	bMsgs := clientB.sent
 	clientB.mu.Unlock()
-	if len(bMsgs) == 0 || bMsgs[0][0] != MsgMatchError {
+	if len(bMsgs) == 0 {
 		t.Fatal("Client B should receive error on room creation failure")
+	}
+	msgTypeB, _, err := decodeMatchMsg(bMsgs[0])
+	if err != nil || msgTypeB != MsgMatchError {
+		t.Fatalf("Client B should receive MsgMatchError on room creation failure, got type=0x%02x err=%v", msgTypeB, err)
 	}
 }
 
@@ -696,7 +720,7 @@ func TestHandleInviteJoin_UsedToken(t *testing.T) {
 	payload := mustMarshal(t, MatchInviteJoinData{Token: inviteLink.Token})
 	ms.handleInviteJoin(invitee1, payload)
 
-	// Second use fails â€?token already used.
+	// Second use fails â€” token already used.
 	invitee2 := newTestClient("invitee-2")
 	ms.handleInviteJoin(invitee2, payload)
 	assertClientReceivedError(t, invitee2, ErrCodeInviteInvalid)
@@ -994,7 +1018,7 @@ func TestHandleReport_InvalidReason(t *testing.T) {
 	payload := mustMarshal(t, MatchReportData{Reason: "invalid-reason"})
 	ms.handleReport(reporter, payload)
 
-	// Should silently ignore â€?no messages to reporter.
+	// Should silently ignore â€” no messages to reporter.
 	reporter.mu.Lock()
 	msgs := reporter.sent
 	reporter.mu.Unlock()
@@ -1012,7 +1036,7 @@ func TestHandleReport_NotInRoom(t *testing.T) {
 	payload := mustMarshal(t, MatchReportData{Reason: "spam"})
 	ms.handleReport(reporter, payload)
 
-	// Should silently ignore â€?no messages.
+	// Should silently ignore â€” no messages.
 	reporter.mu.Lock()
 	msgs := reporter.sent
 	reporter.mu.Unlock()
@@ -1099,7 +1123,7 @@ func TestHandleExtendRequest_NotInRoom(t *testing.T) {
 	payload := mustMarshal(t, struct{}{})
 	ms.handleExtendRequest(client, payload)
 
-	// Should silently ignore â€?no messages.
+	// Should silently ignore â€” no messages.
 	client.mu.Lock()
 	msgs := client.sent
 	client.mu.Unlock()
@@ -1144,8 +1168,12 @@ func TestHandleExtendRequest_SingleProposal(t *testing.T) {
 	if len(bMsgs) != 1 {
 		t.Fatalf("client B should receive exactly 1 message (extend req), got %d", len(bMsgs))
 	}
-	if bMsgs[0][0] != MsgMatchExtendReq {
-		t.Fatalf("expected MsgMatchExtendReq (0x%02x), got 0x%02x", MsgMatchExtendReq, bMsgs[0][0])
+	msgTypeB, _, err := decodeMatchMsg(bMsgs[0])
+	if err != nil {
+		t.Fatalf("failed to decode Client B message: %v", err)
+	}
+	if msgTypeB != MsgMatchExtendReq {
+		t.Fatalf("expected MsgMatchExtendReq (0x%02x), got 0x%02x", MsgMatchExtendReq, msgTypeB)
 	}
 }
 
@@ -1185,10 +1213,14 @@ func TestHandleExtendRequest_MutualConsent(t *testing.T) {
 	// the caller (clientB) and partner (clientA).
 	foundExtendedA := false
 	for _, msg := range aMsgs {
-		if msgType, _, _ := decodeMatchMsg(msg); msgType == MsgMatchExtended {
+		msgType, msgData, err := decodeMatchMsg(msg)
+		if err != nil {
+			continue
+		}
+		if msgType == MsgMatchExtended {
 			foundExtendedA = true
 			var data MatchExtendedData
-			if err := msgpack.Unmarshal(msg[1:], &data); err == nil {
+			if err := msgpack.Unmarshal(msgData, &data); err == nil {
 				if data.ExtensionsLeft != config.MaxExtensions-1 {
 					t.Fatalf("expected extensionsLeft=%d, got %d", config.MaxExtensions-1, data.ExtensionsLeft)
 				}

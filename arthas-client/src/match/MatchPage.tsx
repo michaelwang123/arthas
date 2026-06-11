@@ -16,8 +16,9 @@
  */
 
 import { useEffect, useCallback } from 'react';
-import { useMatchStore } from './matchStore';
+import { useMatchStore, MATCH_SESSION_RESET } from './matchStore';
 import { useChatStore } from '../stores/chatStore';
+import { useTranslation } from '../i18n';
 import { MatchWaiting } from './MatchWaiting';
 import { MatchFound } from './MatchFound';
 import { MatchRoom } from './MatchRoom';
@@ -25,6 +26,7 @@ import { MatchTimeout } from './MatchTimeout';
 import { usePageStore } from '../stores/pageStore';
 import * as ws from '../network/websocket';
 import { MSG_MATCH_CANCEL } from './protocol';
+import { resetChatStoreForMatch } from './matchCleanup';
 
 /**
  * MatchPage — Orchestrates the entire match flow UI based on matchStore status.
@@ -33,17 +35,29 @@ import { MSG_MATCH_CANCEL } from './protocol';
  * (waiting, pairing, found, in-room, timeout).
  */
 export function MatchPage() {
+  const { t } = useTranslation();
   const status = useMatchStore((s) => s.status);
   const cancelMatch = useMatchStore((s) => s.cancelMatch);
   const startMatch = useMatchStore((s) => s.startMatch);
   const generateInviteLink = useMatchStore((s) => s.generateInviteLink);
 
-  // Navigate back to hub — cancel match if waiting
+  // Navigate back to hub — cancel match if waiting, reset all session state
   const handleBackToHub = useCallback(() => {
     if (status === 'waiting' || status === 'pairing') {
       cancelMatch();
     }
-    useMatchStore.setState({ status: 'idle' });
+
+    // Step 1: Clean up chatStore (voice, file transfers, room state)
+    resetChatStoreForMatch();
+
+    // Step 2: Reset matchStore to idle and clear all session fields
+    useMatchStore.setState({
+      ...MATCH_SESSION_RESET,
+      status: 'idle',
+      waitStartTime: null,
+      elapsedSeconds: 0,
+    });
+
     usePageStore.getState().setPage('hub');
   }, [status, cancelMatch]);
 
@@ -165,6 +179,35 @@ export function MatchPage() {
       return (
         <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
           <MatchTimeout onRetry={handleRetry} onInvite={handleInvite} onBack={handleBackToHub} />
+        </div>
+      );
+
+    case 'expired':
+      return (
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+          <div className="text-center space-y-6 max-w-sm">
+            <div className="text-5xl" role="img" aria-hidden="true">⏰</div>
+            <h2 className="text-xl font-semibold text-gray-100">{t('match.expired.title')}</h2>
+            <p className="text-sm text-gray-400">
+              {t('match.expired.description')}
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleRetry}
+                className="w-full px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-colors"
+                aria-label={t('match.expired.findNewAriaLabel')}
+              >
+                {t('match.expired.findNew')}
+              </button>
+              <button
+                onClick={handleBackToHub}
+                className="w-full px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg font-medium transition-colors"
+                aria-label={t('match.expired.backToHubAriaLabel')}
+              >
+                {t('match.expired.backToHub')}
+              </button>
+            </div>
+          </div>
         </div>
       );
 

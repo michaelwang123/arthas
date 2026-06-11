@@ -15,6 +15,7 @@ import { create } from 'zustand';
 import * as ws from '../network/websocket';
 import { generateRoomKey, exportRoomKey, importRoomKey } from '../crypto/keys';
 import { useChatStore } from '../stores/chatStore';
+import { resetChatStoreForMatch } from './matchCleanup';
 import {
   MSG_MATCH_REQUEST,
   MSG_MATCH_CANCEL,
@@ -49,6 +50,30 @@ import {
 /** localStorage key for persisting last selected tags */
 const STORAGE_KEY_TAGS = 'arthas-match-tags';
 
+/**
+ * Default values for all match session fields.
+ * Used by nextMatch() and handleBackToHub() to reset matchStore to a clean state.
+ * Single source of truth — prevents field list drift between reset call sites.
+ */
+export const MATCH_SESSION_RESET = {
+  matchRoomId: null,
+  matchKey: null,
+  matchKeyRaw: null,
+  matchExpiresAt: null,
+  matchEphemeral: null,
+  isKeyGenerator: false,
+  partnerId: null,
+  inviteLink: null,
+  inviteToken: null,
+  extensionProposed: false,
+  extensionCount: 0,
+  partnerProposedExtend: false,
+  partnerLeft: false,
+  waitedSeconds: 0,
+  error: null,
+  retryAfter: null,
+} as const;
+
 // ===== Types =====
 
 export type MatchStatus =
@@ -58,6 +83,7 @@ export type MatchStatus =
   | 'pairing'
   | 'found'
   | 'timeout'
+  | 'expired'
   | 'in-room';
 
 export interface MatchState {
@@ -287,30 +313,18 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     // Only allowed when in a match room
     if (status !== 'in-room') return;
 
-    // Update state to waiting (re-queue with same tags)
+    // Step 1: Clean up chatStore (voice, file transfers, room state) before re-queue
+    resetChatStoreForMatch();
+
+    // Step 2: Reset matchStore session fields and transition to waiting
     set({
+      ...MATCH_SESSION_RESET,
       status: 'waiting',
       waitStartTime: Date.now(),
       elapsedSeconds: 0,
-      matchRoomId: null,
-      matchKey: null,
-      matchKeyRaw: null,
-      matchExpiresAt: null,
-      matchEphemeral: null,
-      isKeyGenerator: false,
-      partnerId: null,
-      inviteLink: null,
-      inviteToken: null,
-      extensionProposed: false,
-      extensionCount: 0,
-      partnerProposedExtend: false,
-      partnerLeft: false,
-      waitedSeconds: 0,
-      error: null,
-      retryAfter: null,
     });
 
-    // Send next-match request with current tags
+    // Step 3: Send next-match request with current tags
     const data: MatchNextData = { tags: selectedTags };
     ws.send(MSG_MATCH_NEXT, data);
   },

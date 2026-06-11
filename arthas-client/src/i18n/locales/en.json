@@ -262,5 +262,13 @@
   "match.room.reportReason.inappropriate": "Inappropriate content",
   "match.room.reportReason.other": "Other",
   "match.room.next": "Next",
-  "match.room.nextAriaLabel": "Find next match partner"
+  "match.room.nextAriaLabel": "Find next match partner",
+  "match.room.waitingForPartner": "Waiting for partner...",
+  "match.room.e2eeLabel": "End-to-end encrypted",
+  "match.expired.title": "Room Expired",
+  "match.expired.description": "The match room has been closed because the time limit was reached.",
+  "match.expired.findNew": "Find New Match",
+  "match.expired.findNewAriaLabel": "Find a new match partner",
+  "match.expired.backToHub": "Back to Hub",
+  "match.expired.backToHubAriaLabel": "Return to hub"
 }

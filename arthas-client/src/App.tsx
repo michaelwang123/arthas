@@ -118,7 +118,7 @@ function App() {
     // when MSG_ROOM_JOINED sets chatStore.roomId during match flow.
     if (matchStatus === 'waiting' || matchStatus === 'pairing' ||
         matchStatus === 'found' || matchStatus === 'in-room' ||
-        matchStatus === 'timeout') {
+        matchStatus === 'timeout' || matchStatus === 'expired') {
       return <MatchPage />;
     }
 
