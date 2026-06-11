@@ -262,5 +262,13 @@
   "match.room.reportReason.inappropriate": "不適切なコンテンツ",
   "match.room.reportReason.other": "その他",
   "match.room.next": "次へ",
-  "match.room.nextAriaLabel": "次のマッチパートナーを探す"
+  "match.room.nextAriaLabel": "次のマッチパートナーを探す",
+  "match.room.waitingForPartner": "相手の参加を待っています...",
+  "match.room.e2eeLabel": "エンドツーエンド暗号化",
+  "match.expired.title": "ルームの有効期限切れ",
+  "match.expired.description": "マッチルームは制限時間に達したため閉鎖されました。",
+  "match.expired.findNew": "新しいマッチを探す",
+  "match.expired.findNewAriaLabel": "新しいマッチパートナーを探す",
+  "match.expired.backToHub": "ハブに戻る",
+  "match.expired.backToHubAriaLabel": "ハブに戻る"
 }

@@ -423,8 +423,10 @@ func (ms *MatchServer) handleMatchKeyRelay(client ClientRef, data []byte) {
 		return
 	}
 
-	// 6. Join both clients to the room.
-	if err := ms.roomCreator.JoinClientToRoom(pm.ClientA, roomId, "Anonymous"); err != nil {
+	// 6. Join both clients to the room with deterministic generated names.
+	nameA := GenerateMatchName(roomId, 0)
+	nameB := GenerateMatchName(roomId, 1)
+	if err := ms.roomCreator.JoinClientToRoom(pm.ClientA, roomId, nameA); err != nil {
 		logger.Error("Match", "failed to join Client A %s to room %s: %v",
 			pm.ClientA.GetID(), roomId, err)
 		ms.sendError(pm.ClientA, ErrCodeKeyExchangeTimeout, "failed to join room")
@@ -434,7 +436,7 @@ func (ms *MatchServer) handleMatchKeyRelay(client ClientRef, data []byte) {
 		ms.requeueClientWithTags(pm.ClientB, pm.TagsB)
 		return
 	}
-	if err := ms.roomCreator.JoinClientToRoom(pm.ClientB, roomId, "Anonymous"); err != nil {
+	if err := ms.roomCreator.JoinClientToRoom(pm.ClientB, roomId, nameB); err != nil {
 		logger.Error("Match", "failed to join Client B %s to room %s: %v",
 			pm.ClientB.GetID(), roomId, err)
 		// Rollback: remove Client A from the room since Client B couldn't join.

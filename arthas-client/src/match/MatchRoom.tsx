@@ -15,6 +15,7 @@ import { MessageInput } from '../components/MessageInput';
 import { MessageList } from '../components/MessageList';
 import { TypingIndicator } from '../components/TypingIndicator';
 import { DropZone } from '../file-transfer/components/DropZone';
+import { MatchRoomHeader } from './MatchRoomHeader';
 
 /** 5 minutes in seconds — threshold for showing extend prompt */
 const EXTEND_THRESHOLD_SECONDS = 300;
@@ -39,11 +40,15 @@ export function MatchRoom() {
   const partnerProposedExtend = useMatchStore((s) => s.partnerProposedExtend);
   const partnerLeft = useMatchStore((s) => s.partnerLeft);
   const matchExpiresAt = useMatchStore((s) => s.matchExpiresAt);
+  const matchEphemeral = useMatchStore((s) => s.matchEphemeral);
 
   // Chat store state for message list and input
   const messages = useChatStore((s) => s.messages);
   const myId = useChatStore((s) => s.myId);
   const members = useChatStore((s) => s.members);
+
+  // Derive partner name from members list (exclude self)
+  const partnerName = members.find((m) => m.id !== myId)?.name ?? null;
   const typingMembers = useChatStore((s) => s.typingMembers);
 
   const [showExtendPrompt, setShowExtendPrompt] = useState(false);
@@ -78,6 +83,13 @@ export function MatchRoom() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Match room header — E2EE indicator, partner name, ephemeral badge, expiry countdown */}
+      <MatchRoomHeader
+        partnerName={partnerName}
+        expiresAt={matchExpiresAt ?? 0}
+        ephemeral={matchEphemeral ?? 0}
+      />
+
       {/* Partner left banner */}
       {partnerLeft && (
         <div className="bg-amber-900/30 border-b border-amber-700/50 px-4 py-2 text-center">

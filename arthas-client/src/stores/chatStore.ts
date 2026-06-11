@@ -1185,6 +1185,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
           isSystem: true,
         };
 
+        // Cross-store coordination: if in a match session, transition matchStore to 'expired'
+        // This prevents the UI from staying stuck in 'in-room' after the room is closed by server.
+        // Uses 'expired' (not 'timeout') to distinguish from queue timeout state.
+        const matchStatus = useMatchStore.getState().status;
+        if (matchStatus === 'in-room') {
+          useMatchStore.setState({
+            status: 'expired',
+            matchRoomId: null,
+            matchKey: null,
+            matchExpiresAt: null,
+          });
+        }
+
         // Clear deferred verification queue
         deferredQueue.clear();
 

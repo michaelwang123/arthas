@@ -262,5 +262,13 @@
   "match.room.reportReason.inappropriate": "不当内容",
   "match.room.reportReason.other": "其他",
   "match.room.next": "下一位",
-  "match.room.nextAriaLabel": "寻找下一位配对伙伴"
+  "match.room.nextAriaLabel": "寻找下一位配对伙伴",
+  "match.room.waitingForPartner": "等待对方加入...",
+  "match.room.e2eeLabel": "端到端加密",
+  "match.expired.title": "房间已过期",
+  "match.expired.description": "匹配房间因达到时间限制已被关闭。",
+  "match.expired.findNew": "重新匹配",
+  "match.expired.findNewAriaLabel": "寻找新的配对伙伴",
+  "match.expired.backToHub": "返回大厅",
+  "match.expired.backToHubAriaLabel": "返回大厅"
 }
